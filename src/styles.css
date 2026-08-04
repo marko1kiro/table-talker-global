@@ -1,0 +1,119 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brutal-bg: var(--brutal-bg);
+  --color-brutal-fg: var(--brutal-fg);
+  --color-brutal-accent: var(--brutal-accent);
+  --color-brutal-danger: var(--brutal-danger);
+  --color-brutal-success: var(--brutal-success);
+  --color-brutal-muted: var(--brutal-muted);
+  --font-display: "Archivo Black", "Space Grotesk", sans-serif;
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.25rem;
+
+  /* Neo Brutalism palette */
+  --brutal-bg: oklch(0.965 0.018 90);         /* #f5f2e8 off-white */
+  --brutal-fg: oklch(0.15 0 0);                /* near-black */
+  --brutal-accent: oklch(0.87 0.19 95);        /* #facc15 yellow */
+  --brutal-danger: oklch(0.68 0.24 25);        /* red */
+  --brutal-success: oklch(0.72 0.18 145);      /* green */
+  --brutal-muted: oklch(0.9 0.01 90);          /* light beige */
+
+  --background: var(--brutal-bg);
+  --foreground: var(--brutal-fg);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--brutal-fg);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--brutal-fg);
+  --primary: var(--brutal-fg);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: var(--brutal-muted);
+  --secondary-foreground: var(--brutal-fg);
+  --muted: var(--brutal-muted);
+  --muted-foreground: oklch(0.4 0 0);
+  --accent: var(--brutal-accent);
+  --accent-foreground: var(--brutal-fg);
+  --destructive: var(--brutal-danger);
+  --destructive-foreground: oklch(1 0 0);
+  --border: var(--brutal-fg);
+  --input: var(--brutal-fg);
+  --ring: var(--brutal-fg);
+}
+
+.dark {
+  --background: oklch(0.15 0 0);
+  --foreground: oklch(0.95 0 0);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+}
+
+@utility brutal-border {
+  border: 3px solid var(--brutal-fg);
+}
+
+@utility brutal-shadow {
+  box-shadow: 4px 4px 0 0 var(--brutal-fg);
+}
+
+@utility brutal-shadow-lg {
+  box-shadow: 6px 6px 0 0 var(--brutal-fg);
+}
+
+@utility brutal-shadow-sm {
+  box-shadow: 2px 2px 0 0 var(--brutal-fg);
+}
+
+@utility brutal-press {
+  transition: transform 80ms ease, box-shadow 80ms ease;
+
+  &:active {
+    transform: translate(4px, 4px);
+    box-shadow: 0 0 0 0 var(--brutal-fg);
+  }
+}
