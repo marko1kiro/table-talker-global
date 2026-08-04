@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { Megaphone, Play, Square } from "lucide-react";
 
 import { Header } from "@/components/Header";
@@ -8,12 +7,7 @@ import { AuthGate } from "@/components/AuthGate";
 import { getAuthStatus } from "@/lib/auth";
 import { Footer } from "@/components/Footer";
 import { TableButton, type TableStatus } from "@/components/TableButton";
-import {
-  TABLE_COUNT,
-  getAnnouncementAudioUrls,
-  getTableAudioUrls,
-  listReadyTables,
-} from "@/lib/audio-store";
+import { TABLE_COUNT, announcementAudioUrls, getTableAudioUrl, readyTables } from "@/lib/audio";
 
 export const Route = createFileRoute("/")({
   loader: () => getAuthStatus(),
@@ -37,7 +31,7 @@ function SoundboardRoute() {
   const auth = Route.useLoaderData();
   const router = useRouter();
   if (!auth.dashboard) {
-    return <AuthGate role="dashboard" onSuccess={() => router.invalidate()} />;
+    return <AuthGate onSuccess={() => router.invalidate()} />;
   }
   return <SoundboardPage />;
 }
@@ -45,31 +39,9 @@ function SoundboardRoute() {
 function SoundboardPage() {
   const tables = useMemo(() => Array.from({ length: TABLE_COUNT }, (_, i) => i + 1), []);
 
-  const readyQuery = useQuery({
-    queryKey: ["ready-tables"],
-    queryFn: listReadyTables,
-    refetchOnWindowFocus: false,
-  });
-
-  const readyTables = readyQuery.data ?? new Set<number>();
-
-  const urlsQuery = useQuery({
-    queryKey: ["signed-urls", Array.from(readyTables).sort().join(",")],
-    queryFn: () => getTableAudioUrls(Array.from(readyTables)),
-    enabled: readyTables.size > 0,
-    staleTime: 1000 * 60 * 60 * 6, // 6h
-    refetchOnWindowFocus: false,
-  });
-
-  const urls = useMemo(() => urlsQuery.data ?? new Map<number, string>(), [urlsQuery.data]);
-
-  const announcementQuery = useQuery({
-    queryKey: ["announcement-urls"],
-    queryFn: getAnnouncementAudioUrls,
-    staleTime: 1000 * 60 * 60 * 6,
-    refetchOnWindowFocus: false,
-  });
-  const announcements = announcementQuery.data;
+  // Audio ikut di-bundle bersama deployment: daftar & URL-nya sudah tersedia
+  // sejak render pertama, tanpa fetch, tanpa loading, tanpa panggilan API.
+  const announcements = announcementAudioUrls;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState<number | string | null>(null);
@@ -91,44 +63,41 @@ function SoundboardPage() {
     setLoading(null);
   }, []);
 
-  const play = useCallback(
-    async (id: number | string, directUrl?: string | null) => {
-      const url = directUrl ?? (typeof id === "number" ? urls.get(id) : null);
-      if (!url) return;
+  const play = useCallback(async (id: number | string, directUrl?: string | null) => {
+    const url = directUrl ?? (typeof id === "number" ? getTableAudioUrl(id) : null);
+    if (!url) return;
 
-      // Stop any current playback
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-      }
+    // Stop any current playback
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
 
-      setLoading(id);
-      const audio = new Audio(url);
-      audioRef.current = audio;
+    setLoading(id);
+    const audio = new Audio(url);
+    audioRef.current = audio;
 
-      audio.addEventListener("playing", () => {
-        setLoading(null);
-        setPlaying(id);
-      });
-      audio.addEventListener("ended", () => {
-        setPlaying(null);
-      });
-      audio.addEventListener("error", () => {
-        setLoading(null);
-        setPlaying(null);
-        console.error("Audio playback error", id);
-      });
+    audio.addEventListener("playing", () => {
+      setLoading(null);
+      setPlaying(id);
+    });
+    audio.addEventListener("ended", () => {
+      setPlaying(null);
+    });
+    audio.addEventListener("error", () => {
+      setLoading(null);
+      setPlaying(null);
+      console.error("Audio playback error", id);
+    });
 
-      try {
-        await audio.play();
-      } catch (err) {
-        console.error(err);
-        setLoading(null);
-        setPlaying(null);
-      }
-    },
-    [urls],
-  );
+    try {
+      await audio.play();
+    } catch (err) {
+      console.error(err);
+      setLoading(null);
+      setPlaying(null);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -164,8 +133,8 @@ function SoundboardPage() {
           <div className="grid grid-cols-1 gap-2 sm:gap-3">
             <button
               type="button"
-              onClick={() => void play("Himbauan", announcements?.seating)}
-              disabled={!announcements?.seating}
+              onClick={() => void play("Himbauan", announcements.seating)}
+              disabled={!announcements.seating}
               className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-accent px-4 py-3 text-left font-display text-sm uppercase leading-tight sm:text-base"
             >
               <span>
@@ -178,8 +147,8 @@ function SoundboardPage() {
             </button>
             <button
               type="button"
-              onClick={() => void play("Larangan makanan luar", announcements?.["outside-food"])}
-              disabled={!announcements?.["outside-food"]}
+              onClick={() => void play("Larangan makanan luar", announcements["outside-food"])}
+              disabled={!announcements["outside-food"]}
               className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-destructive px-4 py-3 text-left font-display text-sm uppercase leading-tight text-destructive-foreground sm:text-base"
             >
               <span>
@@ -192,8 +161,8 @@ function SoundboardPage() {
             </button>
             <button
               type="button"
-              onClick={() => void play("Larangan merokok", announcements?.["no-smoking"])}
-              disabled={!announcements?.["no-smoking"]}
+              onClick={() => void play("Larangan merokok", announcements["no-smoking"])}
+              disabled={!announcements["no-smoking"]}
               className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-destructive px-4 py-3 text-left font-display text-sm uppercase leading-tight text-destructive-foreground sm:text-base"
             >
               <span>
@@ -206,8 +175,8 @@ function SoundboardPage() {
             </button>
             <button
               type="button"
-              onClick={() => void play("Info jam buka", announcements?.["jam-buka-resto"])}
-              disabled={!announcements?.["jam-buka-resto"]}
+              onClick={() => void play("Info jam buka", announcements["jam-buka-resto"])}
+              disabled={!announcements["jam-buka-resto"]}
               className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-accent px-4 py-3 text-left font-display text-sm uppercase leading-tight sm:text-base"
             >
               <span>
@@ -221,30 +190,26 @@ function SoundboardPage() {
           </div>
         </section>
 
-        {readyQuery.isLoading ? (
-          <div className="brutal-border brutal-shadow bg-card p-6 text-center font-display uppercase">
-            Memuat data meja…
-          </div>
-        ) : (
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 sm:gap-3 md:grid-cols-8 lg:grid-cols-10">
-            {tables.map((n) => {
-              let status: TableStatus = "empty";
-              if (playing === n) status = "playing";
-              else if (loading === n) status = "loading";
-              else if (readyTables.has(n)) status = "ready";
-              return (
-                <TableButton key={n} tableNumber={n} status={status} onClick={() => void play(n)} />
-              );
-            })}
-          </div>
-        )}
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 sm:gap-3 md:grid-cols-8 lg:grid-cols-10">
+          {tables.map((n) => {
+            let status: TableStatus = "empty";
+            if (playing === n) status = "playing";
+            else if (loading === n) status = "loading";
+            else if (readyTables.has(n)) status = "ready";
+            return (
+              <TableButton key={n} tableNumber={n} status={status} onClick={() => void play(n)} />
+            );
+          })}
+        </div>
 
-        {readyTables.size === 0 && !readyQuery.isLoading && (
+        {readyTables.size === 0 && (
           <div className="brutal-border brutal-shadow mt-6 bg-card p-6 text-center">
             <p className="font-display uppercase">Belum ada audio</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Buka menu <span className="font-bold uppercase">Kelola</span> untuk upload file
-              panggilan (1.mp3 – 70.mp3).
+              File audio meja belum ada di dalam aplikasi. Tambahkan{" "}
+              <span className="font-mono font-bold text-foreground">1.mp3 – 70.mp3</span> di{" "}
+              <span className="font-mono font-bold text-foreground">src/assets/audio/tables/</span>{" "}
+              lalu deploy ulang.
             </p>
           </div>
         )}

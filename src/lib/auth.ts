@@ -1,16 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export type AuthRole = "dashboard" | "manage";
-export type AuthStatus = { dashboard: boolean; manage: boolean };
+export type AuthStatus = { dashboard: boolean };
 
 type LoginInput = {
-  role: AuthRole;
-  username?: string;
   password: string;
 };
 
-const MISCONFIGURED_MESSAGE =
-  "Konfigurasi server belum lengkap. Hubungi administrator.";
+const MISCONFIGURED_MESSAGE = "Konfigurasi server belum lengkap. Hubungi administrator.";
 
 /**
  * Kredensial HANYA dibaca dari environment variable.
@@ -40,10 +36,7 @@ export const getAuthStatus = createServerFn({ method: "GET" }).handler(
   async (): Promise<AuthStatus> => {
     const { getAuthSession } = await import("./auth.server");
     const session = await getAuthSession();
-    return {
-      dashboard: session.data.dashboard === true || session.data.manage === true,
-      manage: session.data.manage === true,
-    };
+    return { dashboard: session.data.dashboard === true };
   },
 );
 
@@ -51,22 +44,6 @@ export const login = createServerFn({ method: "POST" })
   .inputValidator((data: LoginInput) => data)
   .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
     const { updateAuthSession } = await import("./auth.server");
-
-    if (data.role === "manage") {
-      const expectedUsername = readEnv("MANAGE_USERNAME");
-      const expectedPassword = readEnv("MANAGE_PASSWORD");
-      if (expectedUsername === null || expectedPassword === null) {
-        return { ok: false, message: MISCONFIGURED_MESSAGE };
-      }
-      if (
-        !safeEqual(data.username ?? "", expectedUsername) ||
-        !safeEqual(data.password, expectedPassword)
-      ) {
-        return { ok: false, message: "Username atau password salah." };
-      }
-      await updateAuthSession({ dashboard: true, manage: true });
-      return { ok: true };
-    }
 
     const expectedPassword = readEnv("DASHBOARD_PASSWORD");
     if (expectedPassword === null) {

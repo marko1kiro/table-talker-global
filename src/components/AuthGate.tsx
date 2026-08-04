@@ -1,15 +1,13 @@
 import { FormEvent, useState } from "react";
-import { LockKeyhole, Loader2 } from "lucide-react";
-import { login, type AuthRole } from "@/lib/auth";
+import { Loader2 } from "lucide-react";
+import { login } from "@/lib/auth";
 import { Footer } from "@/components/Footer";
 
 interface AuthGateProps {
-  role: AuthRole;
   onSuccess: () => Promise<void> | void;
 }
 
-export function AuthGate({ role, onSuccess }: AuthGateProps) {
-  const [username, setUsername] = useState("");
+export function AuthGate({ onSuccess }: AuthGateProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,9 +17,7 @@ export function AuthGate({ role, onSuccess }: AuthGateProps) {
     setLoading(true);
     setError("");
     try {
-      const result = await login({
-        data: { role, username: role === "manage" ? username : undefined, password },
-      });
+      const result = await login({ data: { password } });
       if (!result.ok) {
         setError(result.message || "Login gagal.");
         return;
@@ -41,49 +37,29 @@ export function AuthGate({ role, onSuccess }: AuthGateProps) {
           onSubmit={submit}
           className="brutal-border brutal-shadow-lg w-full max-w-sm bg-card p-5 sm:max-w-md sm:p-8"
         >
-          {role === "manage" ? (
-            <div className="brutal-border brutal-shadow-sm mx-auto flex h-14 w-14 items-center justify-center bg-accent">
-              <LockKeyhole strokeWidth={3} />
-            </div>
-          ) : (
-            <img
-              src="/table-talker-logo.webp"
-              alt="Table Talker Soundboard"
-              width={440}
-              height={376}
-              className="mx-auto h-auto w-full max-w-[220px] sm:max-w-[250px]"
-            />
-          )}
+          <img
+            src="/table-talker-logo.webp"
+            alt="Table Talker Soundboard"
+            width={440}
+            height={376}
+            className="mx-auto h-auto w-full max-w-[220px] sm:max-w-[250px]"
+          />
 
           <h1 className="mt-4 text-center font-display text-lg uppercase sm:text-xl">
-            {role === "manage" ? "Login Pengelola" : "Buka Table Talker"}
+            Buka Table Talker
           </h1>
           <p className="mt-1 text-center text-xs text-muted-foreground">
-            {role === "manage"
-              ? "Masukkan akun pengelola untuk mengatur audio."
-              : "Masukkan kode resto untuk membuka dashboard meja."}
+            Masukkan kode resto untuk membuka dashboard meja.
           </p>
 
           <div className="mt-5 space-y-3 sm:mt-6">
-            {role === "manage" && (
-              <label className="block text-xs font-bold uppercase">
-                Username
-                <input
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  autoComplete="username"
-                  required
-                  className="brutal-border mt-1 w-full bg-background px-3 py-2.5 font-normal normal-case outline-none focus:bg-accent/20"
-                />
-              </label>
-            )}
             <label className="block text-xs font-bold uppercase">
-              {role === "manage" ? "Password" : "Masukkan kode resto dulu ya!"}
+              Masukkan kode resto dulu ya!
               <input
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete={role === "manage" ? "current-password" : "off"}
+                autoComplete="off"
                 required
                 className="brutal-border mt-1 w-full bg-background px-3 py-2.5 font-normal normal-case outline-none focus:bg-accent/20"
               />

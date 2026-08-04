@@ -1,5 +1,5 @@
-import { Link, useLocation } from "@tanstack/react-router";
-import { Volume2, Upload } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Volume2 } from "lucide-react";
 
 interface HeaderProps {
   readyCount: number;
@@ -7,9 +7,6 @@ interface HeaderProps {
 }
 
 export function Header({ readyCount, totalCount }: HeaderProps) {
-  const location = useLocation();
-  const pathname = location.pathname;
-
   return (
     <header className="sticky top-0 z-40 border-b-[3px] border-foreground bg-brutal-bg">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
@@ -40,18 +37,6 @@ export function Header({ readyCount, totalCount }: HeaderProps) {
               <span className="text-muted-foreground">/{totalCount}</span>
             </div>
           </div>
-          <NavButton
-            to="/"
-            active={pathname === "/"}
-            label="Panggil"
-            icon={<Volume2 className="h-4 w-4" strokeWidth={3} />}
-          />
-          <NavButton
-            to="/manage"
-            active={pathname === "/manage"}
-            label="Kelola"
-            icon={<Upload className="h-4 w-4" strokeWidth={3} />}
-          />
         </div>
       </div>
       <div className="border-t-[3px] border-foreground bg-accent px-4 py-1.5 sm:hidden">
@@ -66,31 +51,5 @@ export function Header({ readyCount, totalCount }: HeaderProps) {
         </div>
       </div>
     </header>
-  );
-}
-
-function NavButton({
-  to,
-  active,
-  label,
-  icon,
-}: {
-  to: string;
-  active: boolean;
-  label: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Link
-      to={to}
-      className={`brutal-border brutal-press inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold uppercase ${
-        active
-          ? "brutal-shadow bg-foreground text-primary-foreground"
-          : "brutal-shadow-sm bg-card text-foreground"
-      }`}
-    >
-      {icon}
-      <span className="hidden sm:inline">{label}</span>
-    </Link>
   );
 }
