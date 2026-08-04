@@ -16,6 +16,7 @@ export const TABLE_COUNT = 70;
 
 export type AnnouncementId =
   | "seating"
+  | "himbauan-barang-bawaan-pelanggan"
   | "outside-food"
   | "no-smoking"
   | "larangan-gabung-meja"
@@ -23,6 +24,7 @@ export type AnnouncementId =
 
 export const ANNOUNCEMENT_IDS = [
   "seating",
+  "himbauan-barang-bawaan-pelanggan",
   "outside-food",
   "no-smoking",
   "larangan-gabung-meja",
@@ -63,6 +65,7 @@ export const tableAudioUrls: ReadonlyMap<number, string> = (() => {
 export const announcementAudioUrls: Readonly<Record<AnnouncementId, string | null>> = (() => {
   const result: Record<AnnouncementId, string | null> = {
     seating: null,
+    "himbauan-barang-bawaan-pelanggan": null,
     "outside-food": null,
     "no-smoking": null,
     "larangan-gabung-meja": null,

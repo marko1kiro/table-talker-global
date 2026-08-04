@@ -137,6 +137,49 @@ function SoundboardPage() {
     [play, playing],
   );
 
+  const announcementGroups = [
+    {
+      category: "INFO",
+      items: [
+        {
+          id: "Himbauan duduk sesuai nomor meja",
+          title: "Himbauan Duduk Sesuai Nomor Meja",
+          url: announcements.seating,
+        },
+        {
+          id: "Himbauan barang bawaan pelanggan",
+          title: "Himbauan Barang Bawaan Pelanggan",
+          url: announcements["himbauan-barang-bawaan-pelanggan"],
+        },
+        {
+          id: "Info jam buka",
+          title: "Informasi Jam Buka Tutup Resto",
+          url: announcements["jam-buka-resto"],
+        },
+      ],
+    },
+    {
+      category: "LARANGAN",
+      items: [
+        {
+          id: "Larangan makanan luar",
+          title: "Dilarang Bawa Makanan Dari Luar",
+          url: announcements["outside-food"],
+        },
+        {
+          id: "Larangan merokok",
+          title: "Dilarang Merokok di Area Lobby",
+          url: announcements["no-smoking"],
+        },
+        {
+          id: "Larangan gabungkan meja",
+          title: "Dilarang Gabungkan Meja",
+          url: announcements["larangan-gabung-meja"],
+        },
+      ],
+    },
+  ] as const;
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <Header readyCount={readyTables.size} totalCount={TABLE_COUNT} />
@@ -168,118 +211,56 @@ function SoundboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:gap-3">
-            <button
-              type="button"
-              onClick={() => toggleAnnouncement("Himbauan", announcements.seating)}
-              disabled={!announcements.seating}
-              aria-label={playing === "Himbauan" ? "Jeda himbauan" : "Putar himbauan"}
-              className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-accent px-4 py-3 text-left font-display text-sm uppercase leading-tight sm:text-base"
-            >
-              <span>
-                <span className="mr-2 inline-block bg-primary px-2 py-0.5 text-[10px] text-primary-foreground">
-                  Info
-                </span>
-                Himbauan Duduk Sesuai Nomor Meja
-              </span>
-              {playing === "Himbauan" ? (
-                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              ) : (
-                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                toggleAnnouncement("Larangan makanan luar", announcements["outside-food"])
-              }
-              disabled={!announcements["outside-food"]}
-              aria-label={
-                playing === "Larangan makanan luar"
-                  ? "Jeda larangan makanan luar"
-                  : "Putar larangan makanan luar"
-              }
-              className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-destructive px-4 py-3 text-left font-display text-sm uppercase leading-tight text-destructive-foreground sm:text-base"
-            >
-              <span>
-                <span className="mr-2 inline-block bg-primary px-2 py-0.5 text-[10px] text-primary-foreground">
-                  Larangan
-                </span>
-                Dilarang Bawa Makanan Dari Luar
-              </span>
-              {playing === "Larangan makanan luar" ? (
-                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              ) : (
-                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleAnnouncement("Larangan merokok", announcements["no-smoking"])}
-              disabled={!announcements["no-smoking"]}
-              aria-label={
-                playing === "Larangan merokok" ? "Jeda larangan merokok" : "Putar larangan merokok"
-              }
-              className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-destructive px-4 py-3 text-left font-display text-sm uppercase leading-tight text-destructive-foreground sm:text-base"
-            >
-              <span>
-                <span className="mr-2 inline-block bg-primary px-2 py-0.5 text-[10px] text-primary-foreground">
-                  Larangan
-                </span>
-                Dilarang Merokok di Area Lobby
-              </span>
-              {playing === "Larangan merokok" ? (
-                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              ) : (
-                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                toggleAnnouncement("Larangan gabungkan meja", announcements["larangan-gabung-meja"])
-              }
-              disabled={!announcements["larangan-gabung-meja"]}
-              aria-label={
-                playing === "Larangan gabungkan meja"
-                  ? "Jeda larangan gabungkan meja"
-                  : "Putar larangan gabungkan meja"
-              }
-              className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-destructive px-4 py-3 text-left font-display text-sm uppercase leading-tight text-destructive-foreground sm:text-base"
-            >
-              <span>
-                <span className="mr-2 inline-block bg-primary px-2 py-0.5 text-[10px] text-primary-foreground">
-                  Larangan
-                </span>
-                Dilarang Gabungkan Meja
-              </span>
-              {playing === "Larangan gabungkan meja" ? (
-                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              ) : (
-                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleAnnouncement("Info jam buka", announcements["jam-buka-resto"])}
-              disabled={!announcements["jam-buka-resto"]}
-              aria-label={
-                playing === "Info jam buka" ? "Jeda info jam buka" : "Putar info jam buka"
-              }
-              className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-accent px-4 py-3 text-left font-display text-sm uppercase leading-tight sm:text-base"
-            >
-              <span>
-                <span className="mr-2 inline-block bg-primary px-2 py-0.5 text-[10px] text-primary-foreground">
-                  Info
-                </span>
-                Informasi Jam Buka Tutup Resto
-              </span>
-              {playing === "Info jam buka" ? (
-                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              ) : (
-                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
-              )}
-            </button>
+          <div className="space-y-4">
+            {announcementGroups.map((group) => (
+              <div
+                key={group.category}
+                aria-labelledby={`announcement-category-${group.category.toLowerCase()}`}
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <h3
+                    id={`announcement-category-${group.category.toLowerCase()}`}
+                    className={`border-2 border-foreground px-2.5 py-1 font-display text-xs uppercase ${
+                      group.category === "INFO"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-destructive text-destructive-foreground"
+                    }`}
+                  >
+                    {group.category}
+                  </h3>
+                  <span className="text-xs font-bold text-muted-foreground">
+                    {group.items.length} pengumuman
+                  </span>
+                  <div className="h-0.5 flex-1 bg-foreground" aria-hidden="true" />
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+                  {group.items.map((announcement) => (
+                    <button
+                      key={announcement.id}
+                      type="button"
+                      onClick={() => toggleAnnouncement(announcement.id, announcement.url)}
+                      disabled={!announcement.url}
+                      aria-label={`${
+                        playing === announcement.id ? "Jeda" : "Putar"
+                      } ${announcement.title.toLowerCase()}`}
+                      className={`brutal-border brutal-press flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-display text-sm uppercase leading-tight sm:text-base ${
+                        group.category === "INFO"
+                          ? "bg-accent"
+                          : "bg-destructive text-destructive-foreground"
+                      }`}
+                    >
+                      <span>{announcement.title}</span>
+                      {playing === announcement.id ? (
+                        <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
+                      ) : (
+                        <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
