@@ -42,7 +42,7 @@ export function Header({ readyCount, totalCount }: HeaderProps) {
       <div className="border-t-[3px] border-foreground bg-accent px-4 py-1.5 sm:hidden">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <span className="text-[10px] font-black uppercase tracking-wider">
-            Semua Voice Meja Siap
+            JANGAN LUPA BERDO'A DULU YA GAES! 🙏
           </span>
           <span className="font-display text-sm">
             {readyCount}
