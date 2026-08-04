@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { Megaphone, Play, Square } from "lucide-react";
+import { Megaphone, Pause, Play, Square } from "lucide-react";
 
 import { Header } from "@/components/Header";
 import { AuthGate } from "@/components/AuthGate";
@@ -45,6 +45,7 @@ function SoundboardPage() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState<number | string | null>(null);
+  const [paused, setPaused] = useState<number | string | null>(null);
   const [loading, setLoading] = useState<number | string | null>(null);
 
   useEffect(() => {
@@ -60,44 +61,81 @@ function SoundboardPage() {
       audioRef.current.currentTime = 0;
     }
     setPlaying(null);
+    setPaused(null);
     setLoading(null);
   }, []);
 
-  const play = useCallback(async (id: number | string, directUrl?: string | null) => {
-    const url = directUrl ?? (typeof id === "number" ? getTableAudioUrl(id) : null);
-    if (!url) return;
+  const play = useCallback(
+    async (id: number | string, directUrl?: string | null) => {
+      // Resume audio yang dijeda dari posisi terakhir.
+      if (paused === id && audioRef.current) {
+        setLoading(id);
+        try {
+          await audioRef.current.play();
+        } catch (err) {
+          console.error(err);
+          setLoading(null);
+          setPaused(null);
+        }
+        return;
+      }
 
-    // Stop any current playback
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
-    }
+      const url = directUrl ?? (typeof id === "number" ? getTableAudioUrl(id) : null);
+      if (!url) return;
 
-    setLoading(id);
-    const audio = new Audio(url);
-    audioRef.current = audio;
+      // Stop audio lain sebelum memulai yang baru.
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+      }
 
-    audio.addEventListener("playing", () => {
-      setLoading(null);
-      setPlaying(id);
-    });
-    audio.addEventListener("ended", () => {
-      setPlaying(null);
-    });
-    audio.addEventListener("error", () => {
-      setLoading(null);
-      setPlaying(null);
-      console.error("Audio playback error", id);
-    });
+      setPaused(null);
+      setLoading(id);
+      const audio = new Audio(url);
+      audioRef.current = audio;
 
-    try {
-      await audio.play();
-    } catch (err) {
-      console.error(err);
-      setLoading(null);
-      setPlaying(null);
-    }
-  }, []);
+      audio.addEventListener("playing", () => {
+        setLoading(null);
+        setPaused(null);
+        setPlaying(id);
+      });
+      audio.addEventListener("ended", () => {
+        setPlaying(null);
+        setPaused(null);
+        audioRef.current = null;
+      });
+      audio.addEventListener("error", () => {
+        setLoading(null);
+        setPlaying(null);
+        setPaused(null);
+        audioRef.current = null;
+        console.error("Audio playback error", id);
+      });
+
+      try {
+        await audio.play();
+      } catch (err) {
+        console.error(err);
+        setLoading(null);
+        setPlaying(null);
+      }
+    },
+    [paused],
+  );
+
+  const toggleAnnouncement = useCallback(
+    (id: string, url?: string | null) => {
+      if (playing === id && audioRef.current) {
+        audioRef.current.pause();
+        setPlaying(null);
+        setPaused(id);
+        setLoading(null);
+        return;
+      }
+      void play(id, url);
+    },
+    [play, playing],
+  );
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -133,8 +171,9 @@ function SoundboardPage() {
           <div className="grid grid-cols-1 gap-2 sm:gap-3">
             <button
               type="button"
-              onClick={() => void play("Himbauan", announcements.seating)}
+              onClick={() => toggleAnnouncement("Himbauan", announcements.seating)}
               disabled={!announcements.seating}
+              aria-label={playing === "Himbauan" ? "Jeda himbauan" : "Putar himbauan"}
               className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-accent px-4 py-3 text-left font-display text-sm uppercase leading-tight sm:text-base"
             >
               <span>
@@ -143,12 +182,23 @@ function SoundboardPage() {
                 </span>
                 Himbauan Duduk Sesuai Nomor Meja
               </span>
-              <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              {playing === "Himbauan" ? (
+                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              ) : (
+                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              )}
             </button>
             <button
               type="button"
-              onClick={() => void play("Larangan makanan luar", announcements["outside-food"])}
+              onClick={() =>
+                toggleAnnouncement("Larangan makanan luar", announcements["outside-food"])
+              }
               disabled={!announcements["outside-food"]}
+              aria-label={
+                playing === "Larangan makanan luar"
+                  ? "Jeda larangan makanan luar"
+                  : "Putar larangan makanan luar"
+              }
               className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-destructive px-4 py-3 text-left font-display text-sm uppercase leading-tight text-destructive-foreground sm:text-base"
             >
               <span>
@@ -157,12 +207,19 @@ function SoundboardPage() {
                 </span>
                 Dilarang Bawa Makanan Dari Luar
               </span>
-              <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              {playing === "Larangan makanan luar" ? (
+                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              ) : (
+                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              )}
             </button>
             <button
               type="button"
-              onClick={() => void play("Larangan merokok", announcements["no-smoking"])}
+              onClick={() => toggleAnnouncement("Larangan merokok", announcements["no-smoking"])}
               disabled={!announcements["no-smoking"]}
+              aria-label={
+                playing === "Larangan merokok" ? "Jeda larangan merokok" : "Putar larangan merokok"
+              }
               className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-destructive px-4 py-3 text-left font-display text-sm uppercase leading-tight text-destructive-foreground sm:text-base"
             >
               <span>
@@ -171,12 +228,44 @@ function SoundboardPage() {
                 </span>
                 Dilarang Merokok di Area Lobby
               </span>
-              <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              {playing === "Larangan merokok" ? (
+                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              ) : (
+                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              )}
             </button>
             <button
               type="button"
-              onClick={() => void play("Info jam buka", announcements["jam-buka-resto"])}
+              onClick={() =>
+                toggleAnnouncement("Larangan gabungkan meja", announcements["larangan-gabung-meja"])
+              }
+              disabled={!announcements["larangan-gabung-meja"]}
+              aria-label={
+                playing === "Larangan gabungkan meja"
+                  ? "Jeda larangan gabungkan meja"
+                  : "Putar larangan gabungkan meja"
+              }
+              className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-destructive px-4 py-3 text-left font-display text-sm uppercase leading-tight text-destructive-foreground sm:text-base"
+            >
+              <span>
+                <span className="mr-2 inline-block bg-primary px-2 py-0.5 text-[10px] text-primary-foreground">
+                  Larangan
+                </span>
+                Dilarang Gabungkan Meja
+              </span>
+              {playing === "Larangan gabungkan meja" ? (
+                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              ) : (
+                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleAnnouncement("Info jam buka", announcements["jam-buka-resto"])}
               disabled={!announcements["jam-buka-resto"]}
+              aria-label={
+                playing === "Info jam buka" ? "Jeda info jam buka" : "Putar info jam buka"
+              }
               className="brutal-border brutal-press flex w-full items-center justify-between gap-3 bg-accent px-4 py-3 text-left font-display text-sm uppercase leading-tight sm:text-base"
             >
               <span>
@@ -185,7 +274,11 @@ function SoundboardPage() {
                 </span>
                 Informasi Jam Buka Tutup Resto
               </span>
-              <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              {playing === "Info jam buka" ? (
+                <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              ) : (
+                <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+              )}
             </button>
           </div>
         </section>

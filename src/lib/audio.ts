@@ -14,12 +14,18 @@
 
 export const TABLE_COUNT = 70;
 
-export type AnnouncementId = "seating" | "outside-food" | "no-smoking" | "jam-buka-resto";
+export type AnnouncementId =
+  | "seating"
+  | "outside-food"
+  | "no-smoking"
+  | "larangan-gabung-meja"
+  | "jam-buka-resto";
 
 export const ANNOUNCEMENT_IDS = [
   "seating",
   "outside-food",
   "no-smoking",
+  "larangan-gabung-meja",
   "jam-buka-resto",
 ] as const;
 
@@ -59,6 +65,7 @@ export const announcementAudioUrls: Readonly<Record<AnnouncementId, string | nul
     seating: null,
     "outside-food": null,
     "no-smoking": null,
+    "larangan-gabung-meja": null,
     "jam-buka-resto": null,
   };
   const valid = new Set<string>(ANNOUNCEMENT_IDS);
