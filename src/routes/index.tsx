@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { Megaphone, Pause, Play, Square } from "lucide-react";
+import { Megaphone, Pause, Play, Square, X } from "lucide-react";
 
 import { Header } from "@/components/Header";
 import { AuthGate } from "@/components/AuthGate";
@@ -48,6 +48,7 @@ function SoundboardPage() {
   const [playing, setPlaying] = useState<number | string | null>(null);
   const [paused, setPaused] = useState<number | string | null>(null);
   const [loading, setLoading] = useState<number | string | null>(null);
+  const [announcementPanelOpen, setAnnouncementPanelOpen] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -55,6 +56,16 @@ function SoundboardPage() {
       audioRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!announcementPanelOpen) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAnnouncementPanelOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [announcementPanelOpen]);
 
   const stop = useCallback(() => {
     const audio = audioRef.current;
@@ -198,7 +209,7 @@ function SoundboardPage() {
     },
   ] as const;
 
-  const activeAudioId = playing ?? loading;
+  const activeAudioId = playing ?? loading ?? paused;
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -216,78 +227,6 @@ function SoundboardPage() {
           </div>
         </div>
 
-        <section className="brutal-border brutal-shadow mb-5 bg-card p-3 sm:p-4">
-          <div className="mb-3 flex items-start gap-2.5 border-b-2 border-foreground pb-3">
-            <div className="flex size-9 shrink-0 items-center justify-center bg-primary text-primary-foreground">
-              <Megaphone className="size-5" aria-hidden="true" />
-            </div>
-            <div>
-              <h2 className="font-display text-base uppercase leading-tight sm:text-lg">
-                Tombol Pengumuman
-              </h2>
-              <p className="text-xs text-muted-foreground sm:text-sm">
-                Tekan salah satu tombol di bawah untuk memutar pengumuman.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {announcementGroups.map((group) => (
-              <div
-                key={group.category}
-                aria-labelledby={`announcement-category-${group.category.toLowerCase()}`}
-              >
-                <div className="mb-2 flex items-center gap-2">
-                  <h3
-                    id={`announcement-category-${group.category.toLowerCase()}`}
-                    className={`border-2 border-foreground px-2.5 py-1 font-display text-xs uppercase ${
-                      group.category === "INFO"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-destructive text-destructive-foreground"
-                    }`}
-                  >
-                    {group.category}
-                  </h3>
-                  <span className="text-xs font-bold text-muted-foreground">
-                    {group.items.length} pengumuman
-                  </span>
-                  <div className="h-0.5 flex-1 bg-foreground" aria-hidden="true" />
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-                  {group.items.map((announcement) => (
-                    <button
-                      key={announcement.id}
-                      type="button"
-                      onClick={() => toggleAnnouncement(announcement.id, announcement.url)}
-                      disabled={
-                        !announcement.url ||
-                        loading !== null ||
-                        (playing !== null && playing !== announcement.id)
-                      }
-                      aria-label={`${
-                        playing === announcement.id ? "Jeda" : "Putar"
-                      } ${announcement.title.toLowerCase()}`}
-                      className={`brutal-border brutal-press flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-display text-sm uppercase leading-tight disabled:cursor-not-allowed disabled:opacity-40 sm:text-base ${
-                        group.category === "INFO"
-                          ? "bg-accent"
-                          : "bg-destructive text-destructive-foreground"
-                      }`}
-                    >
-                      <span>{announcement.title}</span>
-                      {playing === announcement.id ? (
-                        <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
-                      ) : (
-                        <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 sm:gap-3 md:grid-cols-8 lg:grid-cols-10">
           {tables.map((n) => {
             let status: TableStatus = "empty";
@@ -300,7 +239,7 @@ function SoundboardPage() {
                 tableNumber={n}
                 status={status}
                 onClick={() => void play(n)}
-                disabled={playing !== null || loading !== null}
+                disabled={activeAudioId !== null}
               />
             );
           })}
@@ -320,6 +259,120 @@ function SoundboardPage() {
       </main>
 
       <Footer />
+
+      {!announcementPanelOpen && (
+        <button
+          type="button"
+          onClick={() => setAnnouncementPanelOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          className={`brutal-border brutal-shadow-lg brutal-press fixed right-4 z-30 flex items-center gap-2 bg-primary px-4 py-3 font-display text-sm uppercase text-primary-foreground sm:px-5 sm:text-base ${
+            activeAudioId !== null ? "bottom-24" : "bottom-4"
+          }`}
+        >
+          <Megaphone className="size-5 shrink-0" aria-hidden="true" />
+          Lihat Pengumuman
+        </button>
+      )}
+
+      {announcementPanelOpen && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end bg-foreground/60"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setAnnouncementPanelOpen(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="announcement-panel-title"
+            className="h-full w-full overflow-y-auto border-l-4 border-foreground bg-background p-4 shadow-[-8px_0_0_0_hsl(var(--foreground))] sm:max-w-xl sm:p-6"
+          >
+            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-5 flex items-start justify-between gap-3 border-b-4 border-foreground bg-background p-4 sm:-mx-6 sm:-mt-6 sm:p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground">
+                  <Megaphone className="size-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <h2
+                    id="announcement-panel-title"
+                    className="font-display text-lg uppercase leading-tight sm:text-xl"
+                  >
+                    Tombol Pengumuman
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                    Pilih pengumuman yang ingin diputar.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnnouncementPanelOpen(false)}
+                aria-label="Tutup panel pengumuman"
+                className="brutal-border brutal-press flex size-10 shrink-0 items-center justify-center bg-card"
+              >
+                <X className="size-5" strokeWidth={3} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              {announcementGroups.map((group) => (
+                <div
+                  key={group.category}
+                  aria-labelledby={`announcement-category-${group.category.toLowerCase()}`}
+                >
+                  <div className="mb-3 flex items-center gap-2">
+                    <h3
+                      id={`announcement-category-${group.category.toLowerCase()}`}
+                      className={`border-2 border-foreground px-2.5 py-1 font-display text-xs uppercase ${
+                        group.category === "INFO"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-destructive text-destructive-foreground"
+                      }`}
+                    >
+                      {group.category}
+                    </h3>
+                    <span className="text-xs font-bold text-muted-foreground">
+                      {group.items.length} pengumuman
+                    </span>
+                    <div className="h-0.5 flex-1 bg-foreground" aria-hidden="true" />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {group.items.map((announcement) => (
+                      <button
+                        key={announcement.id}
+                        type="button"
+                        onClick={() => toggleAnnouncement(announcement.id, announcement.url)}
+                        disabled={
+                          !announcement.url ||
+                          loading !== null ||
+                          (activeAudioId !== null && activeAudioId !== announcement.id)
+                        }
+                        aria-label={`${
+                          playing === announcement.id ? "Jeda" : "Putar"
+                        } ${announcement.title.toLowerCase()}`}
+                        className={`brutal-border brutal-press flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-display text-sm uppercase leading-tight disabled:cursor-not-allowed disabled:opacity-40 sm:text-base ${
+                          group.category === "INFO"
+                            ? "bg-accent"
+                            : "bg-destructive text-destructive-foreground"
+                        }`}
+                      >
+                        <span>{announcement.title}</span>
+                        {playing === announcement.id ? (
+                          <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
+                        ) : (
+                          <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
 
       {activeAudioId !== null && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
