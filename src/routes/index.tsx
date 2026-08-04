@@ -370,6 +370,17 @@ function SoundboardPage() {
                 </div>
               ))}
             </div>
+
+            <footer className="mt-8 border-t-2 border-foreground px-2 pb-2 pt-4 text-center text-xs leading-relaxed text-muted-foreground sm:text-sm">
+              <p className="italic">
+                - Gak ada orang yang terlahir bodoh, mereka hanya{" "}
+                <strong className="font-bold text-foreground">Malas Belajar</strong>. -
+              </p>
+              <p className="mt-1 font-semibold text-foreground">Semoga Bermanfaat ya gaes!</p>
+              <p className="mt-1 text-[11px] sm:text-xs">
+                By <strong className="font-bold text-foreground">Bang Marko Ganteng</strong>
+              </p>
+            </footer>
           </section>
         </div>
       )}
