@@ -46,10 +46,10 @@ export function AuthGate({ onSuccess }: AuthGateProps) {
           />
 
           <h1 className="mt-4 text-center font-display text-lg uppercase sm:text-xl">
-            Buka Table Talker
+            SIMPLE, SMART, SMOOTH !
           </h1>
           <p className="mt-1 text-center text-xs text-muted-foreground">
-            Masukkan kode resto untuk membuka dashboard meja.
+           🙏 Jangan lupa Baca Do'a Dulu 🙏
           </p>
 
           <div className="mt-5 space-y-3 sm:mt-6">
@@ -81,7 +81,7 @@ export function AuthGate({ onSuccess }: AuthGateProps) {
             className="brutal-border brutal-shadow brutal-press mt-5 flex w-full items-center justify-center gap-2 bg-accent px-4 py-3 font-display uppercase disabled:opacity-60"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            {loading ? "Memeriksa…" : "Masuk"}
+            {loading ? "Bentar…" : "Gassss!"}
           </button>
         </form>
       </div>
