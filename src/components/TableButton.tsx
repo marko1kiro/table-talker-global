@@ -6,15 +6,16 @@ interface TableButtonProps {
   tableNumber: number;
   status: TableStatus;
   onClick: () => void;
+  disabled?: boolean;
 }
 
-export function TableButton({ tableNumber, status, onClick }: TableButtonProps) {
+export function TableButton({ tableNumber, status, onClick, disabled = false }: TableButtonProps) {
   const isEmpty = status === "empty";
   const isPlaying = status === "playing";
   const isLoading = status === "loading";
 
   const base =
-    "brutal-border brutal-press relative flex aspect-square w-full flex-col items-center justify-center font-display uppercase select-none";
+    "brutal-border brutal-press relative flex aspect-square w-full select-none flex-col items-center justify-center font-display uppercase disabled:cursor-not-allowed disabled:opacity-40";
   const state = isPlaying
     ? "bg-accent brutal-shadow-lg"
     : isEmpty
@@ -25,7 +26,7 @@ export function TableButton({ tableNumber, status, onClick }: TableButtonProps) 
     <button
       type="button"
       onClick={onClick}
-      disabled={isEmpty || isLoading}
+      disabled={disabled || isEmpty || isLoading}
       aria-label={`Meja nomor ${tableNumber}`}
       className={`${base} ${state}`}
     >

@@ -44,6 +44,7 @@ function SoundboardPage() {
   const announcements = announcementAudioUrls;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const activeAudioIdRef = useRef<number | string | null>(null);
   const [playing, setPlaying] = useState<number | string | null>(null);
   const [paused, setPaused] = useState<number | string | null>(null);
   const [loading, setLoading] = useState<number | string | null>(null);
@@ -56,9 +57,13 @@ function SoundboardPage() {
   }, []);
 
   const stop = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+    const audio = audioRef.current;
+    audioRef.current = null;
+    activeAudioIdRef.current = null;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = "";
     }
     setPlaying(null);
     setPaused(null);
@@ -67,15 +72,23 @@ function SoundboardPage() {
 
   const play = useCallback(
     async (id: number | string, directUrl?: string | null) => {
+      // Kunci sinkron mencegah dua klik cepat memulai audio secara bersamaan.
+      if (activeAudioIdRef.current !== null) return;
+
       // Resume audio yang dijeda dari posisi terakhir.
       if (paused === id && audioRef.current) {
+        const audio = audioRef.current;
+        activeAudioIdRef.current = id;
         setLoading(id);
         try {
-          await audioRef.current.play();
+          await audio.play();
         } catch (err) {
           console.error(err);
-          setLoading(null);
-          setPaused(null);
+          if (audioRef.current === audio) {
+            activeAudioIdRef.current = null;
+            setLoading(null);
+            setPaused(null);
+          }
         }
         return;
       }
@@ -83,28 +96,28 @@ function SoundboardPage() {
       const url = directUrl ?? (typeof id === "number" ? getTableAudioUrl(id) : null);
       if (!url) return;
 
-      // Stop audio lain sebelum memulai yang baru.
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-      }
-
+      activeAudioIdRef.current = id;
       setPaused(null);
       setLoading(id);
       const audio = new Audio(url);
       audioRef.current = audio;
 
       audio.addEventListener("playing", () => {
+        if (audioRef.current !== audio) return;
         setLoading(null);
         setPaused(null);
         setPlaying(id);
       });
       audio.addEventListener("ended", () => {
+        if (audioRef.current !== audio) return;
+        activeAudioIdRef.current = null;
         setPlaying(null);
         setPaused(null);
         audioRef.current = null;
       });
       audio.addEventListener("error", () => {
+        if (audioRef.current !== audio) return;
+        activeAudioIdRef.current = null;
         setLoading(null);
         setPlaying(null);
         setPaused(null);
@@ -116,8 +129,12 @@ function SoundboardPage() {
         await audio.play();
       } catch (err) {
         console.error(err);
-        setLoading(null);
-        setPlaying(null);
+        if (audioRef.current === audio) {
+          activeAudioIdRef.current = null;
+          audioRef.current = null;
+          setLoading(null);
+          setPlaying(null);
+        }
       }
     },
     [paused],
@@ -127,6 +144,7 @@ function SoundboardPage() {
     (id: string, url?: string | null) => {
       if (playing === id && audioRef.current) {
         audioRef.current.pause();
+        activeAudioIdRef.current = null;
         setPlaying(null);
         setPaused(id);
         setLoading(null);
@@ -179,6 +197,8 @@ function SoundboardPage() {
       ],
     },
   ] as const;
+
+  const activeAudioId = playing ?? loading;
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -240,11 +260,15 @@ function SoundboardPage() {
                       key={announcement.id}
                       type="button"
                       onClick={() => toggleAnnouncement(announcement.id, announcement.url)}
-                      disabled={!announcement.url}
+                      disabled={
+                        !announcement.url ||
+                        loading !== null ||
+                        (playing !== null && playing !== announcement.id)
+                      }
                       aria-label={`${
                         playing === announcement.id ? "Jeda" : "Putar"
                       } ${announcement.title.toLowerCase()}`}
-                      className={`brutal-border brutal-press flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-display text-sm uppercase leading-tight sm:text-base ${
+                      className={`brutal-border brutal-press flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-display text-sm uppercase leading-tight disabled:cursor-not-allowed disabled:opacity-40 sm:text-base ${
                         group.category === "INFO"
                           ? "bg-accent"
                           : "bg-destructive text-destructive-foreground"
@@ -271,7 +295,13 @@ function SoundboardPage() {
             else if (loading === n) status = "loading";
             else if (readyTables.has(n)) status = "ready";
             return (
-              <TableButton key={n} tableNumber={n} status={status} onClick={() => void play(n)} />
+              <TableButton
+                key={n}
+                tableNumber={n}
+                status={status}
+                onClick={() => void play(n)}
+                disabled={playing !== null || loading !== null}
+              />
             );
           })}
         </div>
@@ -291,14 +321,14 @@ function SoundboardPage() {
 
       <Footer />
 
-      {playing !== null && (
+      {activeAudioId !== null && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
           <button
             onClick={stop}
             className="brutal-border brutal-shadow-lg brutal-press flex items-center gap-2 bg-destructive px-5 py-3 font-display uppercase text-destructive-foreground"
           >
             <Square className="h-4 w-4" fill="currentColor" strokeWidth={3} />
-            Stop {typeof playing === "number" ? `Meja ${playing}` : playing}
+            Stop {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioId}
           </button>
         </div>
       )}
