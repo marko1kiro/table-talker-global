@@ -9,6 +9,22 @@ import {
 } from "../lib/remote-audio-domain";
 import { getSupabaseBrowserClient } from "../lib/supabase-browser";
 
+const anonymousUsers = new WeakMap<SupabaseClient, Promise<string>>();
+
+export async function getAnonymousUserId(client: SupabaseClient): Promise<string> {
+  const { data } = await client.auth.getUser();
+  if (data.user) return data.user.id;
+  let pending = anonymousUsers.get(client);
+  if (!pending) {
+    pending = client.auth.signInAnonymously().then(({ data, error }) => {
+      if (error || !data.user) throw error ?? new Error("Anonymous sign-in failed");
+      return data.user.id;
+    });
+    anonymousUsers.set(client, pending);
+  }
+  return pending;
+}
+
 export type CrewRegistration = {
   displayName: string;
   normalizedName: string;
@@ -56,28 +72,36 @@ export function createRemoteCommandProcessor({
 }: ProcessorOptions) {
   const processedIds = new Set<string>();
   let newestCreatedAt: string | null = null;
+  let queue = Promise.resolve();
 
-  return {
-    async process(command: RemoteCommand) {
-      if (!commandIsProcessable(command, sessionId, processedIds, newestCreatedAt, now())) return;
-      processedIds.add(command.id);
-      newestCreatedAt = command.createdAt;
+  const process = async (command: RemoteCommand) => {
+    if (newestCreatedAt !== command.createdAt) return;
+    try {
+      await playRemoteAudio(command.audioId);
+    } catch (error) {
+      onNeedsAudioRecovery?.();
       try {
-        await playRemoteAudio(command.audioId);
-      } catch (error) {
-        onNeedsAudioRecovery?.();
-        try {
-          await acknowledge(command.id, "failed", boundedFailureReason(error));
-        } catch {
-          onDeliveryUncertain?.();
-        }
-        return;
-      }
-      try {
-        await acknowledge(command.id, "played", null);
+        await acknowledge(command.id, "failed", boundedFailureReason(error));
       } catch {
         onDeliveryUncertain?.();
       }
+      return;
+    }
+    try {
+      await acknowledge(command.id, "played", null);
+    } catch {
+      onDeliveryUncertain?.();
+    }
+  };
+
+  return {
+    process(command: RemoteCommand) {
+      if (!commandIsProcessable(command, sessionId, processedIds, newestCreatedAt, now()))
+        return queue;
+      processedIds.add(command.id);
+      newestCreatedAt = command.createdAt;
+      queue = queue.then(() => process(command));
+      return queue;
     },
   };
 }
@@ -94,6 +118,9 @@ export function useRemoteCrew({
   playRemoteAudio: (audioId: AudioId) => Promise<void>;
 }) {
   const [offline, setOffline] = useState(false);
+  const [connectionState, setConnectionState] = useState<"offline" | "connecting" | "online">(
+    "offline",
+  );
   const [duplicateName, setDuplicateName] = useState(false);
   const [needsAudioRecovery, setNeedsAudioRecovery] = useState(false);
   const [deliveryUncertain, setDeliveryUncertain] = useState(false);
@@ -104,10 +131,12 @@ export function useRemoteCrew({
     const client = getSupabaseBrowserClient();
     if (!registration) {
       setOffline(false);
+      setConnectionState("offline");
       return;
     }
     if (!client) {
       setOffline(true);
+      setConnectionState("offline");
       return;
     }
 
@@ -138,66 +167,76 @@ export function useRemoteCrew({
     };
 
     const start = async () => {
-      const { data, error } = await client.auth.signInAnonymously();
-      if (error || !data.user) {
+      try {
+        userId = await getAnonymousUserId(client);
+        if (!active) {
+          disconnect();
+          return;
+        }
+        const { error: claimError } = await client.rpc("claim_crew_session", {
+          p_display_name: registration.displayName,
+          p_normalized_name: registration.normalizedName,
+          p_device_description: deviceDescription(),
+          p_audio_ready: registration.audioReady,
+          p_visibility_state: document.visibilityState,
+        });
+        if (!active) {
+          disconnect();
+          return;
+        }
+        if (claimError) {
+          update(setDuplicateName, /duplicate|unique/i.test(claimError.message));
+          update(setOffline, !/duplicate|unique/i.test(claimError.message));
+          return;
+        }
         update(setOffline, true);
-        return;
-      }
-      userId = data.user.id;
-      if (!active) return;
-      const { error: claimError } = await client.rpc("claim_crew_session", {
-        p_display_name: registration.displayName,
-        p_normalized_name: registration.normalizedName,
-        p_device_description: deviceDescription(),
-        p_audio_ready: registration.audioReady,
-        p_visibility_state: document.visibilityState,
-      });
-      if (!active) return;
-      if (claimError) {
-        update(setDuplicateName, /duplicate|unique/i.test(claimError.message));
-        update(setOffline, !/duplicate|unique/i.test(claimError.message));
-        return;
-      }
-      update(setOffline, false);
-      const processor = createRemoteCommandProcessor({
-        sessionId: userId,
-        playRemoteAudio: (audioId) => playRef.current(audioId),
-        acknowledge: async (commandId, status, reason) => {
-          try {
-            await rpc("ack_remote_command", {
-              p_command_id: commandId,
-              p_status: status,
-              p_failure_reason: reason,
-            });
-          } catch {
-            throw new Error("ACK_FAILED");
-          }
-        },
-        now: Date.now,
-        onNeedsAudioRecovery: () => update(setNeedsAudioRecovery, true),
-        onDeliveryUncertain: () => update(setDeliveryUncertain, true),
-      });
-      channel = client
-        .channel(`remote-commands:${userId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "remote_commands",
-            filter: `target_session_id=eq.${userId}`,
+        if (active) setConnectionState("connecting");
+        const processor = createRemoteCommandProcessor({
+          sessionId: userId,
+          playRemoteAudio: (audioId) => playRef.current(audioId),
+          acknowledge: async (commandId, status, reason) => {
+            try {
+              await rpc("ack_remote_command", {
+                p_command_id: commandId,
+                p_status: status,
+                p_failure_reason: reason,
+              });
+            } catch {
+              throw new Error("ACK_FAILED");
+            }
           },
-          ({ new: row }) => void processor.process(toRemoteCommand(row as RemoteCommandRow)),
-        )
-        .subscribe((status) => update(setOffline, status !== "SUBSCRIBED"));
-      if (document.visibilityState === "visible")
-        void heartbeat("connected").catch(() => update(setOffline, true));
-      timer = setInterval(() => {
+          now: Date.now,
+          onNeedsAudioRecovery: () => update(setNeedsAudioRecovery, true),
+          onDeliveryUncertain: () => update(setDeliveryUncertain, true),
+        });
+        channel = client
+          .channel(`remote-commands:${userId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "remote_commands",
+              filter: `target_session_id=eq.${userId}`,
+            },
+            ({ new: row }) => void processor.process(toRemoteCommand(row as RemoteCommandRow)),
+          )
+          .subscribe((status) => {
+            update(setOffline, status !== "SUBSCRIBED");
+            if (active) setConnectionState(status === "SUBSCRIBED" ? "online" : "offline");
+          });
         if (document.visibilityState === "visible")
           void heartbeat("connected").catch(() => update(setOffline, true));
-      }, HEARTBEAT_MS);
-      document.addEventListener("visibilitychange", onVisibilityChange);
-      window.addEventListener("pagehide", disconnect);
+        timer = setInterval(() => {
+          if (document.visibilityState === "visible")
+            void heartbeat("connected").catch(() => update(setOffline, true));
+        }, HEARTBEAT_MS);
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        window.addEventListener("pagehide", disconnect);
+      } catch {
+        update(setOffline, true);
+        if (active) setConnectionState("offline");
+      }
     };
 
     void start();
@@ -213,6 +252,7 @@ export function useRemoteCrew({
 
   return {
     offline,
+    connectionState,
     duplicateName,
     needsAudioRecovery,
     deliveryUncertain,
