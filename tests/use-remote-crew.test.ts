@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRemoteCommandProcessor, getAnonymousUserId } from "../src/hooks/use-remote-crew";
+import {
+  channelStateIsTerminal,
+  createRemoteCommandProcessor,
+  getAnonymousUserId,
+} from "../src/hooks/use-remote-crew";
 
 const command = {
   id: "command-1",
@@ -10,6 +14,13 @@ const command = {
 };
 
 describe("remote crew command processor", () => {
+  it("treats terminal channel states as disconnected but not initial subscribing", () => {
+    expect(channelStateIsTerminal("SUBSCRIBING")).toBe(false);
+    expect(channelStateIsTerminal("SUBSCRIBED")).toBe(false);
+    expect(channelStateIsTerminal("CLOSED")).toBe(true);
+    expect(channelStateIsTerminal("CHANNEL_ERROR")).toBe(true);
+    expect(channelStateIsTerminal("TIMED_OUT")).toBe(true);
+  });
   it("shares a pending anonymous sign-in for one client", async () => {
     const signInAnonymously = vi.fn().mockResolvedValue({
       data: { user: { id: "crew-1" } },

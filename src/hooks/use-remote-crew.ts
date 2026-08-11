@@ -11,6 +11,10 @@ import { getSupabaseBrowserClient } from "../lib/supabase-browser";
 
 const anonymousUsers = new WeakMap<SupabaseClient, Promise<string>>();
 
+export function channelStateIsTerminal(status: string) {
+  return status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT";
+}
+
 export async function getAnonymousUserId(client: SupabaseClient): Promise<string> {
   const { data } = await client.auth.getUser();
   if (data.user) return data.user.id;
@@ -144,8 +148,14 @@ export function useRemoteCrew({
     let channel: ReturnType<SupabaseClient["channel"]> | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
     let userId: string | null = null;
+    let channelTerminal = false;
     const update = (setter: (value: boolean) => void, value: boolean) => {
       if (active) setter(value);
+    };
+    update(setDuplicateName, false);
+    const stopHeartbeat = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
     };
     const rpc = async (fn: string, args: Record<string, unknown>) => {
       const { error } = await client.rpc(fn, args);
@@ -189,6 +199,7 @@ export function useRemoteCrew({
           update(setOffline, !/duplicate|unique/i.test(claimError.message));
           return;
         }
+        update(setDuplicateName, false);
         update(setOffline, true);
         if (active) setConnectionState("connecting");
         const processor = createRemoteCommandProcessor({
@@ -222,15 +233,25 @@ export function useRemoteCrew({
             ({ new: row }) => void processor.process(toRemoteCommand(row as RemoteCommandRow)),
           )
           .subscribe((status) => {
-            update(setOffline, status !== "SUBSCRIBED");
-            if (active) setConnectionState(status === "SUBSCRIBED" ? "online" : "offline");
+            if (status === "SUBSCRIBED") {
+              update(setOffline, false);
+              if (active) setConnectionState("online");
+              return;
+            }
+            if (!channelStateIsTerminal(status)) return;
+            channelTerminal = true;
+            stopHeartbeat();
+            disconnect();
+            update(setOffline, true);
+            if (active) setConnectionState("offline");
           });
-        if (document.visibilityState === "visible")
+        if (!channelTerminal && document.visibilityState === "visible")
           void heartbeat("connected").catch(() => update(setOffline, true));
-        timer = setInterval(() => {
-          if (document.visibilityState === "visible")
-            void heartbeat("connected").catch(() => update(setOffline, true));
-        }, HEARTBEAT_MS);
+        if (!channelTerminal)
+          timer = setInterval(() => {
+            if (document.visibilityState === "visible")
+              void heartbeat("connected").catch(() => update(setOffline, true));
+          }, HEARTBEAT_MS);
         document.addEventListener("visibilitychange", onVisibilityChange);
         window.addEventListener("pagehide", disconnect);
       } catch {
@@ -244,7 +265,7 @@ export function useRemoteCrew({
       active = false;
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pagehide", disconnect);
-      if (timer) clearInterval(timer);
+      stopHeartbeat();
       disconnect();
       if (channel) void client.removeChannel(channel);
     };
