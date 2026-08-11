@@ -49,7 +49,7 @@ export function AuthGate({ onSuccess }: AuthGateProps) {
             SIMPLE, SMART, SMOOTH !
           </h1>
           <p className="mt-1 text-center text-xs text-muted-foreground">
-           🙏 Jangan lupa Baca Do'a Dulu 🙏
+            🙏 Jangan lupa Baca Do'a Dulu 🙏
           </p>
 
           <div className="mt-5 space-y-3 sm:mt-6">
