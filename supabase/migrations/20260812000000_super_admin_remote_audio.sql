@@ -35,6 +35,7 @@ create table public.remote_commands (
 
 create index remote_commands_target_created_at_idx on public.remote_commands (target_session_id, created_at desc);
 create index remote_commands_created_at_idx on public.remote_commands (created_at);
+create index remote_commands_sent_expires_at_idx on public.remote_commands (expires_at) where status = 'sent';
 
 create or replace function public.claim_crew_session(
   p_display_name text,

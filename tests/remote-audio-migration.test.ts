@@ -62,6 +62,9 @@ describe("remote audio Supabase migration", () => {
       /do \$\$[\s\S]*alter publication supabase_realtime add table public\.remote_commands[\s\S]*duplicate_object/i,
     );
     expect(migration()).toMatch(/created_at < now\(\) - interval '7 days'/i);
+    expect(migration()).toMatch(
+      /create index remote_commands_sent_expires_at_idx on public\.remote_commands \(expires_at\) where status = 'sent'/i,
+    );
     expect(migration()).toMatch(/create extension if not exists pg_cron/i);
   });
 
