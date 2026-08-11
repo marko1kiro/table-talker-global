@@ -62,8 +62,7 @@ export function pruneProcessedCommands(processedIds: Map<string, ProcessedComman
   for (const [id, command] of processedIds)
     if (command.expiresAt <= now - PROCESSED_COMMAND_MAX_AGE_MS) processedIds.delete(id);
   if (processedIds.size <= PROCESSED_COMMAND_MAX_COUNT) return;
-  for (const [id, command] of processedIds) {
-    if (command.expiresAt > now) continue;
+  for (const [id] of [...processedIds].sort(([, a], [, b]) => a.processedAt - b.processedAt)) {
     processedIds.delete(id);
     if (processedIds.size <= PROCESSED_COMMAND_MAX_COUNT) return;
   }

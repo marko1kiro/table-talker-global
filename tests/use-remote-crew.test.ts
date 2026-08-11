@@ -77,6 +77,21 @@ describe("remote crew command processor", () => {
     expect(processedIds.size).toBe(256);
   });
 
+  it("caps unexpired replay IDs by deterministic oldest entry", () => {
+    const processedIds = new Map(
+      Array.from(
+        { length: 257 },
+        (_, index) => [`id-${index}`, { expiresAt: 100_000, processedAt: index }] as const,
+      ),
+    );
+
+    pruneProcessedCommands(processedIds, 1);
+
+    expect(processedIds.size).toBe(256);
+    expect(processedIds.has("id-0")).toBe(false);
+    expect(processedIds.has("id-256")).toBe(true);
+  });
+
   it("preserves processed commands across processors for one client and UID", async () => {
     const client = {} as never;
     const playRemoteAudio = vi.fn().mockResolvedValue(undefined);
