@@ -75,6 +75,7 @@ type ProcessorOptions = {
   now: () => number;
   onNeedsAudioRecovery?: () => void;
   onDeliveryUncertain?: () => void;
+  isVisible?: () => boolean;
   state?: RemoteCommandState;
 };
 
@@ -103,6 +104,7 @@ export function createRemoteCommandProcessor({
   now,
   onNeedsAudioRecovery,
   onDeliveryUncertain,
+  isVisible = () => typeof document === "undefined" || document.visibilityState === "visible",
   state = { processedIds: new Set(), newest: null, queue: Promise.resolve() },
 }: ProcessorOptions) {
   const process = async (command: RemoteCommand) => {
@@ -117,6 +119,7 @@ export function createRemoteCommandProcessor({
       )
     )
       return;
+    if (!isVisible()) return;
     try {
       await playRemoteAudio(command.audioId);
     } catch (error) {

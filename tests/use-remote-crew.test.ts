@@ -161,6 +161,41 @@ describe("remote crew command processor", () => {
     expect(acknowledge).toHaveBeenCalledTimes(1);
   });
 
+  it("discards a queued command when visibility becomes hidden", async () => {
+    let visible = true;
+    let releaseFirst: (() => void) | undefined;
+    const firstPlayback = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const playRemoteAudio = vi
+      .fn()
+      .mockImplementationOnce(() => firstPlayback)
+      .mockResolvedValue(undefined);
+    const acknowledge = vi.fn().mockResolvedValue(undefined);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio,
+      acknowledge,
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      isVisible: () => visible,
+    });
+
+    const first = processor.process({ ...command, id: "a", createdAt: "2026-08-12T10:00:01.000Z" });
+    await vi.waitFor(() => expect(playRemoteAudio).toHaveBeenCalledOnce());
+    const queued = processor.process({
+      ...command,
+      id: "b",
+      createdAt: "2026-08-12T10:00:02.000Z",
+    });
+    visible = false;
+    releaseFirst?.();
+    await Promise.all([first, queued]);
+    await processor.process({ ...command, id: "b", createdAt: "2026-08-12T10:00:02.000Z" });
+
+    expect(playRemoteAudio).toHaveBeenCalledOnce();
+    expect(acknowledge).toHaveBeenCalledTimes(1);
+  });
+
   it("acknowledges playback failure once and reports acknowledgement uncertainty", async () => {
     const onNeedsAudioRecovery = vi.fn();
     const onDeliveryUncertain = vi.fn();
