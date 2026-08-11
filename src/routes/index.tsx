@@ -13,6 +13,7 @@ import {
   getBundledAudioUrl,
   getTableAudioUrl,
   createAudioPlaybackController,
+  createPlaybackGeneration,
   getUnlockAudioUrl,
   readyTables,
   unlockBundledAudio,
@@ -58,6 +59,7 @@ function SoundboardPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioControllerRef = useRef<ReturnType<typeof createAudioPlaybackController> | null>(null);
   const activeAudioIdRef = useRef<number | string | null>(null);
+  const playbackGenerationRef = useRef(createPlaybackGeneration());
   const [playing, setPlaying] = useState<number | string | null>(null);
   const [paused, setPaused] = useState<number | string | null>(null);
   const [loading, setLoading] = useState<number | string | null>(null);
@@ -84,6 +86,7 @@ function SoundboardPage() {
   }, [announcementPanelOpen]);
 
   const stop = useCallback(() => {
+    playbackGenerationRef.current.next();
     audioControllerRef.current?.stop();
     activeAudioIdRef.current = null;
     setPlaying(null);
@@ -94,7 +97,8 @@ function SoundboardPage() {
   const getAudioController = useCallback(() => {
     const audio = audioRef.current ?? new Audio();
     audioRef.current = audio;
-    audioControllerRef.current ??= createAudioPlaybackController(audio, () => {
+    audioControllerRef.current ??= createAudioPlaybackController(audio, (token) => {
+      if (!playbackGenerationRef.current.isCurrent(token)) return;
       activeAudioIdRef.current = null;
       setPlaying(null);
       setPaused(null);
@@ -114,14 +118,21 @@ function SoundboardPage() {
       if (!url) throw new Error("Audio tidak tersedia.");
       stop();
       const { controller } = getAudioController();
+      const token = playbackGenerationRef.current.next();
       activeAudioIdRef.current = audioId;
       setLoading(audioId);
       try {
-        await controller.play(url);
-        setLoading(null);
-        setPlaying(audioId);
+        await controller.play(url, token);
+        if (playbackGenerationRef.current.isCurrent(token)) {
+          setLoading(null);
+          setPlaying(audioId);
+        }
       } catch (error) {
-        if ((error as Error).name !== "AbortError") stop();
+        if (
+          playbackGenerationRef.current.isCurrent(token) &&
+          (error as Error).name !== "AbortError"
+        )
+          stop();
         throw error;
       }
     },
@@ -162,16 +173,19 @@ function SoundboardPage() {
       const url = directUrl ?? (typeof id === "number" ? getTableAudioUrl(id) : null);
       if (!url) return;
 
+      const token = playbackGenerationRef.current.next();
       activeAudioIdRef.current = id;
       setPaused(null);
       setLoading(id);
       const { controller } = getAudioController();
       try {
-        await controller.play(url);
+        await controller.play(url, token);
+        if (!playbackGenerationRef.current.isCurrent(token)) return;
         setLoading(null);
         setPaused(null);
         setPlaying(id);
       } catch (error) {
+        if (!playbackGenerationRef.current.isCurrent(token)) return;
         if ((error as Error).name !== "AbortError") console.error(error);
         activeAudioIdRef.current = null;
         setLoading(null);

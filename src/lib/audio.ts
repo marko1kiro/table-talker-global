@@ -124,7 +124,18 @@ function abortError() {
   return Object.assign(new Error("Audio playback aborted."), { name: "AbortError" });
 }
 
-export function createAudioPlaybackController(audio: PlaybackAudio, onPlaybackEnded?: () => void) {
+export function createPlaybackGeneration() {
+  let current = 0;
+  return {
+    next: () => ++current,
+    isCurrent: (token: number) => token === current,
+  };
+}
+
+export function createAudioPlaybackController(
+  audio: PlaybackAudio,
+  onPlaybackEnded?: (token: number) => void,
+) {
   let settle: ((error?: Error) => void) | null = null;
   let cleanup: (() => void) | null = null;
   let endedListener: (() => void) | null = null;
@@ -142,14 +153,14 @@ export function createAudioPlaybackController(audio: PlaybackAudio, onPlaybackEn
   };
   return {
     stop,
-    play(url: string) {
+    play(url: string, token: number) {
       stop();
       audio.src = url;
       return new Promise<void>((resolve, reject) => {
         const onEnded = () => {
           endedListener = null;
           stop();
-          onPlaybackEnded?.();
+          onPlaybackEnded?.(token);
         };
         const finish = (error?: Error) => {
           cleanup?.();
