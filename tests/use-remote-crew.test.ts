@@ -4,6 +4,7 @@ import {
   canSendConnectedHeartbeat,
   createRemoteCommandProcessor,
   getAnonymousUserId,
+  getRemoteCommandState,
 } from "../src/hooks/use-remote-crew";
 
 const command = {
@@ -40,6 +41,23 @@ describe("remote crew command processor", () => {
     await Promise.all([getAnonymousUserId(client as never), getAnonymousUserId(client as never)]);
 
     expect(signInAnonymously).toHaveBeenCalledOnce();
+  });
+
+  it("preserves processed commands across processors for one client and UID", async () => {
+    const client = {} as never;
+    const playRemoteAudio = vi.fn().mockResolvedValue(undefined);
+    const options = {
+      sessionId: "crew-1",
+      playRemoteAudio,
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      state: getRemoteCommandState(client, "crew-1"),
+    };
+
+    await createRemoteCommandProcessor(options).process(command);
+    await createRemoteCommandProcessor(options).process(command);
+
+    expect(playRemoteAudio).toHaveBeenCalledOnce();
   });
 
   it("marks a valid command processed before playback and ignores its duplicate", async () => {

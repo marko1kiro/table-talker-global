@@ -11,6 +11,7 @@ import {
 import { getSupabaseBrowserClient } from "../lib/supabase-browser";
 
 const anonymousUsers = new WeakMap<SupabaseClient, Promise<string>>();
+const commandStates = new WeakMap<SupabaseClient, Map<string, RemoteCommandState>>();
 
 export function channelStateIsTerminal(status: string) {
   return status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT";
@@ -40,6 +41,29 @@ export type CrewRegistration = {
   audioReady: boolean;
 };
 
+export type RemoteCommandState = {
+  processedIds: Set<string>;
+  newest: CommandWatermark | null;
+  queue: Promise<void>;
+};
+
+export function getRemoteCommandState(
+  client: SupabaseClient,
+  sessionId: string,
+): RemoteCommandState {
+  let sessions = commandStates.get(client);
+  if (!sessions) {
+    sessions = new Map();
+    commandStates.set(client, sessions);
+  }
+  let state = sessions.get(sessionId);
+  if (!state) {
+    state = { processedIds: new Set(), newest: null, queue: Promise.resolve() };
+    sessions.set(sessionId, state);
+  }
+  return state;
+}
+
 type ProcessorOptions = {
   sessionId: string;
   playRemoteAudio: (audioId: AudioId) => Promise<void>;
@@ -51,6 +75,7 @@ type ProcessorOptions = {
   now: () => number;
   onNeedsAudioRecovery?: () => void;
   onDeliveryUncertain?: () => void;
+  state?: RemoteCommandState;
 };
 
 type RemoteCommandRow = {
@@ -78,18 +103,15 @@ export function createRemoteCommandProcessor({
   now,
   onNeedsAudioRecovery,
   onDeliveryUncertain,
+  state = { processedIds: new Set(), newest: null, queue: Promise.resolve() },
 }: ProcessorOptions) {
-  const processedIds = new Set<string>();
-  let newest: CommandWatermark | null = null;
-  let queue = Promise.resolve();
-
   const process = async (command: RemoteCommand) => {
-    if (newest?.createdAt !== command.createdAt || newest.id !== command.id) return;
+    if (state.newest?.createdAt !== command.createdAt || state.newest.id !== command.id) return;
     if (
       !commandIsProcessable(
         command,
         sessionId,
-        new Set([...processedIds].filter((id) => id !== command.id)),
+        new Set([...state.processedIds].filter((id) => id !== command.id)),
         null,
         now(),
       )
@@ -115,11 +137,12 @@ export function createRemoteCommandProcessor({
 
   return {
     process(command: RemoteCommand) {
-      if (!commandIsProcessable(command, sessionId, processedIds, newest, now())) return queue;
-      processedIds.add(command.id);
-      newest = { createdAt: command.createdAt, id: command.id };
-      queue = queue.then(() => process(command));
-      return queue;
+      if (!commandIsProcessable(command, sessionId, state.processedIds, state.newest, now()))
+        return state.queue;
+      state.processedIds.add(command.id);
+      state.newest = { createdAt: command.createdAt, id: command.id };
+      state.queue = state.queue.then(() => process(command));
+      return state.queue;
     },
   };
 }
@@ -218,6 +241,7 @@ export function useRemoteCrew({
         if (active) setConnectionState("connecting");
         const processor = createRemoteCommandProcessor({
           sessionId: userId,
+          state: getRemoteCommandState(client, userId),
           playRemoteAudio: (audioId) => playRef.current(audioId),
           acknowledge: async (commandId, status, reason) => {
             try {
