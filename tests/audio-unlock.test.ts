@@ -41,12 +41,29 @@ describe("bundled audio playback", () => {
     expect(audio.src).toBe("");
   });
 
+  it("resets after manual ended and reuses one controller for remote", async () => {
+    const audio = audioMock();
+    const ended = vi.fn();
+    const controller = createAudioPlaybackController(audio, ended);
+    const manual = controller.play("/manual.mp3");
+    audio.emit("playing");
+    await manual;
+    audio.emit("ended");
+    expect(ended).toHaveBeenCalledOnce();
+    expect(audio.src).toBe("");
+    const remote = controller.play("/remote.mp3");
+    audio.emit("playing");
+    await remote;
+    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(audio.src).toBe("/remote.mp3");
+  });
+
   it("rejects a pending start when stopped and removes listeners", async () => {
     const audio = audioMock();
     const controller = createAudioPlaybackController(audio);
     const pending = controller.play("/audio.mp3");
     controller.stop();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(audio.removeEventListener).toHaveBeenCalledTimes(2);
+    expect(audio.removeEventListener).toHaveBeenCalledTimes(3);
   });
 });

@@ -91,24 +91,31 @@ function SoundboardPage() {
     setLoading(null);
   }, []);
 
-  const unlockAudio = useCallback(() => {
+  const getAudioController = useCallback(() => {
     const audio = audioRef.current ?? new Audio();
     audioRef.current = audio;
-    audioControllerRef.current ??= createAudioPlaybackController(audio);
-    return unlockBundledAudio(audio, getUnlockAudioUrl());
+    audioControllerRef.current ??= createAudioPlaybackController(audio, () => {
+      activeAudioIdRef.current = null;
+      setPlaying(null);
+      setPaused(null);
+      setLoading(null);
+    });
+    return { audio, controller: audioControllerRef.current };
   }, []);
+
+  const unlockAudio = useCallback(() => {
+    const { audio } = getAudioController();
+    return unlockBundledAudio(audio, getUnlockAudioUrl());
+  }, [getAudioController]);
 
   const playRemoteAudio = useCallback(
     async (audioId: AudioId) => {
       const url = getBundledAudioUrl(audioId);
       if (!url) throw new Error("Audio tidak tersedia.");
       stop();
-      const audio = audioRef.current ?? new Audio();
-      audioRef.current = audio;
-      const controller = (audioControllerRef.current ??= createAudioPlaybackController(audio));
+      const { controller } = getAudioController();
       activeAudioIdRef.current = audioId;
       setLoading(audioId);
-      audio.addEventListener("ended", stop, { once: true });
       try {
         await controller.play(url);
         setLoading(null);
@@ -118,7 +125,7 @@ function SoundboardPage() {
         throw error;
       }
     },
-    [stop],
+    [getAudioController, stop],
   );
 
   const remoteCrew = useRemoteCrew({ registration: crewIdentity, playRemoteAudio });
@@ -158,47 +165,21 @@ function SoundboardPage() {
       activeAudioIdRef.current = id;
       setPaused(null);
       setLoading(id);
-      const audio = audioRef.current ?? new Audio();
-      audioRef.current = audio;
-      audioControllerRef.current ??= createAudioPlaybackController(audio);
-      audio.src = url;
-
-      audio.addEventListener("playing", () => {
-        if (audioRef.current !== audio) return;
+      const { controller } = getAudioController();
+      try {
+        await controller.play(url);
         setLoading(null);
         setPaused(null);
         setPlaying(id);
-      });
-      audio.addEventListener("ended", () => {
-        if (audioRef.current !== audio) return;
-        activeAudioIdRef.current = null;
-        setPlaying(null);
-        setPaused(null);
-        audioRef.current = null;
-      });
-      audio.addEventListener("error", () => {
-        if (audioRef.current !== audio) return;
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") console.error(error);
         activeAudioIdRef.current = null;
         setLoading(null);
         setPlaying(null);
         setPaused(null);
-        audioRef.current = null;
-        console.error("Audio playback error", id);
-      });
-
-      try {
-        await audio.play();
-      } catch (err) {
-        console.error(err);
-        if (audioRef.current === audio) {
-          activeAudioIdRef.current = null;
-          audioRef.current = null;
-          setLoading(null);
-          setPlaying(null);
-        }
       }
     },
-    [paused],
+    [getAudioController, paused],
   );
 
   const toggleAnnouncement = useCallback(

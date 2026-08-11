@@ -124,12 +124,15 @@ function abortError() {
   return Object.assign(new Error("Audio playback aborted."), { name: "AbortError" });
 }
 
-export function createAudioPlaybackController(audio: PlaybackAudio) {
+export function createAudioPlaybackController(audio: PlaybackAudio, onPlaybackEnded?: () => void) {
   let settle: ((error?: Error) => void) | null = null;
   let cleanup: (() => void) | null = null;
+  let endedListener: (() => void) | null = null;
   const stop = () => {
     cleanup?.();
     cleanup = null;
+    if (endedListener) audio.removeEventListener("ended", endedListener);
+    endedListener = null;
     const pending = settle;
     settle = null;
     audio.pause();
@@ -143,6 +146,11 @@ export function createAudioPlaybackController(audio: PlaybackAudio) {
       stop();
       audio.src = url;
       return new Promise<void>((resolve, reject) => {
+        const onEnded = () => {
+          endedListener = null;
+          stop();
+          onPlaybackEnded?.();
+        };
         const finish = (error?: Error) => {
           cleanup?.();
           cleanup = null;
@@ -151,14 +159,19 @@ export function createAudioPlaybackController(audio: PlaybackAudio) {
           else resolve();
         };
         const onPlaying = () => finish();
-        const onError = () => finish(new Error("Audio playback error"));
+        const onError = () => {
+          finish(new Error("Audio playback error"));
+          stop();
+        };
         cleanup = () => {
           audio.removeEventListener("playing", onPlaying);
           audio.removeEventListener("error", onError);
         };
+        endedListener = onEnded;
         settle = finish;
         audio.addEventListener("playing", onPlaying, { once: true });
         audio.addEventListener("error", onError, { once: true });
+        audio.addEventListener("ended", onEnded, { once: true });
         void audio
           .play()
           .catch((error) =>
