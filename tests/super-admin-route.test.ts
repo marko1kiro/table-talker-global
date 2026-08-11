@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { commandStatus, canPlayRemoteAudio } from "../src/lib/super-admin-state";
+import {
+  commandStatus,
+  canPlayRemoteAudio,
+  reconcileRemoteSelection,
+} from "../src/lib/super-admin-state";
 
 it("enables Play only for a valid online idle selection", () => {
   expect(
@@ -35,6 +39,29 @@ it("enables Play only for a valid online idle selection", () => {
   ).toBe(false);
 });
 
+it("clears selections removed from an updated eligible target or catalog snapshot", () => {
+  expect(
+    reconcileRemoteSelection(
+      "crew-1",
+      "table:1",
+      [{ id: "crew-1", eligible: true, audioReady: true }],
+      ["table:1"],
+    ),
+  ).toEqual({ targetSessionId: "crew-1", audioId: "table:1" });
+  expect(
+    reconcileRemoteSelection(
+      "crew-1",
+      "table:1",
+      [{ id: "crew-1", eligible: false, audioReady: true }],
+      ["table:1"],
+    ),
+  ).toEqual({ targetSessionId: "", audioId: "table:1" });
+  expect(reconcileRemoteSelection("crew-1", "table:1", [], [])).toEqual({
+    targetSessionId: "",
+    audioId: "",
+  });
+});
+
 it("shows sent commands as expired at their effective expiry time", () => {
   expect(
     commandStatus(
@@ -56,4 +83,7 @@ it("guards the route with the super-admin session bit and noindex", () => {
   expect(source).toContain('{ name: "robots", content: "noindex" }');
   expect(source).toContain("loginSuperAdmin");
   expect(source).toContain("setInterval");
+  expect(source).toContain("onError");
+  expect(source).toContain('role="alert"');
+  expect(source).toContain("mutation.reset()");
 });

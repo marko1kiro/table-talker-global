@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { AuthGate } from "@/components/AuthGate";
 import { getAuthStatus, loginSuperAdmin } from "@/lib/auth";
 import { getRemoteAdminSnapshot, sendRemoteCommand } from "@/lib/remote-audio.server";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { canPlayRemoteAudio, commandStatus } from "@/lib/super-admin-state";
+import {
+  canPlayRemoteAudio,
+  commandStatus,
+  reconcileRemoteSelection,
+} from "@/lib/super-admin-state";
 
 const snapshotKey = ["remote-admin-snapshot"] as const;
 
@@ -38,6 +42,7 @@ function SuperAdminPage() {
   const queryClient = useQueryClient();
   const [targetSessionId, setTargetSessionId] = useState("");
   const [audioId, setAudioId] = useState("");
+  const [sendError, setSendError] = useState("");
   const [now, setNow] = useState(Date.now());
   const snapshot = useQuery({
     queryKey: snapshotKey,
@@ -47,7 +52,11 @@ function SuperAdminPage() {
   });
   const mutation = useMutation({
     mutationFn: () => sendRemoteCommand({ data: { targetSessionId, audioId } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: snapshotKey }),
+    onSuccess: () => {
+      setSendError("");
+      queryClient.invalidateQueries({ queryKey: snapshotKey });
+    },
+    onError: () => setSendError("Gagal mengirim perintah. Silakan coba lagi."),
   });
 
   useEffect(() => {
@@ -74,9 +83,26 @@ function SuperAdminPage() {
 
   const data = snapshot.data;
   const offline = !data || data.offline;
-  const sessions = data && !data.offline ? data.sessions : [];
-  const catalog = data && !data.offline ? data.catalog : [];
+  const sessions = useMemo(() => (data && !data.offline ? data.sessions : []), [data]);
+  const catalog = useMemo(() => (data && !data.offline ? data.catalog : []), [data]);
   const commands = data && !data.offline ? data.commands : [];
+
+  useEffect(() => {
+    const selection = reconcileRemoteSelection(
+      targetSessionId,
+      audioId,
+      sessions.map((session) => ({
+        id: session.id,
+        eligible: session.eligible,
+        audioReady: session.audio_ready,
+      })),
+      catalog.map((audio) => audio.id),
+    );
+    if (selection.targetSessionId !== targetSessionId)
+      setTargetSessionId(selection.targetSessionId);
+    if (selection.audioId !== audioId) setAudioId(selection.audioId);
+  }, [audioId, catalog, sessions, targetSessionId]);
+
   const canPlay = canPlayRemoteAudio({
     offline,
     targetSessionId,
@@ -144,14 +170,18 @@ function SuperAdminPage() {
               : "Target tidak siap audio."}
           </p>
         )}
-        {mutation.data && "error" in mutation.data && (
+        {(sendError || (mutation.data && "error" in mutation.data && mutation.data.error)) && (
           <p role="alert" className="mt-3 text-sm font-bold text-destructive">
-            {mutation.data.error}
+            {sendError || (mutation.data && "error" in mutation.data ? mutation.data.error : "")}
           </p>
         )}
         <button
           type="button"
-          onClick={() => mutation.mutate()}
+          onClick={() => {
+            setSendError("");
+            mutation.reset();
+            mutation.mutate();
+          }}
           disabled={!canPlay}
           className="brutal-border brutal-shadow brutal-press mt-5 w-full bg-accent px-4 py-3 font-display uppercase disabled:cursor-not-allowed disabled:opacity-60"
         >
