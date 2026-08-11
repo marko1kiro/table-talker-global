@@ -38,3 +38,6 @@ dist-ssr
 
 # Vercel
 .vercel
+
+# Local worktrees
+.worktrees/
