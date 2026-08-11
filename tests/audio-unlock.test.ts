@@ -5,6 +5,7 @@ import {
   getUnlockAudioUrl,
   unlockBundledAudio,
   createPlaybackGeneration,
+  runIfPlaybackCurrent,
 } from "../src/lib/audio";
 
 function audioMock() {
@@ -65,6 +66,18 @@ describe("bundled audio playback", () => {
     const remote = generation.next();
     expect(generation.isCurrent(manual)).toBe(false);
     expect(generation.isCurrent(remote)).toBe(true);
+  });
+
+  it("ignores a stale resumed-play rejection after remote replacement", async () => {
+    const generation = createPlaybackGeneration();
+    const resumed = generation.next();
+    const remote = generation.next();
+    const clearResumedState = vi.fn();
+    await Promise.reject(new Error("resumed playback failed")).catch(() =>
+      runIfPlaybackCurrent(generation, resumed, clearResumedState),
+    );
+    expect(generation.isCurrent(remote)).toBe(true);
+    expect(clearResumedState).not.toHaveBeenCalled();
   });
 
   it("rejects a pending start when stopped and removes listeners", async () => {

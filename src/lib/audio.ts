@@ -132,6 +132,14 @@ export function createPlaybackGeneration() {
   };
 }
 
+export function runIfPlaybackCurrent(
+  generation: ReturnType<typeof createPlaybackGeneration>,
+  token: number,
+  effect: () => void,
+) {
+  if (generation.isCurrent(token)) effect();
+}
+
 export function createAudioPlaybackController(
   audio: PlaybackAudio,
   onPlaybackEnded?: (token: number) => void,

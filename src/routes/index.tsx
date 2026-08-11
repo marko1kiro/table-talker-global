@@ -15,6 +15,7 @@ import {
   createAudioPlaybackController,
   createPlaybackGeneration,
   getUnlockAudioUrl,
+  runIfPlaybackCurrent,
   readyTables,
   unlockBundledAudio,
 } from "@/lib/audio";
@@ -155,17 +156,23 @@ function SoundboardPage() {
       // Resume audio yang dijeda dari posisi terakhir.
       if (paused === id && audioRef.current) {
         const audio = audioRef.current;
+        const token = playbackGenerationRef.current.next();
         activeAudioIdRef.current = id;
         setLoading(id);
         try {
           await audio.play();
-        } catch (err) {
-          console.error(err);
-          if (audioRef.current === audio) {
+          runIfPlaybackCurrent(playbackGenerationRef.current, token, () => {
+            setLoading(null);
+            setPaused(null);
+            setPlaying(id);
+          });
+        } catch (error) {
+          runIfPlaybackCurrent(playbackGenerationRef.current, token, () => {
+            console.error(error);
             activeAudioIdRef.current = null;
             setLoading(null);
             setPaused(null);
-          }
+          });
         }
         return;
       }
