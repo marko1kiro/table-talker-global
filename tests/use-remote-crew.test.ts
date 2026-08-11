@@ -6,6 +6,7 @@ import {
   getAnonymousUserId,
   getRemoteCommandState,
   pruneProcessedCommands,
+  shouldActivatePresence,
 } from "../src/hooks/use-remote-crew";
 
 const command = {
@@ -28,6 +29,12 @@ describe("remote crew command processor", () => {
     expect(canSendConnectedHeartbeat(false, "visible")).toBe(true);
     expect(canSendConnectedHeartbeat(true, "hidden")).toBe(false);
     expect(canSendConnectedHeartbeat(true, "visible")).toBe(false);
+  });
+
+  it("activates connected presence only after realtime subscription", () => {
+    expect(shouldActivatePresence("SUBSCRIBING")).toBe(false);
+    expect(shouldActivatePresence("SUBSCRIBED")).toBe(true);
+    expect(shouldActivatePresence("CLOSED")).toBe(false);
   });
 
   it("shares a pending anonymous sign-in for one client", async () => {

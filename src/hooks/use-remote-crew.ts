@@ -21,6 +21,10 @@ export function canSendConnectedHeartbeat(channelTerminal: boolean, visibilitySt
   return !channelTerminal && visibilityState === "visible";
 }
 
+export function shouldActivatePresence(status: string) {
+  return status === "SUBSCRIBED";
+}
+
 export async function getAnonymousUserId(client: SupabaseClient): Promise<string> {
   const { data } = await client.auth.getUser();
   if (data.user) return data.user.id;
@@ -224,6 +228,7 @@ export function useRemoteCrew({
     let timer: ReturnType<typeof setInterval> | null = null;
     let userId: string | null = null;
     let channelTerminal = false;
+    let presenceActive = false;
     const update = (setter: (value: boolean) => void, value: boolean) => {
       if (active) setter(value);
     };
@@ -245,8 +250,18 @@ export function useRemoteCrew({
       });
     };
     const disconnect = () => void heartbeat("disconnected").catch(() => undefined);
-    const onVisibilityChange = () => {
+    const activatePresence = () => {
+      if (channelTerminal) return;
+      presenceActive = true;
       if (canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
+        void heartbeat("connected").catch(() => update(setOffline, true));
+      timer = setInterval(() => {
+        if (presenceActive && canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
+          void heartbeat("connected").catch(() => update(setOffline, true));
+      }, HEARTBEAT_MS);
+    };
+    const onVisibilityChange = () => {
+      if (presenceActive && canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
         void heartbeat("connected").catch(() => update(setOffline, true));
       else if (!channelTerminal) disconnect();
     };
@@ -263,7 +278,7 @@ export function useRemoteCrew({
           p_normalized_name: registration.normalizedName,
           p_device_description: deviceDescription(),
           p_audio_ready: registration.audioReady,
-          p_visibility_state: document.visibilityState,
+          p_visibility_state: "hidden",
         });
         if (!active) {
           disconnect();
@@ -309,9 +324,10 @@ export function useRemoteCrew({
             ({ new: row }) => void processor.process(toRemoteCommand(row as RemoteCommandRow)),
           )
           .subscribe((status) => {
-            if (status === "SUBSCRIBED") {
+            if (shouldActivatePresence(status)) {
               update(setOffline, false);
               if (active) setConnectionState("online");
+              activatePresence();
               return;
             }
             if (!channelStateIsTerminal(status)) return;
@@ -321,13 +337,6 @@ export function useRemoteCrew({
             update(setOffline, true);
             if (active) setConnectionState("offline");
           });
-        if (canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
-          void heartbeat("connected").catch(() => update(setOffline, true));
-        if (!channelTerminal)
-          timer = setInterval(() => {
-            if (canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
-              void heartbeat("connected").catch(() => update(setOffline, true));
-          }, HEARTBEAT_MS);
         document.addEventListener("visibilitychange", onVisibilityChange);
         window.addEventListener("pagehide", disconnect);
       } catch {
