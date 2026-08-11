@@ -108,17 +108,80 @@ export function getUnlockAudioUrl(): string | null {
   return bundledAudioCatalog[0]?.url ?? null;
 }
 
-type MutedUnlockAudio = Pick<HTMLAudioElement, "muted" | "currentTime" | "src" | "play" | "pause">;
+type PlaybackAudio = Pick<
+  HTMLAudioElement,
+  | "muted"
+  | "volume"
+  | "currentTime"
+  | "src"
+  | "play"
+  | "pause"
+  | "addEventListener"
+  | "removeEventListener"
+>;
 
-export async function playMutedAudioUnlock(
+function abortError() {
+  return Object.assign(new Error("Audio playback aborted."), { name: "AbortError" });
+}
+
+export function createAudioPlaybackController(audio: PlaybackAudio) {
+  let settle: ((error?: Error) => void) | null = null;
+  let cleanup: (() => void) | null = null;
+  const stop = () => {
+    cleanup?.();
+    cleanup = null;
+    const pending = settle;
+    settle = null;
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = "";
+    pending?.(abortError());
+  };
+  return {
+    stop,
+    play(url: string) {
+      stop();
+      audio.src = url;
+      return new Promise<void>((resolve, reject) => {
+        const finish = (error?: Error) => {
+          cleanup?.();
+          cleanup = null;
+          settle = null;
+          if (error) reject(error);
+          else resolve();
+        };
+        const onPlaying = () => finish();
+        const onError = () => finish(new Error("Audio playback error"));
+        cleanup = () => {
+          audio.removeEventListener("playing", onPlaying);
+          audio.removeEventListener("error", onError);
+        };
+        settle = finish;
+        audio.addEventListener("playing", onPlaying, { once: true });
+        audio.addEventListener("error", onError, { once: true });
+        void audio
+          .play()
+          .catch((error) =>
+            finish(error instanceof Error ? error : new Error("Audio playback error")),
+          );
+      });
+    },
+  };
+}
+
+export async function unlockBundledAudio(
+  audio: PlaybackAudio,
   url: string | null,
-  createAudio: (source: string) => MutedUnlockAudio = (source) => new Audio(source),
 ): Promise<boolean> {
   if (!url) return false;
-  const audio = createAudio(url);
+  const muted = audio.muted;
+  const volume = audio.volume;
+  audio.src = url;
   audio.muted = true;
+  audio.volume = 0;
+  const playback = audio.play();
   try {
-    await audio.play();
+    await playback;
     return true;
   } catch {
     return false;
@@ -126,5 +189,7 @@ export async function playMutedAudioUnlock(
     audio.pause();
     audio.currentTime = 0;
     audio.src = "";
+    audio.muted = muted;
+    audio.volume = volume;
   }
 }

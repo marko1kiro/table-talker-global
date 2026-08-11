@@ -12,9 +12,10 @@ import {
   announcementAudioUrls,
   getBundledAudioUrl,
   getTableAudioUrl,
+  createAudioPlaybackController,
   getUnlockAudioUrl,
-  playMutedAudioUnlock,
   readyTables,
+  unlockBundledAudio,
 } from "@/lib/audio";
 import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
 import { useRemoteCrew } from "@/hooks/use-remote-crew";
@@ -55,6 +56,7 @@ function SoundboardPage() {
   const announcements = announcementAudioUrls;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioControllerRef = useRef<ReturnType<typeof createAudioPlaybackController> | null>(null);
   const activeAudioIdRef = useRef<number | string | null>(null);
   const [playing, setPlaying] = useState<number | string | null>(null);
   const [paused, setPaused] = useState<number | string | null>(null);
@@ -65,7 +67,8 @@ function SoundboardPage() {
 
   useEffect(() => {
     return () => {
-      audioRef.current?.pause();
+      audioControllerRef.current?.stop();
+      audioControllerRef.current = null;
       audioRef.current = null;
     };
   }, []);
@@ -81,17 +84,18 @@ function SoundboardPage() {
   }, [announcementPanelOpen]);
 
   const stop = useCallback(() => {
-    const audio = audioRef.current;
-    audioRef.current = null;
+    audioControllerRef.current?.stop();
     activeAudioIdRef.current = null;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.src = "";
-    }
     setPlaying(null);
     setPaused(null);
     setLoading(null);
+  }, []);
+
+  const unlockAudio = useCallback(() => {
+    const audio = audioRef.current ?? new Audio();
+    audioRef.current = audio;
+    audioControllerRef.current ??= createAudioPlaybackController(audio);
+    return unlockBundledAudio(audio, getUnlockAudioUrl());
   }, []);
 
   const playRemoteAudio = useCallback(
@@ -99,38 +103,20 @@ function SoundboardPage() {
       const url = getBundledAudioUrl(audioId);
       if (!url) throw new Error("Audio tidak tersedia.");
       stop();
-      const audio = new Audio(url);
+      const audio = audioRef.current ?? new Audio();
       audioRef.current = audio;
+      const controller = (audioControllerRef.current ??= createAudioPlaybackController(audio));
       activeAudioIdRef.current = audioId;
       setLoading(audioId);
-      audio.addEventListener("ended", () => {
-        if (audioRef.current === audio) stop();
-      });
-      await new Promise<void>((resolve, reject) => {
-        const cleanup = () => {
-          audio.removeEventListener("playing", onPlaying);
-          audio.removeEventListener("error", onError);
-        };
-        const onPlaying = () => {
-          cleanup();
-          if (audioRef.current !== audio) return reject(new Error("Audio diganti."));
-          setLoading(null);
-          setPlaying(audioId);
-          resolve();
-        };
-        const onError = () => {
-          cleanup();
-          if (audioRef.current === audio) stop();
-          reject(new Error("Audio playback error"));
-        };
-        audio.addEventListener("playing", onPlaying, { once: true });
-        audio.addEventListener("error", onError, { once: true });
-        void audio.play().catch((error) => {
-          cleanup();
-          if (audioRef.current === audio) stop();
-          reject(error);
-        });
-      });
+      audio.addEventListener("ended", stop, { once: true });
+      try {
+        await controller.play(url);
+        setLoading(null);
+        setPlaying(audioId);
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") stop();
+        throw error;
+      }
     },
     [stop],
   );
@@ -172,8 +158,10 @@ function SoundboardPage() {
       activeAudioIdRef.current = id;
       setPaused(null);
       setLoading(id);
-      const audio = new Audio(url);
+      const audio = audioRef.current ?? new Audio();
       audioRef.current = audio;
+      audioControllerRef.current ??= createAudioPlaybackController(audio);
+      audio.src = url;
 
       audio.addEventListener("playing", () => {
         if (audioRef.current !== audio) return;
@@ -278,6 +266,7 @@ function SoundboardPage() {
       <CrewIdentityDialog
         open={!crewIdentity}
         duplicateName={duplicateName}
+        unlockAudio={unlockAudio}
         onContinue={(identity) => {
           setDuplicateName(false);
           setCrewIdentity(identity);
@@ -290,7 +279,7 @@ function SoundboardPage() {
             type="button"
             className="brutal-border brutal-press bg-accent px-3 py-2 font-display"
             onClick={() => {
-              void playMutedAudioUnlock(getUnlockAudioUrl()).then((audioReady) => {
+              void unlockAudio().then((audioReady) => {
                 setCrewIdentity({ ...crewIdentity, audioReady });
                 remoteCrew.retryAudioUnlock();
               });

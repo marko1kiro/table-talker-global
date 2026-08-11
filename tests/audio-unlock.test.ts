@@ -1,44 +1,52 @@
 import { describe, expect, it, vi } from "vitest";
-import { getBundledAudioUrl, getUnlockAudioUrl, playMutedAudioUnlock } from "../src/lib/audio";
+import {
+  createAudioPlaybackController,
+  getBundledAudioUrl,
+  getUnlockAudioUrl,
+  unlockBundledAudio,
+} from "../src/lib/audio";
+
+function audioMock() {
+  const listeners = new Map<string, Set<() => void>>();
+  return {
+    muted: false,
+    volume: 0.7,
+    currentTime: 4,
+    src: "",
+    play: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn(),
+    addEventListener: vi.fn((name: string, listener: () => void) =>
+      (listeners.get(name) ?? listeners.set(name, new Set()).get(name)!).add(listener),
+    ),
+    removeEventListener: vi.fn((name: string, listener: () => void) =>
+      listeners.get(name)?.delete(listener),
+    ),
+    emit: (name: string) => listeners.get(name)?.forEach((listener) => listener()),
+  };
+}
 
 describe("bundled audio playback", () => {
-  it("exposes a real bundled URL for muted unlock", () => {
+  it("exposes real bundled sources", () => {
     expect(getUnlockAudioUrl).toBeTypeOf("function");
-  });
-
-  it("resolves catalog audio IDs only when bundled", () => {
     expect(getBundledAudioUrl).toBeTypeOf("function");
   });
 
-  it("plays a muted source then resets it", async () => {
-    const audio = {
-      muted: false,
-      currentTime: 4,
-      src: "",
-      play: vi.fn().mockResolvedValue(undefined),
-      pause: vi.fn(),
-    };
-
-    await expect(playMutedAudioUnlock("/audio.mp3", () => audio)).resolves.toBe(true);
-    expect(audio.muted).toBe(true);
+  it("reuses supplied audio for muted unlock and restores its settings", async () => {
+    const audio = audioMock();
+    await expect(unlockBundledAudio(audio, "/audio.mp3")).resolves.toBe(true);
     expect(audio.play).toHaveBeenCalledOnce();
     expect(audio.pause).toHaveBeenCalledOnce();
-    expect(audio.currentTime).toBe(0);
+    expect(audio.muted).toBe(false);
+    expect(audio.volume).toBe(0.7);
     expect(audio.src).toBe("");
   });
 
-  it("reports unavailable when muted playback is rejected", async () => {
-    const audio = {
-      muted: false,
-      currentTime: 0,
-      src: "",
-      play: vi.fn().mockRejectedValue(new Error("blocked")),
-      pause: vi.fn(),
-    };
-
-    await expect(playMutedAudioUnlock("/audio.mp3", () => audio)).resolves.toBe(false);
-    expect(audio.pause).toHaveBeenCalledOnce();
-    expect(audio.currentTime).toBe(0);
-    expect(audio.src).toBe("");
+  it("rejects a pending start when stopped and removes listeners", async () => {
+    const audio = audioMock();
+    const controller = createAudioPlaybackController(audio);
+    const pending = controller.play("/audio.mp3");
+    controller.stop();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(audio.removeEventListener).toHaveBeenCalledTimes(2);
   });
 });

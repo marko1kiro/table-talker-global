@@ -2,7 +2,6 @@ import { FormEvent, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { normalizeCrewName } from "@/lib/remote-audio-domain";
-import { getUnlockAudioUrl, playMutedAudioUnlock } from "@/lib/audio";
 
 export type CrewIdentity = {
   displayName: string;
@@ -14,10 +13,12 @@ export function CrewIdentityDialog({
   open,
   duplicateName,
   onContinue,
+  unlockAudio,
 }: {
   open: boolean;
   duplicateName: boolean;
   onContinue: (identity: CrewIdentity) => void;
+  unlockAudio: () => Promise<boolean>;
 }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -32,7 +33,7 @@ export function CrewIdentityDialog({
     }
     setSubmitting(true);
     setError("");
-    const audioReady = await playMutedAudioUnlock(getUnlockAudioUrl());
+    const audioReady = await unlockAudio();
     onContinue({ ...result, audioReady });
     setSubmitting(false);
   };
