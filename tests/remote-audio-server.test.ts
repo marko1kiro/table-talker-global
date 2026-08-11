@@ -1,5 +1,9 @@
 import { expect, it } from "vitest";
-import { buildCommandPayload, validateCommandRequest } from "../src/lib/remote-audio.server";
+import {
+  buildCommandPayload,
+  commandInputSchema,
+  validateCommandRequest,
+} from "../src/lib/remote-audio.server";
 
 it("rejects invalid targets and non-catalog audio", () => {
   expect(
@@ -15,6 +19,13 @@ it("rejects invalid targets and non-catalog audio", () => {
       ["table:7"],
     ),
   ).toEqual({ error: "Audio tidak tersedia." });
+});
+
+it("rejects malformed command payloads before availability checks", () => {
+  expect(commandInputSchema.safeParse({}).success).toBe(false);
+  expect(commandInputSchema.safeParse({ targetSessionId: 1, audioId: "table:7" }).success).toBe(
+    false,
+  );
 });
 
 it("sets an exact five-second command TTL", () => {

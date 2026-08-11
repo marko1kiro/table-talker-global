@@ -35,6 +35,10 @@ type RemoteCommandRow = {
 type EligibleSession = { id: string; eligible: boolean };
 
 const uuid = z.string().uuid();
+export const commandInputSchema = z.object({
+  targetSessionId: z.string(),
+  audioId: z.string(),
+});
 const catalogIds = [
   ...Array.from({ length: TABLE_COUNT }, (_, index) => `table:${index + 1}`),
   ...ANNOUNCEMENT_CATALOG.map((announcement) => `announcement:${announcement.id}`),
@@ -43,6 +47,10 @@ const catalog = catalogIds.flatMap((id) => {
   const metadata = getCatalogMetadata(id);
   return metadata ? [metadata] : [];
 });
+const crewSessionColumns =
+  "id,display_name,device_description,audio_ready,visibility_state,connection_state,last_seen";
+const remoteCommandColumns =
+  "id,target_session_id,audio_id,actor,created_at,expires_at,status,acknowledged_at,failure_reason";
 
 function getServiceClient() {
   const url = process.env.SUPABASE_URL;
@@ -102,8 +110,8 @@ export const getRemoteAdminSnapshot = createServerFn({ method: "GET" }).handler(
   try {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const [sessionsResult, commandsResult] = await Promise.all([
-      client.from("crew_sessions").select("*"),
-      client.from("remote_commands").select("*").gte("created_at", since),
+      client.from("crew_sessions").select(crewSessionColumns),
+      client.from("remote_commands").select(remoteCommandColumns).gte("created_at", since),
     ]);
     if (sessionsResult.error || commandsResult.error) return offline();
 
@@ -128,14 +136,14 @@ export const getRemoteAdminSnapshot = createServerFn({ method: "GET" }).handler(
 });
 
 export const sendRemoteCommand = createServerFn({ method: "POST" })
-  .inputValidator((data: { targetSessionId: string; audioId: string }) => data)
+  .validator(commandInputSchema)
   .handler(async ({ data }) => {
     await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
 
     try {
-      const sessionsResult = await client.from("crew_sessions").select("*");
+      const sessionsResult = await client.from("crew_sessions").select(crewSessionColumns);
       if (sessionsResult.error) return offline();
 
       const request = validateCommandRequest(

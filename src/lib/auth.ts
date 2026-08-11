@@ -1,10 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 export type AuthStatus = { dashboard: boolean; superAdmin: boolean };
 
-type LoginInput = {
-  password: string;
-};
+export const loginInputSchema = z.object({ password: z.string() });
 
 const MISCONFIGURED_MESSAGE = "Konfigurasi server belum lengkap. Hubungi administrator.";
 
@@ -34,7 +33,7 @@ export const getAuthStatus = createServerFn({ method: "GET" }).handler(
 );
 
 export const login = createServerFn({ method: "POST" })
-  .inputValidator((data: LoginInput) => data)
+  .validator(loginInputSchema)
   .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
     const { isPasswordValid, updateAuthSession } = await import("./auth.server");
 
@@ -50,7 +49,7 @@ export const login = createServerFn({ method: "POST" })
   });
 
 export const loginSuperAdmin = createServerFn({ method: "POST" })
-  .inputValidator((data: LoginInput) => data)
+  .validator(loginInputSchema)
   .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
     const { isPasswordValid, updateAuthSession } = await import("./auth.server");
     const expectedPassword = readEnv("SUPER_ADMIN_PASSWORD");
