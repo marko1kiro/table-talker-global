@@ -4,7 +4,7 @@ import {
   updateSession,
   type SessionConfig,
 } from "@tanstack/react-start/server";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 export interface TableTalkerSession {
   dashboard?: boolean;
@@ -36,6 +36,13 @@ function getSessionSecret(): string {
     );
   }
   return devSessionSecret;
+}
+
+export function isPasswordValid(password: string, expectedPassword: string | null): boolean {
+  if (expectedPassword === null) return false;
+  const candidate = createHash("sha256").update(password).digest();
+  const expected = createHash("sha256").update(expectedPassword).digest();
+  return timingSafeEqual(candidate, expected);
 }
 
 export function getAuthSessionConfig(): SessionConfig {

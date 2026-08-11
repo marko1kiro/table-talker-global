@@ -22,16 +22,6 @@ function readEnv(name: string): string | null {
   return value;
 }
 
-/** Perbandingan waktu-konstan sederhana untuk mengurangi kebocoran lewat timing. */
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
-}
-
 export const getAuthStatus = createServerFn({ method: "GET" }).handler(
   async (): Promise<AuthStatus> => {
     const { getAuthSession } = await import("./auth.server");
@@ -46,32 +36,25 @@ export const getAuthStatus = createServerFn({ method: "GET" }).handler(
 export const login = createServerFn({ method: "POST" })
   .inputValidator((data: LoginInput) => data)
   .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
-    const { updateAuthSession } = await import("./auth.server");
+    const { isPasswordValid, updateAuthSession } = await import("./auth.server");
 
     const expectedPassword = readEnv("DASHBOARD_PASSWORD");
     if (expectedPassword === null) {
       return { ok: false, message: MISCONFIGURED_MESSAGE };
     }
-    if (!safeEqual(data.password, expectedPassword)) {
+    if (!isPasswordValid(data.password, expectedPassword)) {
       return { ok: false, message: "Password salah." };
     }
     await updateAuthSession({ dashboard: true });
     return { ok: true };
   });
 
-export function isSuperAdminPasswordValid(
-  password: string,
-  expectedPassword: string | null,
-): boolean {
-  return expectedPassword !== null && safeEqual(password, expectedPassword);
-}
-
 export const loginSuperAdmin = createServerFn({ method: "POST" })
   .inputValidator((data: LoginInput) => data)
   .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
-    const { updateAuthSession } = await import("./auth.server");
+    const { isPasswordValid, updateAuthSession } = await import("./auth.server");
     const expectedPassword = readEnv("SUPER_ADMIN_PASSWORD");
-    if (!isSuperAdminPasswordValid(data.password, expectedPassword)) {
+    if (!isPasswordValid(data.password, expectedPassword)) {
       return {
         ok: false,
         message: expectedPassword === null ? MISCONFIGURED_MESSAGE : "Password Super Admin salah.",
