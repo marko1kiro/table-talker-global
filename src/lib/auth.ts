@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export type AuthStatus = { dashboard: boolean };
+export type AuthStatus = { dashboard: boolean; superAdmin: boolean };
 
 type LoginInput = {
   password: string;
@@ -36,7 +36,10 @@ export const getAuthStatus = createServerFn({ method: "GET" }).handler(
   async (): Promise<AuthStatus> => {
     const { getAuthSession } = await import("./auth.server");
     const session = await getAuthSession();
-    return { dashboard: session.data.dashboard === true };
+    return {
+      dashboard: session.data.dashboard === true,
+      superAdmin: session.data.superAdmin === true,
+    };
   },
 );
 
@@ -53,6 +56,28 @@ export const login = createServerFn({ method: "POST" })
       return { ok: false, message: "Password salah." };
     }
     await updateAuthSession({ dashboard: true });
+    return { ok: true };
+  });
+
+export function isSuperAdminPasswordValid(
+  password: string,
+  expectedPassword: string | null,
+): boolean {
+  return expectedPassword !== null && safeEqual(password, expectedPassword);
+}
+
+export const loginSuperAdmin = createServerFn({ method: "POST" })
+  .inputValidator((data: LoginInput) => data)
+  .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
+    const { updateAuthSession } = await import("./auth.server");
+    const expectedPassword = readEnv("SUPER_ADMIN_PASSWORD");
+    if (!isSuperAdminPasswordValid(data.password, expectedPassword)) {
+      return {
+        ok: false,
+        message: expectedPassword === null ? MISCONFIGURED_MESSAGE : "Password Super Admin salah.",
+      };
+    }
+    await updateAuthSession({ superAdmin: true });
     return { ok: true };
   });
 

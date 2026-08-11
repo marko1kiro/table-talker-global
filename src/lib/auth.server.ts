@@ -8,6 +8,7 @@ import { randomBytes } from "node:crypto";
 
 export interface TableTalkerSession {
   dashboard?: boolean;
+  superAdmin?: boolean;
 }
 
 /**
@@ -66,6 +67,14 @@ export function clearAuthSession() {
 export async function requireDashboard() {
   const session = await getAuthSession();
   if (session.data.dashboard !== true) {
+    throw new Error("UNAUTHORIZED");
+  }
+  return session;
+}
+
+export async function requireSuperAdmin() {
+  const session = await getAuthSession();
+  if (session.data.superAdmin !== true) {
     throw new Error("UNAUTHORIZED");
   }
   return session;
