@@ -7,6 +7,7 @@ import {
   getRemoteCommandState,
   pruneProcessedCommands,
   shouldActivatePresence,
+  replaceHeartbeatTimer,
 } from "../src/hooks/use-remote-crew";
 
 const command = {
@@ -35,6 +36,15 @@ describe("remote crew command processor", () => {
     expect(shouldActivatePresence("SUBSCRIBING")).toBe(false);
     expect(shouldActivatePresence("SUBSCRIBED")).toBe(true);
     expect(shouldActivatePresence("CLOSED")).toBe(false);
+  });
+
+  it("replaces the heartbeat timer on repeated subscription", () => {
+    const clear = vi.fn();
+    const start = vi.fn().mockReturnValue("next-timer");
+
+    expect(replaceHeartbeatTimer("old-timer", clear, start)).toBe("next-timer");
+    expect(clear).toHaveBeenCalledWith("old-timer");
+    expect(start).toHaveBeenCalledOnce();
   });
 
   it("shares a pending anonymous sign-in for one client", async () => {

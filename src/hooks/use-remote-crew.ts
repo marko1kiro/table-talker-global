@@ -25,6 +25,15 @@ export function shouldActivatePresence(status: string) {
   return status === "SUBSCRIBED";
 }
 
+export function replaceHeartbeatTimer<T>(
+  timer: T | null,
+  clear: (timer: T) => void,
+  start: () => T,
+) {
+  if (timer !== null) clear(timer);
+  return start();
+}
+
 export async function getAnonymousUserId(client: SupabaseClient): Promise<string> {
   const { data } = await client.auth.getUser();
   if (data.user) return data.user.id;
@@ -255,10 +264,15 @@ export function useRemoteCrew({
       presenceActive = true;
       if (canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
         void heartbeat("connected").catch(() => update(setOffline, true));
-      timer = setInterval(() => {
-        if (presenceActive && canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
-          void heartbeat("connected").catch(() => update(setOffline, true));
-      }, HEARTBEAT_MS);
+      timer = replaceHeartbeatTimer(timer, clearInterval, () =>
+        setInterval(() => {
+          if (
+            presenceActive &&
+            canSendConnectedHeartbeat(channelTerminal, document.visibilityState)
+          )
+            void heartbeat("connected").catch(() => update(setOffline, true));
+        }, HEARTBEAT_MS),
+      );
     };
     const onVisibilityChange = () => {
       if (presenceActive && canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
