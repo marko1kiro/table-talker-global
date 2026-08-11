@@ -85,6 +85,16 @@ export function createRemoteCommandProcessor({
 
   const process = async (command: RemoteCommand) => {
     if (newest?.createdAt !== command.createdAt || newest.id !== command.id) return;
+    if (
+      !commandIsProcessable(
+        command,
+        sessionId,
+        new Set([...processedIds].filter((id) => id !== command.id)),
+        null,
+        now(),
+      )
+    )
+      return;
     try {
       await playRemoteAudio(command.audioId);
     } catch (error) {
