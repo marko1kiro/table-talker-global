@@ -5,6 +5,7 @@ import {
   createRemoteCommandProcessor,
   getAnonymousUserId,
   getRemoteCommandState,
+  pruneProcessedCommands,
 } from "../src/hooks/use-remote-crew";
 
 const command = {
@@ -41,6 +42,39 @@ describe("remote crew command processor", () => {
     await Promise.all([getAnonymousUserId(client as never), getAnonymousUserId(client as never)]);
 
     expect(signInAnonymously).toHaveBeenCalledOnce();
+  });
+
+  it("retries anonymous authentication after a rejected cached attempt", async () => {
+    const signInAnonymously = vi
+      .fn()
+      .mockResolvedValueOnce({ data: { user: null }, error: new Error("offline") })
+      .mockResolvedValueOnce({ data: { user: { id: "crew-1" } }, error: null });
+    const client = {
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }), signInAnonymously },
+    };
+
+    await expect(getAnonymousUserId(client as never)).rejects.toThrow("offline");
+    await expect(getAnonymousUserId(client as never)).resolves.toBe("crew-1");
+
+    expect(signInAnonymously).toHaveBeenCalledTimes(2);
+  });
+
+  it("prunes expired replay IDs without evicting live duplicates", () => {
+    const processedIds = new Map([
+      ["expired", { expiresAt: 1, processedAt: 1 }],
+      ["live", { expiresAt: 100_000, processedAt: 100_000 }],
+      ...Array.from(
+        { length: 255 },
+        (_, index) =>
+          [`id-${index}`, { expiresAt: 100_000 + index, processedAt: 100_000 + index }] as const,
+      ),
+    ]);
+
+    pruneProcessedCommands(processedIds, 40_000);
+
+    expect(processedIds.has("expired")).toBe(false);
+    expect(processedIds.has("live")).toBe(true);
+    expect(processedIds.size).toBe(256);
   });
 
   it("preserves processed commands across processors for one client and UID", async () => {

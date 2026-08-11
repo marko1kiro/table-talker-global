@@ -26,10 +26,16 @@ export async function getAnonymousUserId(client: SupabaseClient): Promise<string
   if (data.user) return data.user.id;
   let pending = anonymousUsers.get(client);
   if (!pending) {
-    pending = client.auth.signInAnonymously().then(({ data, error }) => {
-      if (error || !data.user) throw error ?? new Error("Anonymous sign-in failed");
-      return data.user.id;
-    });
+    pending = client.auth
+      .signInAnonymously()
+      .then(({ data, error }) => {
+        if (error || !data.user) throw error ?? new Error("Anonymous sign-in failed");
+        return data.user.id;
+      })
+      .catch((error) => {
+        anonymousUsers.delete(client);
+        throw error;
+      });
     anonymousUsers.set(client, pending);
   }
   return pending;
@@ -41,11 +47,27 @@ export type CrewRegistration = {
   audioReady: boolean;
 };
 
+const PROCESSED_COMMAND_MAX_AGE_MS = 35_000;
+const PROCESSED_COMMAND_MAX_COUNT = 256;
+
+type ProcessedCommand = { expiresAt: number; processedAt: number };
+
 export type RemoteCommandState = {
-  processedIds: Set<string>;
+  processedIds: Map<string, ProcessedCommand>;
   newest: CommandWatermark | null;
   queue: Promise<void>;
 };
+
+export function pruneProcessedCommands(processedIds: Map<string, ProcessedCommand>, now: number) {
+  for (const [id, command] of processedIds)
+    if (command.expiresAt <= now - PROCESSED_COMMAND_MAX_AGE_MS) processedIds.delete(id);
+  if (processedIds.size <= PROCESSED_COMMAND_MAX_COUNT) return;
+  for (const [id, command] of processedIds) {
+    if (command.expiresAt > now) continue;
+    processedIds.delete(id);
+    if (processedIds.size <= PROCESSED_COMMAND_MAX_COUNT) return;
+  }
+}
 
 export function getRemoteCommandState(
   client: SupabaseClient,
@@ -58,7 +80,7 @@ export function getRemoteCommandState(
   }
   let state = sessions.get(sessionId);
   if (!state) {
-    state = { processedIds: new Set(), newest: null, queue: Promise.resolve() };
+    state = { processedIds: new Map(), newest: null, queue: Promise.resolve() };
     sessions.set(sessionId, state);
   }
   return state;
@@ -105,7 +127,7 @@ export function createRemoteCommandProcessor({
   onNeedsAudioRecovery,
   onDeliveryUncertain,
   isVisible = () => typeof document === "undefined" || document.visibilityState === "visible",
-  state = { processedIds: new Set(), newest: null, queue: Promise.resolve() },
+  state = { processedIds: new Map(), newest: null, queue: Promise.resolve() },
 }: ProcessorOptions) {
   const process = async (command: RemoteCommand) => {
     if (state.newest?.createdAt !== command.createdAt || state.newest.id !== command.id) return;
@@ -113,7 +135,7 @@ export function createRemoteCommandProcessor({
       !commandIsProcessable(
         command,
         sessionId,
-        new Set([...state.processedIds].filter((id) => id !== command.id)),
+        new Set([...state.processedIds.keys()].filter((id) => id !== command.id)),
         null,
         now(),
       )
@@ -140,9 +162,22 @@ export function createRemoteCommandProcessor({
 
   return {
     process(command: RemoteCommand) {
-      if (!commandIsProcessable(command, sessionId, state.processedIds, state.newest, now()))
+      const currentTime = now();
+      pruneProcessedCommands(state.processedIds, currentTime);
+      if (
+        !commandIsProcessable(
+          command,
+          sessionId,
+          new Set(state.processedIds.keys()),
+          state.newest,
+          currentTime,
+        )
+      )
         return state.queue;
-      state.processedIds.add(command.id);
+      state.processedIds.set(command.id, {
+        expiresAt: Date.parse(command.expiresAt),
+        processedAt: currentTime,
+      });
       state.newest = { createdAt: command.createdAt, id: command.id };
       state.queue = state.queue.then(() => process(command));
       return state.queue;
