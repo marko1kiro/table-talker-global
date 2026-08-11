@@ -59,6 +59,7 @@ export function sessionIsEligible(session: CrewSessionEligibility, now: number):
     session.connectionState === "connected" &&
     session.visibilityState === "visible" &&
     Number.isFinite(seen) &&
+    seen <= now &&
     now - seen <= ONLINE_WINDOW_MS
   );
 }
@@ -76,6 +77,7 @@ export function commandIsProcessable(
     command.targetSessionId === sessionId &&
     !processedIds.has(command.id) &&
     Number.isFinite(created) &&
+    created <= now &&
     Number.isFinite(expires) &&
     expires > now &&
     (!newestCreatedAt || created > Date.parse(newestCreatedAt))

@@ -69,6 +69,17 @@ describe("remote audio domain", () => {
         now,
       ),
     ).toBe(false);
+    expect(
+      sessionIsEligible(
+        {
+          connectionState: "connected",
+          visibilityState: "visible",
+          audioReady: true,
+          lastSeen: "2026-08-12T10:00:31.000Z",
+        },
+        now,
+      ),
+    ).toBe(false);
   });
 
   it("accepts a newest unexpired targeted command once", () => {
@@ -81,6 +92,15 @@ describe("remote audio domain", () => {
     };
     const now = Date.parse("2026-08-12T10:00:03.000Z");
     expect(commandIsProcessable(command, "crew-1", new Set(), null, now)).toBe(true);
+    expect(
+      commandIsProcessable(
+        { ...command, createdAt: "2026-08-12T10:00:04.000Z" },
+        "crew-1",
+        new Set(),
+        null,
+        now,
+      ),
+    ).toBe(false);
     expect(commandIsProcessable(command, "crew-1", new Set(["new"]), null, now)).toBe(false);
     expect(
       commandIsProcessable(
