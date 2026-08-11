@@ -92,6 +92,36 @@ describe("remote crew command processor", () => {
     expect(processedIds.has("id-256")).toBe(true);
   });
 
+  it("caps replay IDs after inserting beyond exactly 256 entries", async () => {
+    const state = {
+      processedIds: new Map<string, { expiresAt: number; processedAt: number }>(
+        Array.from(
+          { length: 256 },
+          (_, index) =>
+            [
+              `id-${index}`,
+              { expiresAt: Date.parse("2026-08-12T10:00:07.000Z"), processedAt: index },
+            ] as const,
+        ),
+      ),
+      newest: { createdAt: "2026-08-12T10:00:01.000Z", id: "old" },
+      queue: Promise.resolve(),
+    };
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      state,
+    });
+
+    await processor.process({ ...command, id: "new" });
+
+    expect(state.processedIds.size).toBe(256);
+    expect(state.processedIds.has("id-0")).toBe(false);
+    expect(state.processedIds.has("new")).toBe(true);
+  });
+
   it("preserves processed commands across processors for one client and UID", async () => {
     const client = {} as never;
     const playRemoteAudio = vi.fn().mockResolvedValue(undefined);

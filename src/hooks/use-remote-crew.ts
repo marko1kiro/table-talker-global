@@ -177,6 +177,7 @@ export function createRemoteCommandProcessor({
         expiresAt: Date.parse(command.expiresAt),
         processedAt: currentTime,
       });
+      pruneProcessedCommands(state.processedIds, currentTime);
       state.newest = { createdAt: command.createdAt, id: command.id };
       state.queue = state.queue.then(() => process(command));
       return state.queue;
