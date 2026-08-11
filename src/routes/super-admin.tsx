@@ -38,6 +38,7 @@ function SuperAdminPage() {
   const queryClient = useQueryClient();
   const [targetSessionId, setTargetSessionId] = useState("");
   const [audioId, setAudioId] = useState("");
+  const [now, setNow] = useState(Date.now());
   const snapshot = useQuery({
     queryKey: snapshotKey,
     queryFn: () => getRemoteAdminSnapshot(),
@@ -48,6 +49,11 @@ function SuperAdminPage() {
     mutationFn: () => sendRemoteCommand({ data: { targetSessionId, audioId } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: snapshotKey }),
   });
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const client = getSupabaseBrowserClient();
@@ -177,7 +183,7 @@ function SuperAdminPage() {
                 const audio = catalog.find((item) => item.id === command.audio_id);
                 return (
                   <tr key={command.id} className="border-b align-top">
-                    <td className="p-2 font-bold">{commandStatus(command, Date.now())}</td>
+                    <td className="p-2 font-bold">{commandStatus(command, now)}</td>
                     <td className="p-2">{command.actor}</td>
                     <td className="p-2">{target?.display_name ?? command.target_session_id}</td>
                     <td className="p-2">{audio?.label ?? command.audio_id}</td>

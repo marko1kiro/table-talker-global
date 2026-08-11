@@ -55,4 +55,5 @@ it("guards the route with the super-admin session bit and noindex", () => {
   expect(source).toContain("auth.superAdmin");
   expect(source).toContain('{ name: "robots", content: "noindex" }');
   expect(source).toContain("loginSuperAdmin");
+  expect(source).toContain("setInterval");
 });
