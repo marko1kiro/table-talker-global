@@ -5,9 +5,19 @@ import { Footer } from "@/components/Footer";
 
 interface AuthGateProps {
   onSuccess: () => Promise<void> | void;
+  title?: string;
+  instruction?: string;
+  submitLabel?: string;
+  loginAction?: typeof login;
 }
 
-export function AuthGate({ onSuccess }: AuthGateProps) {
+export function AuthGate({
+  onSuccess,
+  title = "SIMPLE, SMART, SMOOTH !",
+  instruction = "Masukkan kode resto dulu ya!",
+  submitLabel = "Gassss!",
+  loginAction = login,
+}: AuthGateProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,7 +27,7 @@ export function AuthGate({ onSuccess }: AuthGateProps) {
     setLoading(true);
     setError("");
     try {
-      const result = await login({ data: { password } });
+      const result = await loginAction({ data: { password } });
       if (!result.ok) {
         setError(result.message || "Login gagal.");
         return;
@@ -45,16 +55,14 @@ export function AuthGate({ onSuccess }: AuthGateProps) {
             className="mx-auto h-auto w-full max-w-[220px] sm:max-w-[250px]"
           />
 
-          <h1 className="mt-4 text-center font-display text-lg uppercase sm:text-xl">
-            SIMPLE, SMART, SMOOTH !
-          </h1>
+          <h1 className="mt-4 text-center font-display text-lg uppercase sm:text-xl">{title}</h1>
           <p className="mt-1 text-center text-xs text-muted-foreground">
             🙏 Jangan lupa Baca Do'a Dulu 🙏
           </p>
 
           <div className="mt-5 space-y-3 sm:mt-6">
             <label className="block text-xs font-bold uppercase">
-              Masukkan kode resto dulu ya!
+              {instruction}
               <input
                 type="password"
                 value={password}
@@ -81,7 +89,7 @@ export function AuthGate({ onSuccess }: AuthGateProps) {
             className="brutal-border brutal-shadow brutal-press mt-5 flex w-full items-center justify-center gap-2 bg-accent px-4 py-3 font-display uppercase disabled:opacity-60"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            {loading ? "Bentar…" : "Gassss!"}
+            {loading ? "Bentar…" : submitLabel}
           </button>
         </form>
       </div>
