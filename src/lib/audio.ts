@@ -99,3 +99,32 @@ export const bundledAudioCatalog: readonly CatalogAudio[] = [
 export function getTableAudioUrl(tableNumber: number): string | null {
   return tableAudioUrls.get(tableNumber) ?? null;
 }
+
+export function getBundledAudioUrl(audioId: AudioId): string | null {
+  return bundledAudioCatalog.find((audio) => audio.id === audioId)?.url ?? null;
+}
+
+export function getUnlockAudioUrl(): string | null {
+  return bundledAudioCatalog[0]?.url ?? null;
+}
+
+type MutedUnlockAudio = Pick<HTMLAudioElement, "muted" | "currentTime" | "src" | "play" | "pause">;
+
+export async function playMutedAudioUnlock(
+  url: string | null,
+  createAudio: (source: string) => MutedUnlockAudio = (source) => new Audio(source),
+): Promise<boolean> {
+  if (!url) return false;
+  const audio = createAudio(url);
+  audio.muted = true;
+  try {
+    await audio.play();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = "";
+  }
+}
