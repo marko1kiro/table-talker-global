@@ -12,24 +12,19 @@
  * Cara memperbarui audio: ganti file di `src/assets/audio/**` lalu deploy ulang.
  */
 
-export const TABLE_COUNT = 70;
+import {
+  ANNOUNCEMENT_CATALOG,
+  TABLE_COUNT,
+  getCatalogMetadata,
+  type AnnouncementId,
+  type AudioId,
+} from "./remote-audio-domain";
 
-export type AnnouncementId =
-  | "seating"
-  | "himbauan-barang-bawaan-pelanggan"
-  | "outside-food"
-  | "no-smoking"
-  | "larangan-gabung-meja"
-  | "jam-buka-resto";
+export { TABLE_COUNT } from "./remote-audio-domain";
 
-export const ANNOUNCEMENT_IDS = [
-  "seating",
-  "himbauan-barang-bawaan-pelanggan",
-  "outside-food",
-  "no-smoking",
-  "larangan-gabung-meja",
-  "jam-buka-resto",
-] as const;
+export const ANNOUNCEMENT_IDS = ANNOUNCEMENT_CATALOG.map(
+  ({ id }) => id,
+) as readonly AnnouncementId[];
 
 const tableModules = import.meta.glob<string>("../assets/audio/tables/*.mp3", {
   eager: true,
@@ -83,6 +78,23 @@ export const announcementAudioUrls: Readonly<Record<AnnouncementId, string | nul
 export const readyTables: ReadonlySet<number> = new Set(
   [...tableAudioUrls.keys()].sort((a, b) => a - b),
 );
+
+export type CatalogAudio = { id: AudioId; label: string; url: string };
+
+export const bundledAudioCatalog: readonly CatalogAudio[] = [
+  ...ANNOUNCEMENT_CATALOG.flatMap((announcement) => {
+    const url = announcementAudioUrls[announcement.id];
+    return url
+      ? [{ id: `announcement:${announcement.id}` as AudioId, label: announcement.label, url }]
+      : [];
+  }),
+  ...[...tableAudioUrls.entries()]
+    .sort(([a], [b]) => a - b)
+    .flatMap(([tableNumber, url]) => {
+      const metadata = getCatalogMetadata(`table:${tableNumber}`);
+      return metadata ? [{ ...metadata, url }] : [];
+    }),
+];
 
 export function getTableAudioUrl(tableNumber: number): string | null {
   return tableAudioUrls.get(tableNumber) ?? null;
