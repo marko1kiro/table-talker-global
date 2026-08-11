@@ -15,6 +15,10 @@ export function channelStateIsTerminal(status: string) {
   return status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT";
 }
 
+export function canSendConnectedHeartbeat(channelTerminal: boolean, visibilityState: string) {
+  return !channelTerminal && visibilityState === "visible";
+}
+
 export async function getAnonymousUserId(client: SupabaseClient): Promise<string> {
   const { data } = await client.auth.getUser();
   if (data.user) return data.user.id;
@@ -171,9 +175,9 @@ export function useRemoteCrew({
     };
     const disconnect = () => void heartbeat("disconnected").catch(() => undefined);
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible")
+      if (canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
         void heartbeat("connected").catch(() => update(setOffline, true));
-      else disconnect();
+      else if (!channelTerminal) disconnect();
     };
 
     const start = async () => {
@@ -245,11 +249,11 @@ export function useRemoteCrew({
             update(setOffline, true);
             if (active) setConnectionState("offline");
           });
-        if (!channelTerminal && document.visibilityState === "visible")
+        if (canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
           void heartbeat("connected").catch(() => update(setOffline, true));
         if (!channelTerminal)
           timer = setInterval(() => {
-            if (document.visibilityState === "visible")
+            if (canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
               void heartbeat("connected").catch(() => update(setOffline, true));
           }, HEARTBEAT_MS);
         document.addEventListener("visibilitychange", onVisibilityChange);

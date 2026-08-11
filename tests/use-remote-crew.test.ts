@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   channelStateIsTerminal,
+  canSendConnectedHeartbeat,
   createRemoteCommandProcessor,
   getAnonymousUserId,
 } from "../src/hooks/use-remote-crew";
@@ -21,6 +22,12 @@ describe("remote crew command processor", () => {
     expect(channelStateIsTerminal("CHANNEL_ERROR")).toBe(true);
     expect(channelStateIsTerminal("TIMED_OUT")).toBe(true);
   });
+  it("keeps terminal channels offline across hidden-visible transitions", () => {
+    expect(canSendConnectedHeartbeat(false, "visible")).toBe(true);
+    expect(canSendConnectedHeartbeat(true, "hidden")).toBe(false);
+    expect(canSendConnectedHeartbeat(true, "visible")).toBe(false);
+  });
+
   it("shares a pending anonymous sign-in for one client", async () => {
     const signInAnonymously = vi.fn().mockResolvedValue({
       data: { user: { id: "crew-1" } },
