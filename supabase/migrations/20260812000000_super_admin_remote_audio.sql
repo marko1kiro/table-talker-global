@@ -176,6 +176,7 @@ alter table public.remote_commands enable row level security;
 revoke all on public.crew_sessions, public.remote_commands from anon, authenticated;
 revoke all on function public.claim_crew_session(text, text, text, boolean, text), public.heartbeat_crew_session(boolean, text, text), public.ack_remote_command(uuid, text, text), public.expire_remote_commands(), public.cleanup_remote_commands() from public, anon, authenticated;
 grant execute on function public.claim_crew_session(text, text, text, boolean, text), public.heartbeat_crew_session(boolean, text, text), public.ack_remote_command(uuid, text, text) to authenticated;
+grant execute on function public.expire_remote_commands(), public.cleanup_remote_commands() to service_role;
 grant select on public.crew_sessions, public.remote_commands to authenticated;
 create policy "crew reads own session" on public.crew_sessions for select to authenticated using (id = auth.uid());
 create policy "crew reads targeted commands" on public.remote_commands for select to authenticated using (target_session_id = auth.uid());

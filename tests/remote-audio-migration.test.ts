@@ -59,6 +59,9 @@ describe("remote audio Supabase migration", () => {
       /grant execute on function public\.claim_crew_session[\s\S]*to authenticated/i,
     );
     expect(migration()).toMatch(
+      /grant execute on function public\.expire_remote_commands\(\), public\.cleanup_remote_commands\(\) to service_role/i,
+    );
+    expect(migration()).toMatch(
       /do \$\$[\s\S]*alter publication supabase_realtime add table public\.remote_commands[\s\S]*duplicate_object/i,
     );
     expect(migration()).toMatch(/created_at < now\(\) - interval '7 days'/i);
