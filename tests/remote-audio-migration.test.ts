@@ -6,9 +6,14 @@ const migrationPath = resolve(
   import.meta.dirname,
   "../supabase/migrations/20260812000000_super_admin_remote_audio.sql",
 );
+const operationsPath = resolve(import.meta.dirname, "../docs/supabase-super-admin-remote-audio.md");
 
 function migration(): string {
   return readFileSync(migrationPath, "utf8");
+}
+
+function operations(): string {
+  return readFileSync(operationsPath, "utf8");
 }
 
 describe("remote audio Supabase migration", () => {
@@ -20,6 +25,15 @@ describe("remote audio Supabase migration", () => {
     );
     expect(migration()).toMatch(
       /update public\.crew_sessions[\s\S]*last_seen <= now\(\) - interval '30 seconds'/i,
+    );
+  });
+
+  it("forces hidden heartbeats offline", () => {
+    expect(migration()).toMatch(
+      /connection_state = case when p_visibility_state = 'visible' then p_connection_state else 'disconnected' end/i,
+    );
+    expect(migration()).toMatch(
+      /offline_at = case when p_visibility_state = 'visible' and p_connection_state = 'connected' then null else now\(\) end/i,
     );
   });
 
@@ -49,5 +63,14 @@ describe("remote audio Supabase migration", () => {
     );
     expect(migration()).toMatch(/created_at < now\(\) - interval '7 days'/i);
     expect(migration()).toMatch(/create extension if not exists pg_cron/i);
+  });
+
+  it("documents expiry as authoritative before minute-level audit updates", () => {
+    expect(operations()).toMatch(
+      /`sent` commands with `expires_at <= now\(\)` as expired immediately/i,
+    );
+    expect(operations()).toMatch(/must never play/i);
+    expect(operations()).toMatch(/server snapshot/i);
+    expect(operations()).toMatch(/minute cron only persists the audit status eventually/i);
   });
 });

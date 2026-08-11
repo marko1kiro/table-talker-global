@@ -8,6 +8,8 @@ npx supabase db push
 
 The migration enables `pg_cron` only when the database supports it. Missing extension support or permission is ignored, so Supabase Hobby migration deployment succeeds.
 
+`expires_at` is authoritative: clients and the Task 4 server snapshot treat `sent` commands with `expires_at <= now()` as expired immediately and must never play them. The minute cron only persists the audit status eventually; it does not control delivery. No polling or retry is required.
+
 If `pg_cron` is available, the migration schedules command expiry every minute and seven-day cleanup daily at 03:17. If it is unavailable, run the same RPCs from a Dashboard Scheduled Function:
 
 ```ts

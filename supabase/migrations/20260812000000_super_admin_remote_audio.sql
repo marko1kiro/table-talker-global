@@ -104,9 +104,9 @@ begin
   update public.crew_sessions
   set audio_ready = p_audio_ready,
       visibility_state = p_visibility_state,
-      connection_state = p_connection_state,
+      connection_state = case when p_visibility_state = 'visible' then p_connection_state else 'disconnected' end,
       last_seen = now(),
-      offline_at = case when p_connection_state = 'connected' and p_visibility_state = 'visible' then null else now() end,
+      offline_at = case when p_visibility_state = 'visible' and p_connection_state = 'connected' then null else now() end,
       updated_at = now()
   where id = auth.uid()
   returning * into result;
