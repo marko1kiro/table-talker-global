@@ -183,9 +183,16 @@ create policy "crew reads targeted commands" on public.remote_commands for selec
 
 do $$
 begin
-  alter publication supabase_realtime add table public.remote_commands;
-exception
-  when duplicate_object then null;
+  begin
+    alter publication supabase_realtime add table public.crew_sessions;
+  exception
+    when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.remote_commands;
+  exception
+    when duplicate_object then null;
+  end;
 end;
 $$;
 
