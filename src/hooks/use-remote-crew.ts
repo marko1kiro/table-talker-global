@@ -5,6 +5,7 @@ import {
   commandIsProcessable,
   HEARTBEAT_MS,
   type AudioId,
+  type CommandWatermark,
   type RemoteCommand,
 } from "../lib/remote-audio-domain";
 import { getSupabaseBrowserClient } from "../lib/supabase-browser";
@@ -79,11 +80,11 @@ export function createRemoteCommandProcessor({
   onDeliveryUncertain,
 }: ProcessorOptions) {
   const processedIds = new Set<string>();
-  let newestCreatedAt: string | null = null;
+  let newest: CommandWatermark | null = null;
   let queue = Promise.resolve();
 
   const process = async (command: RemoteCommand) => {
-    if (newestCreatedAt !== command.createdAt) return;
+    if (newest?.createdAt !== command.createdAt || newest.id !== command.id) return;
     try {
       await playRemoteAudio(command.audioId);
     } catch (error) {
@@ -104,10 +105,9 @@ export function createRemoteCommandProcessor({
 
   return {
     process(command: RemoteCommand) {
-      if (!commandIsProcessable(command, sessionId, processedIds, newestCreatedAt, now()))
-        return queue;
+      if (!commandIsProcessable(command, sessionId, processedIds, newest, now())) return queue;
       processedIds.add(command.id);
-      newestCreatedAt = command.createdAt;
+      newest = { createdAt: command.createdAt, id: command.id };
       queue = queue.then(() => process(command));
       return queue;
     },

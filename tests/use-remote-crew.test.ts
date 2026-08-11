@@ -95,6 +95,21 @@ describe("remote crew command processor", () => {
     expect(playRemoteAudio).toHaveBeenCalledWith("table:7");
   });
 
+  it("uses lexicographic IDs to order equal creation timestamps", async () => {
+    const playRemoteAudio = vi.fn().mockResolvedValue(undefined);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio,
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      now: () => Date.parse("2026-08-12T10:00:04.000Z"),
+    });
+
+    await processor.process({ ...command, id: "b" });
+    await processor.process({ ...command, id: "a" });
+
+    expect(playRemoteAudio).toHaveBeenCalledOnce();
+  });
+
   it("acknowledges playback failure once and reports acknowledgement uncertainty", async () => {
     const onNeedsAudioRecovery = vi.fn();
     const onDeliveryUncertain = vi.fn();

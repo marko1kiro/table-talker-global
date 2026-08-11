@@ -107,7 +107,26 @@ describe("remote audio domain", () => {
         { ...command, id: "old", createdAt: "2026-08-12T10:00:01.000Z" },
         "crew-1",
         new Set(),
-        command.createdAt,
+        { createdAt: command.createdAt, id: command.id },
+        now,
+      ),
+    ).toBe(false);
+    const equalCreatedAt = { ...command, id: "b" };
+    expect(
+      commandIsProcessable(
+        equalCreatedAt,
+        "crew-1",
+        new Set(),
+        { createdAt: command.createdAt, id: "a" },
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      commandIsProcessable(
+        { ...command, id: "a" },
+        "crew-1",
+        new Set(),
+        { createdAt: command.createdAt, id: "b" },
         now,
       ),
     ).toBe(false);

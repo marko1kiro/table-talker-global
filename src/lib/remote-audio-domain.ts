@@ -26,6 +26,7 @@ export type RemoteCommand = {
   createdAt: string;
   expiresAt: string;
 };
+export type CommandWatermark = Pick<RemoteCommand, "createdAt" | "id">;
 export type CrewSessionEligibility = {
   connectionState: "connected" | "disconnected";
   visibilityState: "visible" | "hidden";
@@ -68,7 +69,7 @@ export function commandIsProcessable(
   command: RemoteCommand,
   sessionId: string,
   processedIds: ReadonlySet<string>,
-  newestCreatedAt: string | null,
+  newest: CommandWatermark | null,
   now: number,
 ): boolean {
   const created = Date.parse(command.createdAt);
@@ -80,7 +81,9 @@ export function commandIsProcessable(
     created <= now &&
     Number.isFinite(expires) &&
     expires > now &&
-    (!newestCreatedAt || created > Date.parse(newestCreatedAt))
+    (!newest ||
+      created > Date.parse(newest.createdAt) ||
+      (created === Date.parse(newest.createdAt) && command.id > newest.id))
   );
 }
 
