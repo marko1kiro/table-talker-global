@@ -72,9 +72,6 @@ export function CrewIdentityDialog({
               {error || "Nama sedang dipakai crew yang online."}
             </div>
           )}
-          <p className="text-sm text-muted-foreground">
-            Remote control tidak tersedia. Soundboard tetap bisa dipakai.
-          </p>
           <button
             type="submit"
             disabled={submitting}

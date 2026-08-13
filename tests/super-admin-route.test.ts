@@ -13,18 +13,46 @@ it("keeps Play disabled until the invalidation channel subscribes", () => {
   expect(realtimeIsReady("CHANNEL_ERROR")).toBe(false);
 });
 
-it("debounces broadcast invalidations to one refetch per second", () => {
+it("invalidates immediately then once at the end of a burst", () => {
+  vi.useFakeTimers();
   const invalidate = vi.fn();
-  const debouncer = createInvalidationDebouncer(invalidate, () => now);
-  let now = 0;
+  const debouncer = createInvalidationDebouncer(invalidate);
 
   debouncer();
-  now = 500;
+  vi.advanceTimersByTime(500);
   debouncer();
-  now = 1_000;
+  vi.advanceTimersByTime(499);
   debouncer();
+  expect(invalidate).toHaveBeenCalledOnce();
 
+  vi.advanceTimersByTime(1_000);
   expect(invalidate).toHaveBeenCalledTimes(2);
+  vi.useRealTimers();
+});
+
+it("cancels a queued invalidation", () => {
+  vi.useFakeTimers();
+  const invalidate = vi.fn();
+  const debouncer = createInvalidationDebouncer(invalidate);
+
+  debouncer();
+  debouncer();
+  debouncer.cancel();
+  vi.advanceTimersByTime(1_000);
+
+  expect(invalidate).toHaveBeenCalledOnce();
+  vi.useRealTimers();
+});
+
+it("shows remote unavailable copy only after a failed registration", () => {
+  const dialog = readFileSync(
+    new URL("../src/components/CrewIdentityDialog.tsx", import.meta.url),
+    "utf8",
+  );
+  const route = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
+
+  expect(dialog).not.toContain("Remote control tidak tersedia. Soundboard tetap bisa dipakai.");
+  expect(route).toContain("remoteCrew.offline && crewIdentity");
 });
 
 it("enables Play only for a valid online idle selection", () => {

@@ -80,6 +80,7 @@ function SuperAdminPage() {
       .on("broadcast", { event: "invalidate" }, invalidate)
       .subscribe((status) => setRealtimeStatus(status));
     return () => {
+      invalidate.cancel();
       void client.removeChannel(channel);
     };
   }, [queryClient]);
