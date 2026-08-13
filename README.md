@@ -17,8 +17,10 @@ npm run dev
 
 ### Kredensial
 
-Aplikasi **tidak punya kredensial fallback**. Semua nilai dibaca dari environment
-variable, dan login akan ditolak kalau belum diset:
+Setup dashboard awal hanya membutuhkan `AUTH_SECRET` dan `DASHBOARD_PASSWORD`.
+Lima variabel fitur remote bersifat opsional: `SUPER_ADMIN_PASSWORD` serta empat
+variabel Supabase. Tanpanya, dashboard dan soundboard bundled tetap berjalan,
+tetapi remote audio dinonaktifkan secara fail-open.
 
 | Variable | Dipakai untuk |
 | --- | --- |
@@ -112,7 +114,8 @@ kondisi tersebut: buka crew di foreground, tekan `LANJUT!!`, lalu gunakan pemuli
 #### Setup Supabase
 
 1. Buat proyek Supabase, lalu aktifkan **Anonymous sign-ins** pada Authentication.
-2. Isi lima variabel Supabase di `.env` lokal serta environment variables Vercel.
+2. Isi lima variabel fitur remote di `.env` lokal serta environment variables
+   Vercel: `SUPER_ADMIN_PASSWORD` dan empat variabel Supabase.
 3. Login Supabase CLI secara global atau gunakan `npx supabase`; tidak perlu dan
    jangan menambah dependency CLI ke proyek ini.
 4. Terapkan migrasi dan RLS/realtime yang dikandungnya:
