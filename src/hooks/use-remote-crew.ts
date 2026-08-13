@@ -60,6 +60,21 @@ export type CrewRegistration = {
   audioReady: boolean;
 };
 
+export function crewClaimArgs(
+  registration: CrewRegistration,
+  deviceDescription: string,
+  visibilityState: "visible" | "hidden",
+) {
+  if (visibilityState !== "visible") return null;
+  return {
+    p_display_name: registration.displayName,
+    p_normalized_name: registration.normalizedName,
+    p_device_description: deviceDescription,
+    p_audio_ready: registration.audioReady,
+    p_visibility_state: visibilityState,
+  };
+}
+
 const PROCESSED_COMMAND_MAX_AGE_MS = 35_000;
 const PROCESSED_COMMAND_MAX_COUNT = 256;
 
@@ -238,6 +253,7 @@ export function useRemoteCrew({
     let userId: string | null = null;
     let channelTerminal = false;
     let presenceActive = false;
+    let registrationStarted = false;
     const update = (setter: (value: boolean) => void, value: boolean) => {
       if (active) setter(value);
     };
@@ -275,25 +291,32 @@ export function useRemoteCrew({
       );
     };
     const onVisibilityChange = () => {
+      if (!userId && document.visibilityState === "visible") {
+        void start();
+        return;
+      }
       if (presenceActive && canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
         void heartbeat("connected").catch(() => update(setOffline, true));
       else if (!channelTerminal) disconnect();
     };
 
     const start = async () => {
+      if (registrationStarted || document.visibilityState !== "visible") return;
+      registrationStarted = true;
       try {
         userId = await getAnonymousUserId(client);
         if (!active) {
           disconnect();
           return;
         }
-        const { error: claimError } = await client.rpc("claim_crew_session", {
-          p_display_name: registration.displayName,
-          p_normalized_name: registration.normalizedName,
-          p_device_description: deviceDescription(),
-          p_audio_ready: registration.audioReady,
-          p_visibility_state: "hidden",
-        });
+        if (document.visibilityState !== "visible") {
+          registrationStarted = false;
+          return;
+        }
+        const { error: claimError } = await client.rpc(
+          "claim_crew_session",
+          crewClaimArgs(registration, deviceDescription(), "visible"),
+        );
         if (!active) {
           disconnect();
           return;

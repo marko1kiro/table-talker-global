@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   channelStateIsTerminal,
   canSendConnectedHeartbeat,
+  crewClaimArgs,
   createRemoteCommandProcessor,
   getAnonymousUserId,
   getRemoteCommandState,
@@ -36,6 +37,16 @@ describe("remote crew command processor", () => {
     expect(shouldActivatePresence("SUBSCRIBING")).toBe(false);
     expect(shouldActivatePresence("SUBSCRIBED")).toBe(true);
     expect(shouldActivatePresence("CLOSED")).toBe(false);
+  });
+
+  it("claims a foreground crew name visibly before realtime subscribes", () => {
+    const registration = { displayName: "Crew", normalizedName: "crew", audioReady: true };
+
+    expect(crewClaimArgs(registration, "Browser", "visible")).toMatchObject({
+      p_visibility_state: "visible",
+    });
+    expect(crewClaimArgs(registration, "Browser", "hidden")).toBeNull();
+    expect(shouldActivatePresence("SUBSCRIBING")).toBe(false);
   });
 
   it("replaces the heartbeat timer on repeated subscription", () => {
