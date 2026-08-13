@@ -121,13 +121,26 @@ kondisi tersebut: buka crew di foreground, tekan `LANJUT!!`, lalu gunakan pemuli
 1. Buat proyek Supabase, lalu aktifkan **Anonymous sign-ins** pada Authentication.
 2. Isi lima variabel fitur remote di `.env` lokal serta environment variables
    Vercel: `SUPER_ADMIN_PASSWORD` dan empat variabel Supabase.
-3. Login Supabase CLI secara global atau gunakan `npx supabase`; tidak perlu dan
-   jangan menambah dependency CLI ke proyek ini.
-4. Terapkan migrasi dan RLS/realtime yang dikandungnya:
+3. Gunakan Supabase CLI melalui `npx`; tidak perlu dan jangan menambah dependency
+   CLI ke proyek ini. Fresh clone ini sudah memiliki `supabase/migrations/`, tetapi
+   belum memiliki `supabase/config.toml`. Hanya bila file config belum ada, jalankan:
 
    ```bash
+   npx supabase init
+   ```
+
+   Periksa config yang dibuat sebelum commit; `init` tidak diperlukan untuk tugas
+   dokumentasi ini dan tidak boleh mengganti migration yang sudah ada.
+4. Login, hubungkan proyek, lalu terapkan migrasi:
+
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref YOUR_PROJECT_REF
    npx supabase db push
    ```
+
+   Ambil `YOUR_PROJECT_REF` dari Supabase Dashboard. Jangan commit access token CLI,
+   password, atau nilai kredensial apa pun.
 
    Migrasi mengaktifkan RLS deny-by-default, memberi crew hanya akses session dan
    perintah miliknya melalui RPC, serta menambahkan `crew_sessions` dan
