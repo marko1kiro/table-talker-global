@@ -17,16 +17,20 @@ function operations(): string {
 }
 
 describe("remote audio Supabase migration", () => {
-  it("defines auth-bound sessions with atomic fresh-online name claims", () => {
-    expect(migration()).toMatch(/create table public\.crew_sessions/i);
+  it("reserves visible names while connecting and reclaims stale reservations", () => {
+    expect(migration()).toMatch(/connection_state in \('connecting', 'connected', 'disconnected'\)/i);
     expect(migration()).toMatch(/values\s*\(\s*auth\.uid\(\), p_normalized_name/i);
     expect(migration()).toMatch(
-      /create unique index crew_sessions_online_name_key[\s\S]*where connection_state = 'connected'/i,
+      /create unique index crew_sessions_online_name_key[\s\S]*connection_state in \('connecting', 'connected'\)/i,
     );
     expect(migration()).toMatch(
-      /update public\.crew_sessions[\s\S]*last_seen <= now\(\) - interval '30 seconds'/i,
+      /where connection_state in \('connecting', 'connected'\) and last_seen <= now\(\) - interval '30 seconds'/i,
+    );
+    expect(migration()).toMatch(
+      /case when p_visibility_state = 'visible' then 'connecting' else 'disconnected' end/i,
     );
   });
+
 
   it("forces hidden heartbeats offline", () => {
     expect(migration()).toMatch(

@@ -7,7 +7,7 @@ create table public.crew_sessions (
   device_description text not null check (char_length(device_description) between 1 and 200),
   audio_ready boolean not null default false,
   visibility_state text not null check (visibility_state in ('visible', 'hidden')),
-  connection_state text not null check (connection_state in ('connected', 'disconnected')),
+  connection_state text not null check (connection_state in ('connecting', 'connected', 'disconnected')),
   last_seen timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -16,7 +16,7 @@ create table public.crew_sessions (
 
 create unique index crew_sessions_online_name_key
   on public.crew_sessions (normalized_name)
-  where connection_state = 'connected';
+  where connection_state in ('connecting', 'connected');
 
 create table public.remote_commands (
   id uuid primary key default gen_random_uuid(),
@@ -60,7 +60,7 @@ begin
 
   update public.crew_sessions
   set connection_state = 'disconnected', offline_at = now(), updated_at = now()
-  where connection_state = 'connected' and last_seen <= now() - interval '30 seconds';
+  where connection_state in ('connecting', 'connected') and last_seen <= now() - interval '30 seconds';
 
   insert into public.crew_sessions (
     id, normalized_name, display_name, device_description, audio_ready, visibility_state,
@@ -68,7 +68,7 @@ begin
   )
   values (
     auth.uid(), p_normalized_name, p_display_name, p_device_description, p_audio_ready,
-    p_visibility_state, case when p_visibility_state = 'visible' then 'connected' else 'disconnected' end,
+    p_visibility_state, case when p_visibility_state = 'visible' then 'connecting' else 'disconnected' end,
     now(), case when p_visibility_state = 'visible' then null else now() end
   )
   on conflict (id) do update
