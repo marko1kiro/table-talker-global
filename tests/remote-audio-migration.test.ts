@@ -18,7 +18,9 @@ function operations(): string {
 
 describe("remote audio Supabase migration", () => {
   it("reserves visible names while connecting and reclaims stale reservations", () => {
-    expect(migration()).toMatch(/connection_state in \('connecting', 'connected', 'disconnected'\)/i);
+    expect(migration()).toMatch(
+      /connection_state in \('connecting', 'connected', 'disconnected'\)/i,
+    );
     expect(migration()).toMatch(/values\s*\(\s*auth\.uid\(\), p_normalized_name/i);
     expect(migration()).toMatch(
       /create unique index crew_sessions_online_name_key[\s\S]*connection_state in \('connecting', 'connected'\)/i,
@@ -31,13 +33,33 @@ describe("remote audio Supabase migration", () => {
     );
   });
 
-
   it("forces hidden heartbeats offline", () => {
     expect(migration()).toMatch(
       /connection_state = case when p_visibility_state = 'visible' then p_connection_state else 'disconnected' end/i,
     );
     expect(migration()).toMatch(
       /offline_at = case when p_visibility_state = 'visible' and p_connection_state = 'connected' then null else now\(\) end/i,
+    );
+  });
+
+  it("creates remote commands atomically through a service-role-only RPC", () => {
+    expect(migration()).toMatch(/create or replace function public\.create_remote_command\(/i);
+    expect(migration()).toMatch(
+      /p_target_session_id uuid,[\s\S]*p_audio_id text,[\s\S]*p_actor text/i,
+    );
+    expect(migration()).toMatch(/security definer[\s\S]*connection_state = 'connected'/i);
+    expect(migration()).toMatch(
+      /visibility_state = 'visible'[\s\S]*audio_ready = true[\s\S]*last_seen > now\(\) - interval '30 seconds'/i,
+    );
+    expect(migration()).toMatch(/raise exception 'TARGET_NOT_ELIGIBLE'/i);
+    expect(migration()).toMatch(
+      /insert into public\.remote_commands \(target_session_id, audio_id, actor, created_at, expires_at\)[\s\S]*now\(\) \+ interval '5 seconds'/i,
+    );
+    expect(migration()).toMatch(
+      /revoke all on function public\.create_remote_command\(uuid, text, text\) from public, anon, authenticated/i,
+    );
+    expect(migration()).toMatch(
+      /grant execute on function public\.create_remote_command\(uuid, text, text\) to service_role/i,
     );
   });
 

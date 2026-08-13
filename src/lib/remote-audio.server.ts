@@ -4,7 +4,6 @@ import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import {
   ANNOUNCEMENT_CATALOG,
-  COMMAND_TTL_MS,
   TABLE_COUNT,
   getCatalogMetadata,
   sessionIsEligible,
@@ -16,7 +15,7 @@ type CrewSessionRow = {
   device_description: string;
   audio_ready: boolean;
   visibility_state: "visible" | "hidden";
-  connection_state: "connected" | "disconnected";
+  connection_state: "connecting" | "connected" | "disconnected";
   last_seen: string;
 };
 
@@ -31,8 +30,6 @@ type RemoteCommandRow = {
   acknowledged_at: string | null;
   failure_reason: string | null;
 };
-
-type EligibleSession = { id: string; eligible: boolean };
 
 const uuid = z.string().uuid();
 export const commandInputSchema = z.object({
@@ -62,29 +59,15 @@ function getServiceClient() {
 
 export function validateCommandRequest(
   input: { targetSessionId: string; audioId: string },
-  sessions: EligibleSession[],
   availableCatalogIds: readonly string[],
 ): { error: string } | { targetSessionId: string; audioId: string } {
   if (!uuid.safeParse(input.targetSessionId).success) return { error: "Target crew tidak valid." };
-  if (!sessions.some((session) => session.id === input.targetSessionId && session.eligible)) {
-    return { error: "Crew tidak sedang siap menerima audio." };
-  }
   if (!availableCatalogIds.includes(input.audioId)) return { error: "Audio tidak tersedia." };
   return input;
 }
 
 function offline() {
   return { offline: true as const, message: "Realtime offline" };
-}
-
-export function buildCommandPayload(targetSessionId: string, audioId: string, now: number) {
-  return {
-    target_session_id: targetSessionId,
-    audio_id: audioId,
-    actor: "super-admin",
-    created_at: new Date(now).toISOString(),
-    expires_at: new Date(now + COMMAND_TTL_MS).toISOString(),
-  };
 }
 
 function withEligibility(sessions: CrewSessionRow[], now: number) {
@@ -143,19 +126,17 @@ export const sendRemoteCommand = createServerFn({ method: "POST" })
     if (!client) return offline();
 
     try {
-      const sessionsResult = await client.from("crew_sessions").select(crewSessionColumns);
-      if (sessionsResult.error) return offline();
-
-      const request = validateCommandRequest(
-        data,
-        withEligibility((sessionsResult.data ?? []) as CrewSessionRow[], Date.now()),
-        catalogIds,
-      );
+      const request = validateCommandRequest(data, catalogIds);
       if ("error" in request) return request;
 
-      const { error } = await client
-        .from("remote_commands")
-        .insert(buildCommandPayload(request.targetSessionId, request.audioId, Date.now()));
+      const { error } = await client.rpc("create_remote_command", {
+        p_target_session_id: request.targetSessionId,
+        p_audio_id: request.audioId,
+        p_actor: "super-admin",
+      });
+      if (error?.message.includes("TARGET_NOT_ELIGIBLE")) {
+        return { error: "Crew tidak sedang siap menerima audio." };
+      }
       return error ? offline() : { ok: true as const };
     } catch {
       return offline();

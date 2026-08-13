@@ -28,3 +28,5 @@ Deno.serve(async () => {
 ```
 
 Scheduled retention is optional. Its failure never affects command delivery, acknowledgement, or local playback. Service-role credentials belong only in the scheduled server runtime; no client code is included in this task.
+
+Visible crew names are reserved during `connecting` and `connected`; a stale reservation older than 30 seconds is released by the next claim. `create_remote_command` is service-role-only and atomically validates fresh, visible, connected, audio-ready targets before inserting a five-second command.

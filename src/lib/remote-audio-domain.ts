@@ -28,7 +28,7 @@ export type RemoteCommand = {
 };
 export type CommandWatermark = Pick<RemoteCommand, "createdAt" | "id">;
 export type CrewSessionEligibility = {
-  connectionState: "connected" | "disconnected";
+  connectionState: "connecting" | "connected" | "disconnected";
   visibilityState: "visible" | "hidden";
   audioReady: boolean;
   lastSeen: string;

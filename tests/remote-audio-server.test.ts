@@ -1,13 +1,17 @@
 import { expect, it } from "vitest";
-import {
-  buildCommandPayload,
-  commandInputSchema,
-  validateCommandRequest,
-} from "../src/lib/remote-audio.server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { commandInputSchema, validateCommandRequest } from "../src/lib/remote-audio.server";
+
+const serverPath = resolve(import.meta.dirname, "../src/lib/remote-audio.server.ts");
+
+function server(): string {
+  return readFileSync(serverPath, "utf8");
+}
 
 it("rejects invalid targets and non-catalog audio", () => {
   expect(
-    validateCommandRequest({ targetSessionId: "bad", audioId: "table:7" }, [], ["table:7"]),
+    validateCommandRequest({ targetSessionId: "bad", audioId: "table:7" }, ["table:7"]),
   ).toEqual({ error: "Target crew tidak valid." });
   expect(
     validateCommandRequest(
@@ -15,7 +19,6 @@ it("rejects invalid targets and non-catalog audio", () => {
         targetSessionId: "d2719c7e-5b88-4ee3-8a45-7c95305a3023",
         audioId: "announcement:missing",
       },
-      [{ id: "d2719c7e-5b88-4ee3-8a45-7c95305a3023", eligible: true }],
       ["table:7"],
     ),
   ).toEqual({ error: "Audio tidak tersedia." });
@@ -28,12 +31,12 @@ it("rejects malformed command payloads before availability checks", () => {
   );
 });
 
-it("sets an exact five-second command TTL", () => {
-  expect(buildCommandPayload("crew-id", "table:7", 0)).toEqual({
-    target_session_id: "crew-id",
-    audio_id: "table:7",
-    actor: "super-admin",
-    created_at: "1970-01-01T00:00:00.000Z",
-    expires_at: "1970-01-01T00:00:05.000Z",
-  });
+it("uses the authoritative command RPC without a direct command insert", () => {
+  expect(server()).toMatch(/client\.rpc\("create_remote_command", \{/);
+  expect(server()).not.toMatch(/from\("remote_commands"\)\s*\.insert/);
+});
+
+it("maps stale targets to availability and other RPC failures offline", () => {
+  expect(server()).toMatch(/TARGET_NOT_ELIGIBLE[\s\S]*Crew tidak sedang siap menerima audio\./);
+  expect(server()).toMatch(/return error \? offline\(\) : \{ ok: true as const \}/);
 });

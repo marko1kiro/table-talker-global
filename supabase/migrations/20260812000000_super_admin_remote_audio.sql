@@ -116,6 +116,37 @@ begin
 end;
 $$;
 
+create or replace function public.create_remote_command(
+  p_target_session_id uuid,
+  p_audio_id text,
+  p_actor text
+)
+returns public.remote_commands
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  result public.remote_commands;
+begin
+  if p_actor <> 'super-admin' or p_audio_id !~ '^(table:([1-9]|[1-6][0-9]|70)|announcement:(seating|himbauan-barang-bawaan-pelanggan|outside-food|no-smoking|larangan-gabung-meja|jam-buka-resto))$' then
+    raise exception 'INVALID_COMMAND';
+  end if;
+
+  insert into public.remote_commands (target_session_id, audio_id, actor, created_at, expires_at)
+  select id, p_audio_id, p_actor, now(), now() + interval '5 seconds'
+  from public.crew_sessions
+  where id = p_target_session_id
+    and connection_state = 'connected'
+    and visibility_state = 'visible'
+    and audio_ready = true
+    and last_seen > now() - interval '30 seconds'
+  returning * into result;
+  if result.id is null then raise exception 'TARGET_NOT_ELIGIBLE'; end if;
+  return result;
+end;
+$$;
+
 create or replace function public.ack_remote_command(
   p_command_id uuid,
   p_status text,
@@ -175,7 +206,9 @@ alter table public.crew_sessions enable row level security;
 alter table public.remote_commands enable row level security;
 revoke all on public.crew_sessions, public.remote_commands from anon, authenticated;
 revoke all on function public.claim_crew_session(text, text, text, boolean, text), public.heartbeat_crew_session(boolean, text, text), public.ack_remote_command(uuid, text, text), public.expire_remote_commands(), public.cleanup_remote_commands() from public, anon, authenticated;
+revoke all on function public.create_remote_command(uuid, text, text) from public, anon, authenticated;
 grant execute on function public.claim_crew_session(text, text, text, boolean, text), public.heartbeat_crew_session(boolean, text, text), public.ack_remote_command(uuid, text, text) to authenticated;
+grant execute on function public.create_remote_command(uuid, text, text) to service_role;
 grant execute on function public.expire_remote_commands(), public.cleanup_remote_commands() to service_role;
 grant select on public.crew_sessions, public.remote_commands to authenticated;
 create policy "crew reads own session" on public.crew_sessions for select to authenticated using (id = auth.uid());
