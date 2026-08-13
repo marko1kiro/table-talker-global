@@ -1,10 +1,31 @@
 import { readFileSync } from "node:fs";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   commandStatus,
   canPlayRemoteAudio,
   reconcileRemoteSelection,
 } from "../src/lib/super-admin-state";
+import { createInvalidationDebouncer, realtimeIsReady } from "../src/lib/super-admin-realtime";
+
+it("keeps Play disabled until the invalidation channel subscribes", () => {
+  expect(realtimeIsReady("SUBSCRIBING")).toBe(false);
+  expect(realtimeIsReady("SUBSCRIBED")).toBe(true);
+  expect(realtimeIsReady("CHANNEL_ERROR")).toBe(false);
+});
+
+it("debounces broadcast invalidations to one refetch per second", () => {
+  const invalidate = vi.fn();
+  const debouncer = createInvalidationDebouncer(invalidate, () => now);
+  let now = 0;
+
+  debouncer();
+  now = 500;
+  debouncer();
+  now = 1_000;
+  debouncer();
+
+  expect(invalidate).toHaveBeenCalledTimes(2);
+});
 
 it("enables Play only for a valid online idle selection", () => {
   expect(

@@ -6,10 +6,18 @@ const migrationPath = resolve(
   import.meta.dirname,
   "../supabase/migrations/20260812000000_super_admin_remote_audio.sql",
 );
+const broadcastMigrationPath = resolve(
+  import.meta.dirname,
+  "../supabase/migrations/20260813000000_super_admin_realtime_broadcast.sql",
+);
 const operationsPath = resolve(import.meta.dirname, "../docs/supabase-super-admin-remote-audio.md");
 
 function migration(): string {
   return readFileSync(migrationPath, "utf8");
+}
+
+function broadcastMigration(): string {
+  return readFileSync(broadcastMigrationPath, "utf8");
 }
 
 function operations(): string {
@@ -95,6 +103,22 @@ describe("remote audio Supabase migration", () => {
       /create index remote_commands_sent_expires_at_idx on public\.remote_commands \(expires_at\) where status = 'sent'/i,
     );
     expect(migration()).toMatch(/create extension if not exists pg_cron/i);
+  });
+
+  it("broadcasts minimal invalidations without publishing protected tables", () => {
+    expect(broadcastMigration()).toMatch(
+      /create or replace function public\.broadcast_remote_admin_invalidation\(\)/i,
+    );
+    expect(broadcastMigration()).toMatch(
+      /realtime\.send\([\s\S]*'kind', tg_table_name,[\s\S]*'sessionId', case when tg_table_name = 'remote_commands' then new\.target_session_id else new\.id end,[\s\S]*'commandId', case when tg_table_name = 'remote_commands' then new\.id else null end[\s\S]*'invalidate',[\s\S]*'super-admin-remote-audio',[\s\S]*false/i,
+    );
+    expect(broadcastMigration()).toMatch(
+      /create trigger crew_sessions_remote_admin_invalidation[\s\S]*after insert or update on public\.crew_sessions/i,
+    );
+    expect(broadcastMigration()).toMatch(
+      /create trigger remote_commands_remote_admin_invalidation[\s\S]*after insert or update on public\.remote_commands/i,
+    );
+    expect(broadcastMigration()).not.toMatch(/alter publication supabase_realtime add table/i);
   });
 
   it("documents expiry as authoritative before minute-level audit updates", () => {

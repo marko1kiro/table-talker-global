@@ -10,6 +10,7 @@ import {
   commandStatus,
   reconcileRemoteSelection,
 } from "@/lib/super-admin-state";
+import { createInvalidationDebouncer, realtimeIsReady } from "@/lib/super-admin-realtime";
 
 const snapshotKey = ["remote-admin-snapshot"] as const;
 
@@ -43,6 +44,7 @@ function SuperAdminPage() {
   const [targetSessionId, setTargetSessionId] = useState("");
   const [audioId, setAudioId] = useState("");
   const [sendError, setSendError] = useState("");
+  const [realtimeStatus, setRealtimeStatus] = useState("SUBSCRIBING");
   const [now, setNow] = useState(Date.now());
   const snapshot = useQuery({
     queryKey: snapshotKey,
@@ -66,23 +68,24 @@ function SuperAdminPage() {
 
   useEffect(() => {
     const client = getSupabaseBrowserClient();
-    if (!client) return;
+    if (!client) {
+      setRealtimeStatus("CHANNEL_ERROR");
+      return;
+    }
+    const invalidate = createInvalidationDebouncer(() =>
+      queryClient.invalidateQueries({ queryKey: snapshotKey }),
+    );
     const channel = client
-      .channel("super-admin-remote-audio")
-      .on("postgres_changes", { event: "*", schema: "public", table: "crew_sessions" }, () => {
-        queryClient.invalidateQueries({ queryKey: snapshotKey });
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "remote_commands" }, () => {
-        queryClient.invalidateQueries({ queryKey: snapshotKey });
-      })
-      .subscribe();
+      .channel("super-admin-remote-audio", { config: { private: false } })
+      .on("broadcast", { event: "invalidate" }, invalidate)
+      .subscribe((status) => setRealtimeStatus(status));
     return () => {
-      client.removeChannel(channel);
+      void client.removeChannel(channel);
     };
   }, [queryClient]);
 
   const data = snapshot.data;
-  const offline = !data || data.offline;
+  const offline = !data || data.offline || !realtimeIsReady(realtimeStatus);
   const sessions = useMemo(() => (data && !data.offline ? data.sessions : []), [data]);
   const catalog = useMemo(() => (data && !data.offline ? data.catalog : []), [data]);
   const commands = data && !data.offline ? data.commands : [];
