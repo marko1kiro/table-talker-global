@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   channelStateIsTerminal,
   canSendConnectedHeartbeat,
+  createVisibleClaimCoordinator,
   crewClaimArgs,
   createRemoteCommandProcessor,
   getAnonymousUserId,
@@ -47,6 +48,39 @@ describe("remote crew command processor", () => {
     });
     expect(crewClaimArgs(registration, "Browser", "hidden")).toBeNull();
     expect(shouldActivatePresence("SUBSCRIBING")).toBe(false);
+  });
+
+  it("defers a hidden claim after anonymous auth resolves, then claims and subscribes once visible", async () => {
+    let resolveAuth!: (userId: string) => void;
+    const ensureAuth = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveAuth = resolve;
+        }),
+    );
+    let visible = true;
+    const claim = vi.fn().mockResolvedValue(true);
+    const subscribe = vi.fn();
+    const coordinator = createVisibleClaimCoordinator({
+      ensureAuth,
+      isVisible: () => visible,
+      claim,
+      subscribe,
+    });
+
+    void coordinator.start();
+    visible = false;
+    resolveAuth("crew-1");
+    await vi.waitFor(() => expect(ensureAuth).toHaveBeenCalledOnce());
+    expect(claim).not.toHaveBeenCalled();
+    expect(subscribe).not.toHaveBeenCalled();
+
+    visible = true;
+    await coordinator.claimWhenVisible();
+    await coordinator.claimWhenVisible();
+
+    expect(claim).toHaveBeenCalledOnce();
+    expect(subscribe).toHaveBeenCalledOnce();
   });
 
   it("replaces the heartbeat timer on repeated subscription", () => {

@@ -75,6 +75,50 @@ export function crewClaimArgs(
   };
 }
 
+export function createVisibleClaimCoordinator({
+  ensureAuth,
+  isVisible,
+  claim,
+  subscribe,
+}: {
+  ensureAuth: () => Promise<string>;
+  isVisible: () => boolean;
+  claim: (userId: string) => Promise<boolean>;
+  subscribe: (userId: string) => void;
+}) {
+  let userId: string | null = null;
+  let authInFlight: Promise<void> | null = null;
+  let claimInFlight: Promise<void> | null = null;
+  let subscribed = false;
+
+  const claimWhenVisible = async () => {
+    if (!userId || !isVisible() || subscribed) return;
+    if (!claimInFlight)
+      claimInFlight = claim(userId)
+        .then((claimed) => {
+          if (claimed && !subscribed) {
+            subscribed = true;
+            subscribe(userId!);
+          }
+        })
+        .finally(() => {
+          claimInFlight = null;
+        });
+    return claimInFlight;
+  };
+
+  return {
+    start: () => {
+      if (!authInFlight)
+        authInFlight = ensureAuth().then((id) => {
+          userId = id;
+        });
+      return authInFlight.then(claimWhenVisible);
+    },
+    claimWhenVisible,
+  };
+}
+
 const PROCESSED_COMMAND_MAX_AGE_MS = 35_000;
 const PROCESSED_COMMAND_MAX_COUNT = 256;
 
@@ -253,7 +297,8 @@ export function useRemoteCrew({
     let userId: string | null = null;
     let channelTerminal = false;
     let presenceActive = false;
-    let registrationStarted = false;
+    let authInFlight: Promise<string> | null = null;
+    let claimInFlight: Promise<void> | null = null;
     const update = (setter: (value: boolean) => void, value: boolean) => {
       if (active) setter(value);
     };
@@ -291,97 +336,103 @@ export function useRemoteCrew({
       );
     };
     const onVisibilityChange = () => {
-      if (!userId && document.visibilityState === "visible") {
-        void start();
-        return;
-      }
+      if (document.visibilityState === "visible") void claimWhenVisible();
       if (presenceActive && canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
         void heartbeat("connected").catch(() => update(setOffline, true));
       else if (!channelTerminal) disconnect();
     };
 
-    const start = async () => {
-      if (registrationStarted || document.visibilityState !== "visible") return;
-      registrationStarted = true;
-      try {
-        userId = await getAnonymousUserId(client);
-        if (!active) {
-          disconnect();
-          return;
-        }
-        if (document.visibilityState !== "visible") {
-          registrationStarted = false;
-          return;
-        }
-        const { error: claimError } = await client.rpc(
-          "claim_crew_session",
-          crewClaimArgs(registration, deviceDescription(), "visible"),
-        );
-        if (!active) {
-          disconnect();
-          return;
-        }
-        if (claimError) {
-          update(setDuplicateName, /duplicate|unique/i.test(claimError.message));
-          update(setOffline, !/duplicate|unique/i.test(claimError.message));
-          return;
-        }
-        update(setDuplicateName, false);
-        update(setOffline, true);
-        if (active) setConnectionState("connecting");
-        const processor = createRemoteCommandProcessor({
-          sessionId: userId,
-          state: getRemoteCommandState(client, userId),
-          playRemoteAudio: (audioId) => playRef.current(audioId),
-          acknowledge: async (commandId, status, reason) => {
-            try {
-              await rpc("ack_remote_command", {
-                p_command_id: commandId,
-                p_status: status,
-                p_failure_reason: reason,
-              });
-            } catch {
-              throw new Error("ACK_FAILED");
-            }
-          },
-          now: Date.now,
-          onNeedsAudioRecovery: () => update(setNeedsAudioRecovery, true),
-          onDeliveryUncertain: () => update(setDeliveryUncertain, true),
-        });
-        channel = client
-          .channel(`remote-commands:${userId}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "INSERT",
-              schema: "public",
-              table: "remote_commands",
-              filter: `target_session_id=eq.${userId}`,
-            },
-            ({ new: row }) => void processor.process(toRemoteCommand(row as RemoteCommandRow)),
-          )
-          .subscribe((status) => {
-            if (shouldActivatePresence(status)) {
-              update(setOffline, false);
-              if (active) setConnectionState("online");
-              activatePresence();
-              return;
-            }
-            if (!channelStateIsTerminal(status)) return;
-            channelTerminal = true;
-            stopHeartbeat();
+    const ensureAuth = () => {
+      if (!authInFlight) authInFlight = getAnonymousUserId(client);
+      return authInFlight;
+    };
+    const claimWhenVisible = async () => {
+      if (!userId || document.visibilityState !== "visible" || channel || claimInFlight) return;
+      claimInFlight = (async () => {
+        try {
+          const { error: claimError } = await client.rpc(
+            "claim_crew_session",
+            crewClaimArgs(registration, deviceDescription(), "visible"),
+          );
+          if (!active) {
             disconnect();
-            update(setOffline, true);
-            if (active) setConnectionState("offline");
+            return;
+          }
+          if (claimError) {
+            update(setDuplicateName, /duplicate|unique/i.test(claimError.message));
+            update(setOffline, !/duplicate|unique/i.test(claimError.message));
+            return;
+          }
+          update(setDuplicateName, false);
+          update(setOffline, true);
+          if (active) setConnectionState("connecting");
+          const processor = createRemoteCommandProcessor({
+            sessionId: userId,
+            state: getRemoteCommandState(client, userId),
+            playRemoteAudio: (audioId) => playRef.current(audioId),
+            acknowledge: async (commandId, status, reason) => {
+              try {
+                await rpc("ack_remote_command", {
+                  p_command_id: commandId,
+                  p_status: status,
+                  p_failure_reason: reason,
+                });
+              } catch {
+                throw new Error("ACK_FAILED");
+              }
+            },
+            now: Date.now,
+            onNeedsAudioRecovery: () => update(setNeedsAudioRecovery, true),
+            onDeliveryUncertain: () => update(setDeliveryUncertain, true),
           });
-        document.addEventListener("visibilitychange", onVisibilityChange);
-        window.addEventListener("pagehide", disconnect);
+          channel = client
+            .channel(`remote-commands:${userId}`)
+            .on(
+              "postgres_changes",
+              {
+                event: "INSERT",
+                schema: "public",
+                table: "remote_commands",
+                filter: `target_session_id=eq.${userId}`,
+              },
+              ({ new: row }) => void processor.process(toRemoteCommand(row as RemoteCommandRow)),
+            )
+            .subscribe((status) => {
+              if (shouldActivatePresence(status)) {
+                update(setOffline, false);
+                if (active) setConnectionState("online");
+                activatePresence();
+                return;
+              }
+              if (!channelStateIsTerminal(status)) return;
+              channelTerminal = true;
+              stopHeartbeat();
+              disconnect();
+              update(setOffline, true);
+              if (active) setConnectionState("offline");
+            });
+        } catch {
+          update(setOffline, true);
+          if (active) setConnectionState("offline");
+        } finally {
+          claimInFlight = null;
+        }
+      })();
+      return claimInFlight;
+    };
+    const start = async () => {
+      try {
+        userId = await ensureAuth();
+        if (!active) return;
+        await claimWhenVisible();
       } catch {
         update(setOffline, true);
         if (active) setConnectionState("offline");
       }
     };
 
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", disconnect);
     void start();
     return () => {
       active = false;
