@@ -6,11 +6,7 @@ set search_path = public, realtime
 as $$
 begin
   perform realtime.send(
-    jsonb_build_object(
-      'kind', tg_table_name,
-      'sessionId', case when tg_table_name = 'remote_commands' then new.target_session_id else new.id end,
-      'commandId', case when tg_table_name = 'remote_commands' then new.id else null end
-    ),
+    jsonb_build_object('kind', tg_table_name),
     'invalidate',
     'super-admin-remote-audio',
     false

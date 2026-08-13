@@ -110,8 +110,9 @@ describe("remote audio Supabase migration", () => {
       /create or replace function public\.broadcast_remote_admin_invalidation\(\)/i,
     );
     expect(broadcastMigration()).toMatch(
-      /realtime\.send\([\s\S]*'kind', tg_table_name,[\s\S]*'sessionId', case when tg_table_name = 'remote_commands' then new\.target_session_id else new\.id end,[\s\S]*'commandId', case when tg_table_name = 'remote_commands' then new\.id else null end[\s\S]*'invalidate',[\s\S]*'super-admin-remote-audio',[\s\S]*false/i,
+      /realtime\.send\(\s*jsonb_build_object\(\s*'kind', tg_table_name\s*\),\s*'invalidate',\s*'super-admin-remote-audio',\s*false\s*\)/i,
     );
+    expect(broadcastMigration()).not.toMatch(/new\.(id|target_session_id)/i);
     expect(broadcastMigration()).toMatch(
       /create trigger crew_sessions_remote_admin_invalidation[\s\S]*after insert or update on public\.crew_sessions/i,
     );
