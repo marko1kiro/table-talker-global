@@ -12,24 +12,19 @@
  * Cara memperbarui audio: ganti file di `src/assets/audio/**` lalu deploy ulang.
  */
 
-export const TABLE_COUNT = 70;
+import {
+  ANNOUNCEMENT_CATALOG,
+  TABLE_COUNT,
+  getCatalogMetadata,
+  type AnnouncementId,
+  type AudioId,
+} from "./remote-audio-domain";
 
-export type AnnouncementId =
-  | "seating"
-  | "himbauan-barang-bawaan-pelanggan"
-  | "outside-food"
-  | "no-smoking"
-  | "larangan-gabung-meja"
-  | "jam-buka-resto";
+export { TABLE_COUNT } from "./remote-audio-domain";
 
-export const ANNOUNCEMENT_IDS = [
-  "seating",
-  "himbauan-barang-bawaan-pelanggan",
-  "outside-food",
-  "no-smoking",
-  "larangan-gabung-meja",
-  "jam-buka-resto",
-] as const;
+export const ANNOUNCEMENT_IDS = ANNOUNCEMENT_CATALOG.map(
+  ({ id }) => id,
+) as readonly AnnouncementId[];
 
 const tableModules = import.meta.glob<string>("../assets/audio/tables/*.mp3", {
   eager: true,
@@ -84,6 +79,149 @@ export const readyTables: ReadonlySet<number> = new Set(
   [...tableAudioUrls.keys()].sort((a, b) => a - b),
 );
 
+export type CatalogAudio = { id: AudioId; label: string; url: string };
+
+export const bundledAudioCatalog: readonly CatalogAudio[] = [
+  ...ANNOUNCEMENT_CATALOG.flatMap((announcement) => {
+    const url = announcementAudioUrls[announcement.id];
+    return url
+      ? [{ id: `announcement:${announcement.id}` as AudioId, label: announcement.label, url }]
+      : [];
+  }),
+  ...[...tableAudioUrls.entries()]
+    .sort(([a], [b]) => a - b)
+    .flatMap(([tableNumber, url]) => {
+      const metadata = getCatalogMetadata(`table:${tableNumber}`);
+      return metadata ? [{ ...metadata, url }] : [];
+    }),
+];
+
 export function getTableAudioUrl(tableNumber: number): string | null {
   return tableAudioUrls.get(tableNumber) ?? null;
+}
+
+export function getBundledAudioUrl(audioId: AudioId): string | null {
+  return bundledAudioCatalog.find((audio) => audio.id === audioId)?.url ?? null;
+}
+
+export function getUnlockAudioUrl(): string | null {
+  return bundledAudioCatalog[0]?.url ?? null;
+}
+
+type PlaybackAudio = Pick<
+  HTMLAudioElement,
+  | "muted"
+  | "volume"
+  | "currentTime"
+  | "src"
+  | "play"
+  | "pause"
+  | "addEventListener"
+  | "removeEventListener"
+>;
+
+function abortError() {
+  return Object.assign(new Error("Audio playback aborted."), { name: "AbortError" });
+}
+
+export function createPlaybackGeneration() {
+  let current = 0;
+  return {
+    next: () => ++current,
+    isCurrent: (token: number) => token === current,
+  };
+}
+
+export function runIfPlaybackCurrent(
+  generation: ReturnType<typeof createPlaybackGeneration>,
+  token: number,
+  effect: () => void,
+) {
+  if (generation.isCurrent(token)) effect();
+}
+
+export function createAudioPlaybackController(
+  audio: PlaybackAudio,
+  onPlaybackEnded?: (token: number) => void,
+) {
+  let settle: ((error?: Error) => void) | null = null;
+  let cleanup: (() => void) | null = null;
+  let endedListener: (() => void) | null = null;
+  const stop = () => {
+    cleanup?.();
+    cleanup = null;
+    if (endedListener) audio.removeEventListener("ended", endedListener);
+    endedListener = null;
+    const pending = settle;
+    settle = null;
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = "";
+    pending?.(abortError());
+  };
+  return {
+    stop,
+    play(url: string, token: number) {
+      stop();
+      audio.src = url;
+      return new Promise<void>((resolve, reject) => {
+        const onEnded = () => {
+          endedListener = null;
+          stop();
+          onPlaybackEnded?.(token);
+        };
+        const finish = (error?: Error) => {
+          cleanup?.();
+          cleanup = null;
+          settle = null;
+          if (error) reject(error);
+          else resolve();
+        };
+        const onPlaying = () => finish();
+        const onError = () => {
+          finish(new Error("Audio playback error"));
+          stop();
+        };
+        cleanup = () => {
+          audio.removeEventListener("playing", onPlaying);
+          audio.removeEventListener("error", onError);
+        };
+        endedListener = onEnded;
+        settle = finish;
+        audio.addEventListener("playing", onPlaying, { once: true });
+        audio.addEventListener("error", onError, { once: true });
+        audio.addEventListener("ended", onEnded, { once: true });
+        void audio
+          .play()
+          .catch((error) =>
+            finish(error instanceof Error ? error : new Error("Audio playback error")),
+          );
+      });
+    },
+  };
+}
+
+export async function unlockBundledAudio(
+  audio: PlaybackAudio,
+  url: string | null,
+): Promise<boolean> {
+  if (!url) return false;
+  const muted = audio.muted;
+  const volume = audio.volume;
+  audio.src = url;
+  audio.muted = true;
+  audio.volume = 0;
+  const playback = audio.play();
+  try {
+    await playback;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = "";
+    audio.muted = muted;
+    audio.volume = volume;
+  }
 }

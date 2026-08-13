@@ -1,10 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
-export type AuthStatus = { dashboard: boolean };
+export type AuthStatus = { dashboard: boolean; superAdmin: boolean };
 
-type LoginInput = {
-  password: string;
-};
+export const loginInputSchema = z.object({ password: z.string() });
 
 const MISCONFIGURED_MESSAGE = "Konfigurasi server belum lengkap. Hubungi administrator.";
 
@@ -22,37 +21,45 @@ function readEnv(name: string): string | null {
   return value;
 }
 
-/** Perbandingan waktu-konstan sederhana untuk mengurangi kebocoran lewat timing. */
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
-}
-
 export const getAuthStatus = createServerFn({ method: "GET" }).handler(
   async (): Promise<AuthStatus> => {
     const { getAuthSession } = await import("./auth.server");
     const session = await getAuthSession();
-    return { dashboard: session.data.dashboard === true };
+    return {
+      dashboard: session.data.dashboard === true,
+      superAdmin: session.data.superAdmin === true,
+    };
   },
 );
 
 export const login = createServerFn({ method: "POST" })
-  .inputValidator((data: LoginInput) => data)
+  .validator(loginInputSchema)
   .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
-    const { updateAuthSession } = await import("./auth.server");
+    const { isPasswordValid, updateAuthSession } = await import("./auth.server");
 
     const expectedPassword = readEnv("DASHBOARD_PASSWORD");
     if (expectedPassword === null) {
       return { ok: false, message: MISCONFIGURED_MESSAGE };
     }
-    if (!safeEqual(data.password, expectedPassword)) {
+    if (!isPasswordValid(data.password, expectedPassword)) {
       return { ok: false, message: "Password salah." };
     }
     await updateAuthSession({ dashboard: true });
+    return { ok: true };
+  });
+
+export const loginSuperAdmin = createServerFn({ method: "POST" })
+  .validator(loginInputSchema)
+  .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
+    const { isPasswordValid, updateAuthSession } = await import("./auth.server");
+    const expectedPassword = readEnv("SUPER_ADMIN_PASSWORD");
+    if (!isPasswordValid(data.password, expectedPassword)) {
+      return {
+        ok: false,
+        message: expectedPassword === null ? MISCONFIGURED_MESSAGE : "Password Super Admin salah.",
+      };
+    }
+    await updateAuthSession({ superAdmin: true });
     return { ok: true };
   });
 

@@ -7,7 +7,21 @@ import { AuthGate } from "@/components/AuthGate";
 import { getAuthStatus } from "@/lib/auth";
 import { Footer } from "@/components/Footer";
 import { TableButton, type TableStatus } from "@/components/TableButton";
-import { TABLE_COUNT, announcementAudioUrls, getTableAudioUrl, readyTables } from "@/lib/audio";
+import {
+  TABLE_COUNT,
+  announcementAudioUrls,
+  getBundledAudioUrl,
+  getTableAudioUrl,
+  createAudioPlaybackController,
+  createPlaybackGeneration,
+  getUnlockAudioUrl,
+  runIfPlaybackCurrent,
+  readyTables,
+  unlockBundledAudio,
+} from "@/lib/audio";
+import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
+import { useRemoteCrew } from "@/hooks/use-remote-crew";
+import type { AudioId } from "@/lib/remote-audio-domain";
 
 export const Route = createFileRoute("/")({
   loader: () => getAuthStatus(),
@@ -44,15 +58,20 @@ function SoundboardPage() {
   const announcements = announcementAudioUrls;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioControllerRef = useRef<ReturnType<typeof createAudioPlaybackController> | null>(null);
   const activeAudioIdRef = useRef<number | string | null>(null);
+  const playbackGenerationRef = useRef(createPlaybackGeneration());
   const [playing, setPlaying] = useState<number | string | null>(null);
   const [paused, setPaused] = useState<number | string | null>(null);
   const [loading, setLoading] = useState<number | string | null>(null);
   const [announcementPanelOpen, setAnnouncementPanelOpen] = useState(false);
+  const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(null);
+  const [duplicateName, setDuplicateName] = useState(false);
 
   useEffect(() => {
     return () => {
-      audioRef.current?.pause();
+      audioControllerRef.current?.stop();
+      audioControllerRef.current = null;
       audioRef.current = null;
     };
   }, []);
@@ -68,18 +87,66 @@ function SoundboardPage() {
   }, [announcementPanelOpen]);
 
   const stop = useCallback(() => {
-    const audio = audioRef.current;
-    audioRef.current = null;
+    playbackGenerationRef.current.next();
+    audioControllerRef.current?.stop();
     activeAudioIdRef.current = null;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.src = "";
-    }
     setPlaying(null);
     setPaused(null);
     setLoading(null);
   }, []);
+
+  const getAudioController = useCallback(() => {
+    const audio = audioRef.current ?? new Audio();
+    audioRef.current = audio;
+    audioControllerRef.current ??= createAudioPlaybackController(audio, (token) => {
+      if (!playbackGenerationRef.current.isCurrent(token)) return;
+      activeAudioIdRef.current = null;
+      setPlaying(null);
+      setPaused(null);
+      setLoading(null);
+    });
+    return { audio, controller: audioControllerRef.current };
+  }, []);
+
+  const unlockAudio = useCallback(() => {
+    const { audio } = getAudioController();
+    return unlockBundledAudio(audio, getUnlockAudioUrl());
+  }, [getAudioController]);
+
+  const playRemoteAudio = useCallback(
+    async (audioId: AudioId) => {
+      const url = getBundledAudioUrl(audioId);
+      if (!url) throw new Error("Audio tidak tersedia.");
+      stop();
+      const { controller } = getAudioController();
+      const token = playbackGenerationRef.current.next();
+      activeAudioIdRef.current = audioId;
+      setLoading(audioId);
+      try {
+        await controller.play(url, token);
+        if (playbackGenerationRef.current.isCurrent(token)) {
+          setLoading(null);
+          setPlaying(audioId);
+        }
+      } catch (error) {
+        if (
+          playbackGenerationRef.current.isCurrent(token) &&
+          (error as Error).name !== "AbortError"
+        )
+          stop();
+        throw error;
+      }
+    },
+    [getAudioController, stop],
+  );
+
+  const remoteCrew = useRemoteCrew({ registration: crewIdentity, playRemoteAudio });
+
+  useEffect(() => {
+    if (!remoteCrew.duplicateName) return;
+    setDuplicateName(true);
+    setCrewIdentity(null);
+  }, [remoteCrew.duplicateName]);
 
   const play = useCallback(
     async (id: number | string, directUrl?: string | null) => {
@@ -89,17 +156,23 @@ function SoundboardPage() {
       // Resume audio yang dijeda dari posisi terakhir.
       if (paused === id && audioRef.current) {
         const audio = audioRef.current;
+        const token = playbackGenerationRef.current.next();
         activeAudioIdRef.current = id;
         setLoading(id);
         try {
           await audio.play();
-        } catch (err) {
-          console.error(err);
-          if (audioRef.current === audio) {
+          runIfPlaybackCurrent(playbackGenerationRef.current, token, () => {
+            setLoading(null);
+            setPaused(null);
+            setPlaying(id);
+          });
+        } catch (error) {
+          runIfPlaybackCurrent(playbackGenerationRef.current, token, () => {
+            console.error(error);
             activeAudioIdRef.current = null;
             setLoading(null);
             setPaused(null);
-          }
+          });
         }
         return;
       }
@@ -107,48 +180,27 @@ function SoundboardPage() {
       const url = directUrl ?? (typeof id === "number" ? getTableAudioUrl(id) : null);
       if (!url) return;
 
+      const token = playbackGenerationRef.current.next();
       activeAudioIdRef.current = id;
       setPaused(null);
       setLoading(id);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-
-      audio.addEventListener("playing", () => {
-        if (audioRef.current !== audio) return;
+      const { controller } = getAudioController();
+      try {
+        await controller.play(url, token);
+        if (!playbackGenerationRef.current.isCurrent(token)) return;
         setLoading(null);
         setPaused(null);
         setPlaying(id);
-      });
-      audio.addEventListener("ended", () => {
-        if (audioRef.current !== audio) return;
-        activeAudioIdRef.current = null;
-        setPlaying(null);
-        setPaused(null);
-        audioRef.current = null;
-      });
-      audio.addEventListener("error", () => {
-        if (audioRef.current !== audio) return;
+      } catch (error) {
+        if (!playbackGenerationRef.current.isCurrent(token)) return;
+        if ((error as Error).name !== "AbortError") console.error(error);
         activeAudioIdRef.current = null;
         setLoading(null);
         setPlaying(null);
         setPaused(null);
-        audioRef.current = null;
-        console.error("Audio playback error", id);
-      });
-
-      try {
-        await audio.play();
-      } catch (err) {
-        console.error(err);
-        if (audioRef.current === audio) {
-          activeAudioIdRef.current = null;
-          audioRef.current = null;
-          setLoading(null);
-          setPlaying(null);
-        }
       }
     },
-    [paused],
+    [getAudioController, paused],
   );
 
   const toggleAnnouncement = useCallback(
@@ -213,6 +265,37 @@ function SoundboardPage() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
+      <CrewIdentityDialog
+        open={!crewIdentity}
+        duplicateName={duplicateName}
+        unlockAudio={unlockAudio}
+        onContinue={(identity) => {
+          setDuplicateName(false);
+          setCrewIdentity(identity);
+        }}
+      />
+      {(remoteCrew.needsAudioRecovery || !crewIdentity?.audioReady) && crewIdentity && (
+        <div className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 brutal-border bg-card p-3 text-center">
+          <p className="mb-2 text-sm">Remote audio diblokir browser.</p>
+          <button
+            type="button"
+            className="brutal-border brutal-press bg-accent px-3 py-2 font-display"
+            onClick={() => {
+              void unlockAudio().then((audioReady) => {
+                setCrewIdentity({ ...crewIdentity, audioReady });
+                remoteCrew.retryAudioUnlock();
+              });
+            }}
+          >
+            Aktifkan Suara
+          </button>
+        </div>
+      )}
+      {remoteCrew.offline && crewIdentity && (
+        <p className="mx-auto max-w-6xl px-3 pt-3 text-center text-sm text-muted-foreground">
+          Remote control tidak tersedia. Soundboard tetap bisa dipakai.
+        </p>
+      )}
       <Header readyCount={readyTables.size} totalCount={TABLE_COUNT} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">

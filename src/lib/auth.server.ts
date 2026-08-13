@@ -4,10 +4,11 @@ import {
   updateSession,
   type SessionConfig,
 } from "@tanstack/react-start/server";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 export interface TableTalkerSession {
   dashboard?: boolean;
+  superAdmin?: boolean;
 }
 
 /**
@@ -35,6 +36,13 @@ function getSessionSecret(): string {
     );
   }
   return devSessionSecret;
+}
+
+export function isPasswordValid(password: string, expectedPassword: string | null): boolean {
+  if (expectedPassword === null) return false;
+  const candidate = createHash("sha256").update(password).digest();
+  const expected = createHash("sha256").update(expectedPassword).digest();
+  return timingSafeEqual(candidate, expected);
 }
 
 export function getAuthSessionConfig(): SessionConfig {
@@ -66,6 +74,14 @@ export function clearAuthSession() {
 export async function requireDashboard() {
   const session = await getAuthSession();
   if (session.data.dashboard !== true) {
+    throw new Error("UNAUTHORIZED");
+  }
+  return session;
+}
+
+export async function requireSuperAdmin() {
+  const session = await getAuthSession();
+  if (session.data.superAdmin !== true) {
     throw new Error("UNAUTHORIZED");
   }
   return session;
