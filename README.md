@@ -83,10 +83,15 @@ Kalau salah satu filenya tidak ada, tombolnya otomatis tampil non-aktif.
 ## Deploy ke Vercel
 
 1. Import repository ke Vercel.
-2. Tambahkan environment variables:
+2. Tambahkan environment variables dasar yang wajib untuk dashboard/sesi:
    - `AUTH_SECRET`: string acak minimal 32 karakter.
    - `DASHBOARD_PASSWORD`
 3. Deploy. Build command dan target server Vercel sudah dikonfigurasi.
+
+Fitur remote hanya aktif bila lima variabel opsionalnya juga diisi:
+`SUPER_ADMIN_PASSWORD`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
+`SUPABASE_URL`, dan `SUPABASE_SERVICE_ROLE_KEY`. Tanpanya, remote dinonaktifkan
+secara fail-open; dashboard dan soundboard audio bundled tetap berfungsi.
 
 Tidak ada storage yang perlu dihubungkan.
 
@@ -136,8 +141,8 @@ untuk memanggil `expire_remote_commands` dan `cleanup_remote_commands` dengan
 mempengaruhi delivery real-time. Detail fungsi ada di
 `docs/supabase-super-admin-remote-audio.md`.
 
-> Jangan commit file `.env`. Aplikasi tidak punya kredensial default — semua wajib
-> diset lewat environment variable.
+> Jangan commit file `.env`. `AUTH_SECRET` dan `DASHBOARD_PASSWORD` wajib untuk
+> dashboard/sesi; lima variabel remote hanya diperlukan untuk mengaktifkan remote.
 
 ## Perintah
 
