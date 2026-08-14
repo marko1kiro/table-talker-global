@@ -101,6 +101,7 @@ function SuperAdminPage() {
       targetSessionId,
       sessions.map((session) => ({
         id: session.id,
+        state: session.state,
         eligible: session.eligible,
         audioReady: session.audio_ready,
       })),
@@ -152,13 +153,19 @@ function SuperAdminPage() {
               disabled={offline}
             >
               <option value="">Pilih crew</option>
-              {sessions
-                .filter((session) => session.eligible && session.audio_ready)
-                .map((session) => (
-                  <option key={session.id} value={session.id}>
-                    {session.display_name} — {session.device_description}
+              {sessions.map((session) => {
+                const status =
+                  session.state === "recent"
+                    ? `Offline / terakhir aktif ${new Date(session.last_seen).toLocaleString("id-ID")}`
+                    : session.audio_ready
+                      ? "Online dan siap audio"
+                      : "Aktifkan suara di perangkat";
+                return (
+                  <option key={session.id} value={session.id} disabled={!session.eligible}>
+                    {session.display_name} — {session.device_description} — {status}
                   </option>
-                ))}
+                );
+              })}
             </select>
           </label>
         </div>

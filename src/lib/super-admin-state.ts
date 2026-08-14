@@ -1,6 +1,11 @@
 import type { AudioId } from "./remote-audio-domain";
 
-export type RemoteTarget = { id: string; eligible: boolean; audioReady: boolean };
+export type RemoteTarget = {
+  id: string;
+  state: "online" | "recent";
+  eligible: boolean;
+  audioReady: boolean;
+};
 
 export type RemoteSelectionState = {
   offline: boolean;
@@ -13,7 +18,11 @@ export function getSelectedRemoteTarget(
   sessions: readonly RemoteTarget[],
 ): RemoteTarget | undefined {
   return sessions.find(
-    (session) => session.id === targetSessionId && session.eligible && session.audioReady,
+    (session) =>
+      session.id === targetSessionId &&
+      session.state === "online" &&
+      session.eligible &&
+      session.audioReady,
   );
 }
 
