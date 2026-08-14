@@ -3,6 +3,7 @@ import {
   channelStateIsTerminal,
   canReconnectPresence,
   canSendConnectedHeartbeat,
+  createChannelStatusHandler,
   createVisibleClaimCoordinator,
   crewClaimArgs,
   createRemoteCommandProcessor,
@@ -82,6 +83,36 @@ describe("remote crew command processor", () => {
 
     expect(claim).toHaveBeenCalledOnce();
     expect(subscribe).toHaveBeenCalledOnce();
+  });
+
+  it("ignores a removed channel's late terminal callback", () => {
+    const channelA = {};
+    const channelB = {};
+    let currentChannel: object | null = channelA;
+    const stopHeartbeat = vi.fn();
+    const disconnect = vi.fn();
+    const setOffline = vi.fn();
+    const setConnectionState = vi.fn();
+    const removeChannel = vi.fn();
+    const handlerA = createChannelStatusHandler({
+      channel: channelA,
+      currentChannel: () => currentChannel,
+      stopHeartbeat,
+      disconnect,
+      setOffline,
+      setConnectionState,
+      removeChannel,
+      activatePresence: vi.fn(),
+    });
+
+    currentChannel = channelB;
+    handlerA("CLOSED");
+
+    expect(stopHeartbeat).not.toHaveBeenCalled();
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(setOffline).not.toHaveBeenCalled();
+    expect(setConnectionState).not.toHaveBeenCalled();
+    expect(removeChannel).not.toHaveBeenCalled();
   });
 
   it("replaces the heartbeat timer on repeated subscription", () => {
