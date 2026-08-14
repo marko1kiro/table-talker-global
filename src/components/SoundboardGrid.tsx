@@ -5,7 +5,6 @@ import { TableButton, type TableStatus } from "./TableButton";
 import {
   ANNOUNCEMENT_CATALOG,
   TABLE_AUDIO_IDS,
-  type AnnouncementCategory,
   type AnnouncementId,
   type AudioId,
 } from "../lib/remote-audio-domain";
@@ -23,8 +22,6 @@ type SoundboardGridProps = {
   onSelect: (audioId: AudioId) => void;
 };
 
-const categories: readonly AnnouncementCategory[] = ["INFO", "LARANGAN"];
-
 export function SoundboardGrid({
   availableAudioIds,
   drawerDisabled,
@@ -38,10 +35,17 @@ export function SoundboardGrid({
   const [announcementPanelOpen, setAnnouncementPanelOpen] = useState(false);
   const announcementGroups = useMemo(
     () =>
-      categories.map((category) => ({
-        category,
-        items: ANNOUNCEMENT_CATALOG.filter((announcement) => announcement.category === category),
-      })),
+      ANNOUNCEMENT_CATALOG.reduce<
+        Array<{
+          category: (typeof ANNOUNCEMENT_CATALOG)[number]["category"];
+          items: Array<(typeof ANNOUNCEMENT_CATALOG)[number]>;
+        }>
+      >((groups, announcement) => {
+        const group = groups.find(({ category }) => category === announcement.category);
+        if (group) group.items.push(announcement);
+        else groups.push({ category: announcement.category, items: [announcement] });
+        return groups;
+      }, []),
     [],
   );
 
@@ -139,7 +143,9 @@ export function SoundboardGrid({
                       className={`border-2 border-foreground px-2.5 py-1 font-display text-xs uppercase ${
                         group.category === "INFO"
                           ? "bg-primary text-primary-foreground"
-                          : "bg-destructive text-destructive-foreground"
+                          : group.category === "LARANGAN"
+                            ? "bg-destructive text-destructive-foreground"
+                            : "bg-card text-card-foreground"
                       }`}
                     >
                       {group.category}
@@ -166,7 +172,9 @@ export function SoundboardGrid({
                           className={`brutal-border brutal-press flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-display text-sm uppercase leading-tight disabled:cursor-not-allowed disabled:opacity-40 sm:text-base ${
                             group.category === "INFO"
                               ? "bg-accent"
-                              : "bg-destructive text-destructive-foreground"
+                              : group.category === "LARANGAN"
+                                ? "bg-destructive text-destructive-foreground"
+                                : "bg-card text-card-foreground"
                           }`}
                         >
                           <span>{announcement.label}</span>

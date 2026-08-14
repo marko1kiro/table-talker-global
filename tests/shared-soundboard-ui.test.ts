@@ -18,7 +18,8 @@ it("derives all table and categorized announcement controls from shared metadata
   expect(ANNOUNCEMENT_CATALOG.filter(({ category }) => category === "INFO")).toHaveLength(3);
   expect(ANNOUNCEMENT_CATALOG.filter(({ category }) => category === "LARANGAN")).toHaveLength(3);
   expect(source).toContain("TABLE_AUDIO_IDS.map");
-  expect(source).toContain("ANNOUNCEMENT_CATALOG.filter");
+  expect(source).toContain("ANNOUNCEMENT_CATALOG.reduce");
+  expect(source).not.toContain('["INFO", "LARANGAN"]');
   expect(source).toContain('role="dialog"');
   expect(source).toContain('event.key === "Escape"');
   expect(source).toContain("event.target === event.currentTarget");
