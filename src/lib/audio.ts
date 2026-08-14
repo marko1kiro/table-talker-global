@@ -59,9 +59,10 @@ export const tableAudioUrls: ReadonlyMap<number, string> = (() => {
 
 /** Peta id pengumuman -> URL audio. `null` kalau filenya belum ada di repo. */
 export const announcementAudioUrls: Readonly<Record<AnnouncementId, string | null>> = (() => {
-  const result = Object.fromEntries(
-    ANNOUNCEMENT_CATALOG.map(({ id }) => [id, null]),
-  ) as Record<AnnouncementId, string | null>;
+  const result = Object.fromEntries(ANNOUNCEMENT_CATALOG.map(({ id }) => [id, null])) as Record<
+    AnnouncementId,
+    string | null
+  >;
   const valid = new Set<string>(ANNOUNCEMENT_IDS);
   for (const [path, url] of Object.entries(announcementModules)) {
     const stem = fileStem(path);
