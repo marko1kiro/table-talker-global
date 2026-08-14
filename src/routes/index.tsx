@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { Megaphone, Pause, Play, Square, X } from "lucide-react";
+import { Square } from "lucide-react";
 
 import { Header } from "@/components/Header";
 import { AuthGate } from "@/components/AuthGate";
 import { getAuthStatus } from "@/lib/auth";
 import { Footer } from "@/components/Footer";
-import { TableButton, type TableStatus } from "@/components/TableButton";
+import { SoundboardGrid } from "@/components/SoundboardGrid";
 import {
   TABLE_COUNT,
   announcementAudioUrls,
@@ -21,7 +21,7 @@ import {
 } from "@/lib/audio";
 import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
 import { useRemoteCrew } from "@/hooks/use-remote-crew";
-import type { AudioId } from "@/lib/remote-audio-domain";
+import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
 
 export const Route = createFileRoute("/")({
   loader: () => getAuthStatus(),
@@ -50,13 +50,15 @@ function SoundboardRoute() {
   return <SoundboardPage />;
 }
 
+function tableAudioId(tableNumber: number): AudioId {
+  return `table:${tableNumber}`;
+}
+
+function announcementAudioId(announcementId: string): AudioId {
+  return `announcement:${announcementId}` as AudioId;
+}
+
 function SoundboardPage() {
-  const tables = useMemo(() => Array.from({ length: TABLE_COUNT }, (_, i) => i + 1), []);
-
-  // Audio ikut di-bundle bersama deployment: daftar & URL-nya sudah tersedia
-  // sejak render pertama, tanpa fetch, tanpa loading, tanpa panggilan API.
-  const announcements = announcementAudioUrls;
-
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioControllerRef = useRef<ReturnType<typeof createAudioPlaybackController> | null>(null);
   const activeAudioIdRef = useRef<number | string | null>(null);
@@ -64,7 +66,6 @@ function SoundboardPage() {
   const [playing, setPlaying] = useState<number | string | null>(null);
   const [paused, setPaused] = useState<number | string | null>(null);
   const [loading, setLoading] = useState<number | string | null>(null);
-  const [announcementPanelOpen, setAnnouncementPanelOpen] = useState(false);
   const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(null);
   const [duplicateName, setDuplicateName] = useState(false);
 
@@ -75,16 +76,6 @@ function SoundboardPage() {
       audioRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    if (!announcementPanelOpen) return;
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAnnouncementPanelOpen(false);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [announcementPanelOpen]);
 
   const stop = useCallback(() => {
     playbackGenerationRef.current.next();
@@ -218,49 +209,6 @@ function SoundboardPage() {
     [play, playing],
   );
 
-  const announcementGroups = [
-    {
-      category: "INFO",
-      items: [
-        {
-          id: "Himbauan duduk sesuai nomor meja",
-          title: "Himbauan Duduk Sesuai Nomor Meja",
-          url: announcements.seating,
-        },
-        {
-          id: "Himbauan barang bawaan pelanggan",
-          title: "Himbauan Barang Bawaan Pelanggan",
-          url: announcements["himbauan-barang-bawaan-pelanggan"],
-        },
-        {
-          id: "Info jam buka",
-          title: "Informasi Jam Buka Tutup Resto",
-          url: announcements["jam-buka-resto"],
-        },
-      ],
-    },
-    {
-      category: "LARANGAN",
-      items: [
-        {
-          id: "Larangan makanan luar",
-          title: "Dilarang Bawa Makanan Dari Luar",
-          url: announcements["outside-food"],
-        },
-        {
-          id: "Larangan merokok",
-          title: "Dilarang Merokok di Area Lobby",
-          url: announcements["no-smoking"],
-        },
-        {
-          id: "Larangan gabungkan meja",
-          title: "Dilarang Gabungkan Meja",
-          url: announcements["larangan-gabung-meja"],
-        },
-      ],
-    },
-  ] as const;
-
   const activeAudioId = playing ?? loading ?? paused;
 
   return (
@@ -310,23 +258,50 @@ function SoundboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 sm:gap-3 md:grid-cols-8 lg:grid-cols-10">
-          {tables.map((n) => {
-            let status: TableStatus = "empty";
-            if (playing === n) status = "playing";
-            else if (loading === n) status = "loading";
-            else if (readyTables.has(n)) status = "ready";
-            return (
-              <TableButton
-                key={n}
-                tableNumber={n}
-                status={status}
-                onClick={() => void play(n)}
-                disabled={activeAudioId !== null}
-              />
+        <SoundboardGrid
+          availableAudioIds={
+            new Set<AudioId>([
+              ...[...readyTables].map(tableAudioId),
+              ...ANNOUNCEMENT_CATALOG.filter(
+                (announcement) => announcementAudioUrls[announcement.id],
+              ).map((announcement) => announcementAudioId(announcement.id)),
+            ])
+          }
+          drawerDisabled={false}
+          announcementTriggerElevated={activeAudioId !== null}
+          tableDisabled={() => activeAudioId !== null}
+          announcementDisabled={(audioId) => {
+            const announcement = ANNOUNCEMENT_CATALOG.find(
+              ({ id }) => `announcement:${id}` === audioId,
             );
-          })}
-        </div>
+            return (
+              loading !== null || (activeAudioId !== null && activeAudioId !== announcement?.label)
+            );
+          }}
+          tableStatus={(tableNumber) => {
+            if (playing === tableNumber) return "playing";
+            if (loading === tableNumber) return "loading";
+            return readyTables.has(tableNumber) ? "ready" : "empty";
+          }}
+          announcementStatus={(announcementId) => {
+            const announcement = ANNOUNCEMENT_CATALOG.find(({ id }) => id === announcementId);
+            const id = announcement?.label;
+            if (playing === id) return "playing";
+            if (loading === id) return "loading";
+            return paused === id ? "paused" : "idle";
+          }}
+          onSelect={(audioId) => {
+            if (audioId.startsWith("table:")) {
+              void play(Number(audioId.slice("table:".length)));
+              return;
+            }
+            const announcement = ANNOUNCEMENT_CATALOG.find(
+              ({ id }) => `announcement:${id}` === audioId,
+            );
+            if (announcement)
+              toggleAnnouncement(announcement.label, announcementAudioUrls[announcement.id]);
+          }}
+        />
 
         {readyTables.size === 0 && (
           <div className="brutal-border brutal-shadow mt-6 bg-card p-6 text-center">
@@ -342,131 +317,6 @@ function SoundboardPage() {
       </main>
 
       <Footer />
-
-      {!announcementPanelOpen && (
-        <button
-          type="button"
-          onClick={() => setAnnouncementPanelOpen(true)}
-          aria-haspopup="dialog"
-          aria-expanded="false"
-          className={`brutal-border brutal-shadow-lg brutal-press fixed right-4 z-30 flex items-center gap-2 bg-primary px-4 py-3 font-display text-sm uppercase text-primary-foreground sm:px-5 sm:text-base ${
-            activeAudioId !== null ? "bottom-24" : "bottom-4"
-          }`}
-        >
-          <Megaphone className="size-5 shrink-0" aria-hidden="true" />
-          Lihat Pengumuman
-        </button>
-      )}
-
-      {announcementPanelOpen && (
-        <div
-          className="fixed inset-0 z-40 flex justify-end bg-foreground/60"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setAnnouncementPanelOpen(false);
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="announcement-panel-title"
-            className="h-full w-full overflow-y-auto border-l-4 border-foreground bg-background p-4 shadow-[-8px_0_0_0_hsl(var(--foreground))] sm:max-w-xl sm:p-6"
-          >
-            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-5 flex items-start justify-between gap-3 border-b-4 border-foreground bg-background p-4 sm:-mx-6 sm:-mt-6 sm:p-6">
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground">
-                  <Megaphone className="size-5" aria-hidden="true" />
-                </div>
-                <div>
-                  <h2
-                    id="announcement-panel-title"
-                    className="font-display text-lg uppercase leading-tight sm:text-xl"
-                  >
-                    Tombol Pengumuman
-                  </h2>
-                  <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-                    Pilih pengumuman yang ingin diputar.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAnnouncementPanelOpen(false)}
-                aria-label="Tutup panel pengumuman"
-                className="brutal-border brutal-press flex size-10 shrink-0 items-center justify-center bg-card"
-              >
-                <X className="size-5" strokeWidth={3} aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="space-y-5">
-              {announcementGroups.map((group) => (
-                <div
-                  key={group.category}
-                  aria-labelledby={`announcement-category-${group.category.toLowerCase()}`}
-                >
-                  <div className="mb-3 flex items-center gap-2">
-                    <h3
-                      id={`announcement-category-${group.category.toLowerCase()}`}
-                      className={`border-2 border-foreground px-2.5 py-1 font-display text-xs uppercase ${
-                        group.category === "INFO"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-destructive text-destructive-foreground"
-                      }`}
-                    >
-                      {group.category}
-                    </h3>
-                    <span className="text-xs font-bold text-muted-foreground">
-                      {group.items.length} pengumuman
-                    </span>
-                    <div className="h-0.5 flex-1 bg-foreground" aria-hidden="true" />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {group.items.map((announcement) => (
-                      <button
-                        key={announcement.id}
-                        type="button"
-                        onClick={() => toggleAnnouncement(announcement.id, announcement.url)}
-                        disabled={
-                          !announcement.url ||
-                          loading !== null ||
-                          (activeAudioId !== null && activeAudioId !== announcement.id)
-                        }
-                        aria-label={`${
-                          playing === announcement.id ? "Jeda" : "Putar"
-                        } ${announcement.title.toLowerCase()}`}
-                        className={`brutal-border brutal-press flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-display text-sm uppercase leading-tight disabled:cursor-not-allowed disabled:opacity-40 sm:text-base ${
-                          group.category === "INFO"
-                            ? "bg-accent"
-                            : "bg-destructive text-destructive-foreground"
-                        }`}
-                      >
-                        <span>{announcement.title}</span>
-                        {playing === announcement.id ? (
-                          <Pause className="size-5 shrink-0 fill-current" aria-hidden="true" />
-                        ) : (
-                          <Play className="size-5 shrink-0 fill-current" aria-hidden="true" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <footer className="mt-8 border-t-2 border-foreground px-2 pb-2 pt-4 text-center text-xs leading-relaxed text-muted-foreground sm:text-sm">
-              <p className="italic">
-                - Gak ada orang yang terlahir bodoh, mereka hanya{" "}
-                <strong className="font-bold text-foreground">Malas Belajar</strong>. -
-              </p>
-              <p className="mt-1 font-semibold text-foreground">Semoga Bermanfaat ya gaes!</p>
-              <p className="mt-1 text-[11px] sm:text-xs">
-                By <strong className="font-bold text-foreground">Bang Marko Ganteng</strong>
-              </p>
-            </footer>
-          </section>
-        </div>
-      )}
 
       {activeAudioId !== null && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">

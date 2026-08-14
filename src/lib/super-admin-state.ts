@@ -1,33 +1,22 @@
-export type RemotePlayState = {
+export type RemoteSelectionState = {
   offline: boolean;
   targetSessionId: string;
-  audioId: string;
   pending: boolean;
 };
 
-export function canPlayRemoteAudio({
-  offline,
-  targetSessionId,
-  audioId,
-  pending,
-}: RemotePlayState) {
-  return !offline && Boolean(targetSessionId) && Boolean(audioId) && !pending;
+export function canSelectRemoteAudio({ offline, targetSessionId, pending }: RemoteSelectionState) {
+  return !offline && Boolean(targetSessionId) && !pending;
 }
 
 export function reconcileRemoteSelection(
   targetSessionId: string,
-  audioId: string,
   sessions: readonly { id: string; eligible: boolean; audioReady: boolean }[],
-  catalogIds: readonly string[],
 ) {
-  return {
-    targetSessionId: sessions.some(
-      (session) => session.id === targetSessionId && session.eligible && session.audioReady,
-    )
-      ? targetSessionId
-      : "",
-    audioId: catalogIds.includes(audioId) ? audioId : "",
-  };
+  return sessions.some(
+    (session) => session.id === targetSessionId && session.eligible && session.audioReady,
+  )
+    ? targetSessionId
+    : "";
 }
 
 export function commandStatus(

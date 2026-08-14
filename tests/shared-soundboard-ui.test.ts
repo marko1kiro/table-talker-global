@@ -27,3 +27,24 @@ it("derives all table and categorized announcement controls from shared metadata
     "disabled={ announcementDisabled(audioId) || !availableAudioIds.has(audioId) }",
   );
 });
+
+it("makes the crew route use the shared component and pass logical audio IDs", () => {
+  const crew = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
+  expect(crew).toContain('import { SoundboardGrid } from "@/components/SoundboardGrid"');
+  expect(crew).toContain("<SoundboardGrid");
+  expect(crew).toContain("onSelect={(audioId) =>");
+  expect(crew).not.toContain("const announcementGroups = [");
+  expect(crew).not.toContain("announcementPanelOpen");
+  expect(crew).toContain("<Square");
+});
+
+it("makes Super Admin use immediate shared-grid selection without audio dropdown or Play button", () => {
+  const admin = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
+  expect(admin).toContain('import { SoundboardGrid } from "@/components/SoundboardGrid"');
+  expect(admin).toContain("<SoundboardGrid");
+  expect(admin).toContain("mutation.mutate(audioId)");
+  expect(admin).toContain("onSelect={(audioId) =>");
+  expect(admin).toContain("Pilih crew siap audio terlebih dahulu.");
+  expect(admin).not.toContain("Pilih audio");
+  expect(admin).not.toContain("Play audio");
+});
