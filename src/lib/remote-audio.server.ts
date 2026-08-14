@@ -82,19 +82,23 @@ function withSnapshotState(sessions: CrewSessionRow[], now: number) {
       now,
     );
     if (state === "expired") return [];
-    return [{
-      ...session,
-      state,
-      eligible: state === "online" && sessionIsEligible(
-        {
-          audioReady: session.audio_ready,
-          connectionState: session.connection_state,
-          visibilityState: session.visibility_state,
-          lastSeen: session.last_seen,
-        },
-        now,
-      ),
-    }];
+    return [
+      {
+        ...session,
+        state,
+        eligible:
+          state === "online" &&
+          sessionIsEligible(
+            {
+              audioReady: session.audio_ready,
+              connectionState: session.connection_state,
+              visibilityState: session.visibility_state,
+              lastSeen: session.last_seen,
+            },
+            now,
+          ),
+      },
+    ];
   });
 }
 

@@ -113,6 +113,7 @@ function SuperAdminPage() {
     targetSessionId,
     sessions.map((session) => ({
       id: session.id,
+      state: session.state,
       eligible: session.eligible,
       audioReady: session.audio_ready,
     })),

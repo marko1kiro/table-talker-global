@@ -67,10 +67,14 @@ it("enables a soundboard selection only for a valid online idle target", () => {
 
 it("clears a target removed from an updated eligible target snapshot", () => {
   expect(
-    reconcileRemoteSelection("crew-1", [{ id: "crew-1", state: "online", eligible: true, audioReady: true }]),
+    reconcileRemoteSelection("crew-1", [
+      { id: "crew-1", state: "online", eligible: true, audioReady: true },
+    ]),
   ).toEqual("crew-1");
   expect(
-    reconcileRemoteSelection("crew-1", [{ id: "crew-1", state: "online", eligible: false, audioReady: true }]),
+    reconcileRemoteSelection("crew-1", [
+      { id: "crew-1", state: "online", eligible: false, audioReady: true },
+    ]),
   ).toBe("");
   expect(reconcileRemoteSelection("crew-1", [])).toBe("");
 });

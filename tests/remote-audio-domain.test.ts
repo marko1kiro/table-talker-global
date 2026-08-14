@@ -93,12 +93,26 @@ describe("remote audio domain", () => {
       audioReady: true,
     };
 
-    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T11:59:30.000Z" }, now)).toBe("online");
-    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T11:59:29.999Z" }, now)).toBe("recent");
-    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T09:00:00.000Z" }, now)).toBe("recent");
-    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T08:59:59.999Z" }, now)).toBe("expired");
-    expect(classifyCrewSession({ ...base, audioReady: false, lastSeen: "2026-08-15T11:59:30.000Z" }, now)).toBe("online");
-    expect(classifyCrewSession({ ...base, visibilityState: "hidden", lastSeen: "2026-08-15T11:59:30.000Z" }, now)).toBe("recent");
+    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T11:59:30.000Z" }, now)).toBe(
+      "online",
+    );
+    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T11:59:29.999Z" }, now)).toBe(
+      "recent",
+    );
+    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T09:00:00.000Z" }, now)).toBe(
+      "recent",
+    );
+    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T08:59:59.999Z" }, now)).toBe(
+      "expired",
+    );
+    const audioUnready = { ...base, audioReady: false, lastSeen: "2026-08-15T11:59:30.000Z" };
+    expect(classifyCrewSession(audioUnready, now)).toBe("online");
+    expect(
+      classifyCrewSession(
+        { ...base, visibilityState: "hidden", lastSeen: "2026-08-15T11:59:30.000Z" },
+        now,
+      ),
+    ).toBe("recent");
   });
 
   it("accepts a newest unexpired targeted command once", () => {
