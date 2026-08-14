@@ -1,20 +1,28 @@
 export const TABLE_COUNT = 70;
+
+export const TABLE_AUDIO_IDS = Array.from(
+  { length: TABLE_COUNT },
+  (_, index) => `table:${index + 1}` as `table:${number}`,
+);
+
+export const ANNOUNCEMENT_CATALOG = [
+  { id: "seating", label: "Himbauan Duduk Sesuai Nomor Meja", category: "INFO" },
+  {
+    id: "himbauan-barang-bawaan-pelanggan",
+    label: "Himbauan Barang Bawaan Pelanggan",
+    category: "INFO",
+  },
+  { id: "jam-buka-resto", label: "Informasi Jam Buka Tutup Resto", category: "INFO" },
+  { id: "outside-food", label: "Dilarang Bawa Makanan Dari Luar", category: "LARANGAN" },
+  { id: "no-smoking", label: "Dilarang Merokok di Area Lobby", category: "LARANGAN" },
+  { id: "larangan-gabung-meja", label: "Dilarang Gabungkan Meja", category: "LARANGAN" },
+] as const;
+
+export type AnnouncementCategory = (typeof ANNOUNCEMENT_CATALOG)[number]["category"];
 export const HEARTBEAT_MS = 10_000;
 export const ONLINE_WINDOW_MS = 30_000;
 export const COMMAND_TTL_MS = 5_000;
 export const FAILURE_REASON_MAX_LENGTH = 160;
-
-export const ANNOUNCEMENT_CATALOG = [
-  { id: "seating", label: "Himbauan Duduk Sesuai Nomor Meja" },
-  {
-    id: "himbauan-barang-bawaan-pelanggan",
-    label: "Himbauan Barang Bawaan Pelanggan",
-  },
-  { id: "outside-food", label: "Dilarang Bawa Makanan Dari Luar" },
-  { id: "no-smoking", label: "Dilarang Merokok di Area Lobby" },
-  { id: "larangan-gabung-meja", label: "Dilarang Gabungkan Meja" },
-  { id: "jam-buka-resto", label: "Informasi Jam Buka Tutup Resto" },
-] as const;
 
 export type AnnouncementId = (typeof ANNOUNCEMENT_CATALOG)[number]["id"];
 export type AudioId = `table:${number}` | `announcement:${AnnouncementId}`;
@@ -35,9 +43,8 @@ export type CrewSessionEligibility = {
 };
 
 export function getCatalogMetadata(id: string): CatalogMetadata | null {
-  const table = /^table:([1-9][0-9]*)$/.exec(id);
-  if (table && Number(table[1]) <= TABLE_COUNT)
-    return { id: id as AudioId, label: `Meja ${table[1]}` };
+  const table = TABLE_AUDIO_IDS.find((tableId) => tableId === id);
+  if (table) return { id: table, label: `Meja ${table.slice("table:".length)}` };
   const announcement = ANNOUNCEMENT_CATALOG.find((item) => `announcement:${item.id}` === id);
   return announcement ? { id: `announcement:${announcement.id}`, label: announcement.label } : null;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ANNOUNCEMENT_CATALOG,
+  TABLE_AUDIO_IDS,
   COMMAND_TTL_MS,
   FAILURE_REASON_MAX_LENGTH,
   HEARTBEAT_MS,
@@ -13,19 +14,20 @@ import {
 } from "../src/lib/remote-audio-domain";
 
 describe("remote audio domain", () => {
-  it("exposes 70 table IDs and six existing announcement IDs without asset URLs", () => {
-    expect(
-      Array.from({ length: 70 }, (_, index) => getCatalogMetadata(`table:${index + 1}`)?.id),
-    ).toEqual(Array.from({ length: 70 }, (_, index) => `table:${index + 1}`));
-    expect(getCatalogMetadata("table:71")).toBeNull();
-    expect(ANNOUNCEMENT_CATALOG.map(({ id }) => id)).toEqual([
-      "seating",
-      "himbauan-barang-bawaan-pelanggan",
-      "outside-food",
-      "no-smoking",
-      "larangan-gabung-meja",
-      "jam-buka-resto",
+  it("exposes one 70-table range and categorized announcement metadata without asset URLs", () => {
+    expect(TABLE_AUDIO_IDS).toHaveLength(70);
+    expect(TABLE_AUDIO_IDS[0]).toBe("table:1");
+    expect(TABLE_AUDIO_IDS[69]).toBe("table:70");
+    expect(ANNOUNCEMENT_CATALOG.map(({ id, category }) => ({ id, category }))).toEqual([
+      { id: "seating", category: "INFO" },
+      { id: "himbauan-barang-bawaan-pelanggan", category: "INFO" },
+      { id: "jam-buka-resto", category: "INFO" },
+      { id: "outside-food", category: "LARANGAN" },
+      { id: "no-smoking", category: "LARANGAN" },
+      { id: "larangan-gabung-meja", category: "LARANGAN" },
     ]);
+    expect(JSON.stringify({ TABLE_AUDIO_IDS, ANNOUNCEMENT_CATALOG })).not.toContain(".mp3");
+    expect(getCatalogMetadata("table:71")).toBeNull();
     expect(getCatalogMetadata("announcement:no-smoking")).toEqual({
       id: "announcement:no-smoking",
       label: "Dilarang Merokok di Area Lobby",
