@@ -26,6 +26,7 @@ import { announcementPlaybackId, announcementPlaybackStatus } from "@/lib/announ
 import {
   browserSessionStorage,
   readCrewSessionIdentity,
+  removeCrewSessionIdentity,
   writeCrewSessionIdentity,
 } from "@/lib/crew-session-identity";
 
@@ -145,6 +146,7 @@ function SoundboardPage() {
   useEffect(() => {
     if (!remoteCrew.duplicateName) return;
     setDuplicateName(true);
+    removeCrewSessionIdentity(browserSessionStorage());
     setCrewIdentity(null);
   }, [remoteCrew.duplicateName]);
 

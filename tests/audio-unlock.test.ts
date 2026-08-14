@@ -97,5 +97,6 @@ it("hydrates a same-tab crew without persisting audio readiness", () => {
   expect(route).toContain("readCrewSessionIdentity(browserSessionStorage())");
   expect(route).toContain("audioReady: false");
   expect(route).toContain("writeCrewSessionIdentity(browserSessionStorage(), identity)");
+  expect(route).toContain("removeCrewSessionIdentity(browserSessionStorage())");
   expect(route).toContain("Aktifkan Suara");
 });
