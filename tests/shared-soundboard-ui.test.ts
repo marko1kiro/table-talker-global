@@ -8,6 +8,11 @@ const source = readFileSync(
 );
 const compactSource = source.replace(/\s+/g, " ");
 
+it("keeps the announcement trigger at the default bottom position", () => {
+  expect(compactSource).toContain("announcementTriggerElevated = false");
+  expect(compactSource).toContain('announcementTriggerElevated ? "bottom-24" : "bottom-6"');
+});
+
 it("derives all table and categorized announcement controls from shared metadata", () => {
   expect(TABLE_AUDIO_IDS).toHaveLength(70);
   expect(ANNOUNCEMENT_CATALOG.filter(({ category }) => category === "INFO")).toHaveLength(3);
