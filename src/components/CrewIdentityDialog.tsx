@@ -1,13 +1,10 @@
 import { FormEvent, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import type { CrewSessionIdentity } from "@/lib/crew-session-identity";
 import { normalizeCrewName } from "@/lib/remote-audio-domain";
 
-export type CrewIdentity = {
-  displayName: string;
-  normalizedName: string;
-  audioReady: boolean;
-};
+export type CrewIdentity = CrewSessionIdentity & { audioReady: boolean };
 
 export function CrewIdentityDialog({
   open,

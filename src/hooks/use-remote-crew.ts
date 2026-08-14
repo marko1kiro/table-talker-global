@@ -21,8 +21,50 @@ export function canSendConnectedHeartbeat(channelTerminal: boolean, visibilitySt
   return !channelTerminal && visibilityState === "visible";
 }
 
+export function canReconnectPresence(visibilityState: string) {
+  return visibilityState === "visible";
+}
+
 export function shouldActivatePresence(status: string) {
   return status === "SUBSCRIBED";
+}
+
+export function createChannelStatusHandler<T extends object>({
+  channel,
+  currentChannel,
+  activatePresence,
+  stopHeartbeat,
+  disconnect,
+  setOffline,
+  setConnectionState,
+  removeChannel,
+  markTerminal = () => undefined,
+}: {
+  channel: T;
+  currentChannel: () => T | null;
+  activatePresence: () => void;
+  stopHeartbeat: () => void;
+  disconnect: () => void;
+  setOffline: (value: boolean) => void;
+  setConnectionState: (value: "offline" | "online") => void;
+  removeChannel: (channel: T) => void;
+  markTerminal?: () => void;
+}) {
+  return (status: string) => {
+    if (currentChannel() !== channel) return;
+    if (shouldActivatePresence(status)) {
+      setOffline(false);
+      activatePresence();
+      return;
+    }
+    if (!channelStateIsTerminal(status)) return;
+    markTerminal();
+    stopHeartbeat();
+    disconnect();
+    removeChannel(channel);
+    setOffline(true);
+    setConnectionState("offline");
+  };
 }
 
 export function replaceHeartbeatTimer<T>(
@@ -336,10 +378,15 @@ export function useRemoteCrew({
       );
     };
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void claimWhenVisible();
-      if (presenceActive && canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
-        void heartbeat("connected").catch(() => update(setOffline, true));
-      else if (!channelTerminal) disconnect();
+      if (document.visibilityState === "visible") {
+        if (channel) void client.removeChannel(channel);
+        channel = null;
+        channelTerminal = false;
+        presenceActive = false;
+        if (canReconnectPresence(document.visibilityState)) void claimWhenVisible();
+        return;
+      }
+      if (!channelTerminal) disconnect();
     };
 
     const ensureAuth = () => {
@@ -347,7 +394,13 @@ export function useRemoteCrew({
       return authInFlight;
     };
     const claimWhenVisible = async () => {
-      if (!userId || document.visibilityState !== "visible" || channel || claimInFlight) return;
+      if (
+        !userId ||
+        document.visibilityState !== "visible" ||
+        (channel && !channelTerminal) ||
+        claimInFlight
+      )
+        return;
       claimInFlight = (async () => {
         try {
           const { error: claimError } = await client.rpc(
@@ -385,32 +438,41 @@ export function useRemoteCrew({
             onNeedsAudioRecovery: () => update(setNeedsAudioRecovery, true),
             onDeliveryUncertain: () => update(setDeliveryUncertain, true),
           });
-          channel = client
-            .channel(`remote-commands:${userId}`)
-            .on(
-              "postgres_changes",
-              {
-                event: "INSERT",
-                schema: "public",
-                table: "remote_commands",
-                filter: `target_session_id=eq.${userId}`,
-              },
-              ({ new: row }) => void processor.process(toRemoteCommand(row as RemoteCommandRow)),
-            )
-            .subscribe((status) => {
-              if (shouldActivatePresence(status)) {
-                update(setOffline, false);
+          const nextChannel = client.channel(`remote-commands:${userId}`).on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "remote_commands",
+              filter: `target_session_id=eq.${userId}`,
+            },
+            ({ new: row }) => void processor.process(toRemoteCommand(row as RemoteCommandRow)),
+          );
+          channel = nextChannel;
+          nextChannel.subscribe(
+            createChannelStatusHandler({
+              channel: nextChannel,
+              currentChannel: () => channel,
+              activatePresence: () => {
                 if (active) setConnectionState("online");
                 activatePresence();
-                return;
-              }
-              if (!channelStateIsTerminal(status)) return;
-              channelTerminal = true;
-              stopHeartbeat();
-              disconnect();
-              update(setOffline, true);
-              if (active) setConnectionState("offline");
-            });
+              },
+              stopHeartbeat,
+              disconnect,
+              setOffline: (value) => update(setOffline, value),
+              setConnectionState: (value) => {
+                if (active) setConnectionState(value);
+              },
+              removeChannel: (current) => {
+                void client.removeChannel(current);
+                channel = null;
+                presenceActive = false;
+              },
+              markTerminal: () => {
+                channelTerminal = true;
+              },
+            }),
+          );
         } catch {
           update(setOffline, true);
           if (active) setConnectionState("offline");

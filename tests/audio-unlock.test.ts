@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAudioPlaybackController,
@@ -88,4 +89,37 @@ describe("bundled audio playback", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(audio.removeEventListener).toHaveBeenCalledTimes(3);
   });
+});
+
+it("hydrates a same-tab crew after mount without persisting audio readiness", () => {
+  const route = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8").replace(
+    /\r\n/g,
+    "\n",
+  );
+  const hydrationEffect = route.match(
+    /useEffect\(\(\) => \{\s*const identity = readCrewSessionIdentity\(browserSessionStorage\(\)\);[\s\S]*?\}, \[\]\);/,
+  );
+
+  expect(route).toContain("useState<CrewIdentity | null>(null)");
+  expect(route).toContain("useState(false)");
+  expect(hydrationEffect).not.toBeNull();
+  expect(hydrationEffect?.[0]).toContain("audioReady: false");
+  expect(hydrationEffect?.[0]).toContain("setIdentityHydrated(true)");
+  expect(route).toContain("writeCrewSessionIdentity(browserSessionStorage(), identity)");
+  expect(route).toContain("removeCrewSessionIdentity(browserSessionStorage())");
+  expect(route).toContain("Aktifkan Suara");
+});
+
+it("gates the crew dialog and remote registration until identity hydration completes", () => {
+  const route = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8").replace(
+    /\r\n/g,
+    "\n",
+  );
+
+  expect(route).toContain(
+    "useRemoteCrew({\n    registration: identityHydrated ? crewIdentity : null,",
+  );
+  expect(route).toContain(
+    "{identityHydrated && (\n        <CrewIdentityDialog\n          open={!crewIdentity}",
+  );
 });

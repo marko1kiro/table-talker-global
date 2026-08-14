@@ -58,7 +58,7 @@ it("shows remote unavailable copy only after a failed registration", () => {
 });
 
 it("enables a soundboard selection only for a valid online idle target", () => {
-  const target = { id: "crew", eligible: true, audioReady: true };
+  const target = { id: "crew", state: "online" as const, eligible: true, audioReady: true };
   expect(canSelectRemoteAudio({ offline: false, target, pending: false })).toBe(true);
   expect(canSelectRemoteAudio({ offline: true, target, pending: false })).toBe(false);
   expect(canSelectRemoteAudio({ offline: false, target: undefined, pending: false })).toBe(false);
@@ -67,19 +67,23 @@ it("enables a soundboard selection only for a valid online idle target", () => {
 
 it("clears a target removed from an updated eligible target snapshot", () => {
   expect(
-    reconcileRemoteSelection("crew-1", [{ id: "crew-1", eligible: true, audioReady: true }]),
+    reconcileRemoteSelection("crew-1", [
+      { id: "crew-1", state: "online", eligible: true, audioReady: true },
+    ]),
   ).toEqual("crew-1");
   expect(
-    reconcileRemoteSelection("crew-1", [{ id: "crew-1", eligible: false, audioReady: true }]),
+    reconcileRemoteSelection("crew-1", [
+      { id: "crew-1", state: "online", eligible: false, audioReady: true },
+    ]),
   ).toBe("");
   expect(reconcileRemoteSelection("crew-1", [])).toBe("");
 });
 
 it("rejects stale, ineligible, and audio-unready selected targets before dispatch", () => {
   const sessions = [
-    { id: "ready", eligible: true, audioReady: true },
-    { id: "ineligible", eligible: false, audioReady: true },
-    { id: "audio-unready", eligible: true, audioReady: false },
+    { id: "ready", state: "online" as const, eligible: true, audioReady: true },
+    { id: "ineligible", state: "online" as const, eligible: false, audioReady: true },
+    { id: "audio-unready", state: "online" as const, eligible: true, audioReady: false },
   ];
 
   expect(getSelectedRemoteTarget("missing", sessions)).toBeUndefined();
@@ -91,6 +95,27 @@ it("rejects stale, ineligible, and audio-unready selected targets before dispatc
     targetSessionId: "ready",
     audioId: "table:1",
   });
+});
+
+it("clears selected targets synchronously unless online and audio-ready", () => {
+  const sessions = [
+    { id: "ready", state: "online" as const, eligible: true, audioReady: true },
+    { id: "unready", state: "online" as const, eligible: false, audioReady: false },
+    { id: "recent", state: "recent" as const, eligible: false, audioReady: true },
+  ];
+
+  expect(reconcileRemoteSelection("ready", sessions)).toBe("ready");
+  expect(reconcileRemoteSelection("unready", sessions)).toBe("");
+  expect(reconcileRemoteSelection("recent", sessions)).toBe("");
+  expect(getSelectedRemoteTarget("recent", sessions)).toBeUndefined();
+});
+
+it("renders disabled online-unready and recent options", () => {
+  const source = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
+
+  expect(source).toContain("Aktifkan suara di perangkat");
+  expect(source).toContain("Offline / terakhir aktif");
+  expect(source).toContain("disabled={!session.eligible}");
 });
 
 it("shows sent commands as expired at their effective expiry time", () => {

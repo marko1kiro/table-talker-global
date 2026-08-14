@@ -5,6 +5,7 @@ import { requireSuperAdmin } from "./auth.server";
 import {
   ANNOUNCEMENT_CATALOG,
   TABLE_COUNT,
+  classifyCrewSession,
   getCatalogMetadata,
   sessionIsEligible,
 } from "./remote-audio-domain";
@@ -70,19 +71,35 @@ function offline() {
   return { offline: true as const, message: "Realtime offline" };
 }
 
-function withEligibility(sessions: CrewSessionRow[], now: number) {
-  return sessions.map((session) => ({
-    ...session,
-    eligible: sessionIsEligible(
+function withSnapshotState(sessions: CrewSessionRow[], now: number) {
+  return sessions.flatMap((session) => {
+    const state = classifyCrewSession(
       {
-        audioReady: session.audio_ready,
         connectionState: session.connection_state,
         visibilityState: session.visibility_state,
         lastSeen: session.last_seen,
       },
       now,
-    ),
-  }));
+    );
+    if (state === "expired") return [];
+    return [
+      {
+        ...session,
+        state,
+        eligible:
+          state === "online" &&
+          sessionIsEligible(
+            {
+              audioReady: session.audio_ready,
+              connectionState: session.connection_state,
+              visibilityState: session.visibility_state,
+              lastSeen: session.last_seen,
+            },
+            now,
+          ),
+      },
+    ];
+  });
 }
 
 export const getRemoteAdminSnapshot = createServerFn({ method: "GET" }).handler(async () => {
@@ -103,7 +120,7 @@ export const getRemoteAdminSnapshot = createServerFn({ method: "GET" }).handler(
     const commands = (commandsResult.data ?? []) as RemoteCommandRow[];
     return {
       offline: false as const,
-      sessions: withEligibility(sessions, now),
+      sessions: withSnapshotState(sessions, now),
       commands: commands.map((command) => ({
         ...command,
         status:

@@ -36,6 +36,12 @@ it("uses the authoritative command RPC without a direct command insert", () => {
   expect(server()).not.toMatch(/from\("remote_commands"\)\s*\.insert/);
 });
 
+it("maps snapshot sessions through online/recent filtering before returning them", () => {
+  expect(server()).toContain("classifyCrewSession");
+  expect(server()).toContain('state === "expired"');
+  expect(server()).toContain("state,");
+});
+
 it("maps stale targets to availability and other RPC failures offline", () => {
   expect(server()).toMatch(/TARGET_NOT_ELIGIBLE[\s\S]*Crew tidak sedang siap menerima audio\./);
   expect(server()).toMatch(/return error \? offline\(\) : \{ ok: true as const \}/);
