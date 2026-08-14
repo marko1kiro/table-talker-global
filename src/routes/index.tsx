@@ -73,11 +73,15 @@ function SoundboardPage() {
   const [playing, setPlaying] = useState<number | AudioId | null>(null);
   const [paused, setPaused] = useState<number | AudioId | null>(null);
   const [loading, setLoading] = useState<number | AudioId | null>(null);
-  const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(() => {
-    const identity = readCrewSessionIdentity(browserSessionStorage());
-    return identity && { ...identity, audioReady: false };
-  });
+  const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(null);
+  const [identityHydrated, setIdentityHydrated] = useState(false);
   const [duplicateName, setDuplicateName] = useState(false);
+
+  useEffect(() => {
+    const identity = readCrewSessionIdentity(browserSessionStorage());
+    setCrewIdentity(identity && { ...identity, audioReady: false });
+    setIdentityHydrated(true);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -141,7 +145,10 @@ function SoundboardPage() {
     [getAudioController, stop],
   );
 
-  const remoteCrew = useRemoteCrew({ registration: crewIdentity, playRemoteAudio });
+  const remoteCrew = useRemoteCrew({
+    registration: identityHydrated ? crewIdentity : null,
+    playRemoteAudio,
+  });
 
   useEffect(() => {
     if (!remoteCrew.duplicateName) return;
@@ -229,16 +236,18 @@ function SoundboardPage() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <CrewIdentityDialog
-        open={!crewIdentity}
-        duplicateName={duplicateName}
-        unlockAudio={unlockAudio}
-        onContinue={(identity) => {
-          setDuplicateName(false);
-          const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
-          setCrewIdentity({ ...(saved ?? identity), audioReady: identity.audioReady });
-        }}
-      />
+      {identityHydrated && (
+        <CrewIdentityDialog
+          open={!crewIdentity}
+          duplicateName={duplicateName}
+          unlockAudio={unlockAudio}
+          onContinue={(identity) => {
+            setDuplicateName(false);
+            const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
+            setCrewIdentity({ ...(saved ?? identity), audioReady: identity.audioReady });
+          }}
+        />
+      )}
       {(remoteCrew.needsAudioRecovery || !crewIdentity?.audioReady) && crewIdentity && (
         <div className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 brutal-border bg-card p-3 text-center">
           <p className="mb-2 text-sm">Remote audio diblokir browser.</p>
