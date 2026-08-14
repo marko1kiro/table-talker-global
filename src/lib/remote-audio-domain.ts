@@ -21,6 +21,8 @@ export const ANNOUNCEMENT_CATALOG = [
 export type AnnouncementCategory = (typeof ANNOUNCEMENT_CATALOG)[number]["category"];
 export const HEARTBEAT_MS = 10_000;
 export const ONLINE_WINDOW_MS = 30_000;
+export const RECENT_WINDOW_MS = 3 * 60 * 60 * 1_000;
+export type CrewSessionState = "online" | "recent" | "expired";
 export const COMMAND_TTL_MS = 5_000;
 export const FAILURE_REASON_MAX_LENGTH = 160;
 
@@ -70,6 +72,19 @@ export function sessionIsEligible(session: CrewSessionEligibility, now: number):
     seen <= now &&
     now - seen <= ONLINE_WINDOW_MS
   );
+}
+
+export function classifyCrewSession(
+  session: Omit<CrewSessionEligibility, "audioReady">,
+  now: number,
+): CrewSessionState {
+  const seen = Date.parse(session.lastSeen);
+  if (!Number.isFinite(seen) || seen > now || now - seen > RECENT_WINDOW_MS) return "expired";
+  return session.connectionState === "connected" &&
+    session.visibilityState === "visible" &&
+    now - seen <= ONLINE_WINDOW_MS
+    ? "online"
+    : "recent";
 }
 
 export function commandIsProcessable(

@@ -7,6 +7,7 @@ import {
   HEARTBEAT_MS,
   ONLINE_WINDOW_MS,
   boundedFailureReason,
+  classifyCrewSession,
   commandIsProcessable,
   getCatalogMetadata,
   normalizeCrewName,
@@ -82,6 +83,22 @@ describe("remote audio domain", () => {
         now,
       ),
     ).toBe(false);
+  });
+
+  it("classifies fresh visible connected crews as online, recent crews through three hours, and omits expired crews", () => {
+    const now = Date.parse("2026-08-15T12:00:00.000Z");
+    const base = {
+      connectionState: "connected" as const,
+      visibilityState: "visible" as const,
+      audioReady: true,
+    };
+
+    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T11:59:30.000Z" }, now)).toBe("online");
+    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T11:59:29.999Z" }, now)).toBe("recent");
+    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T09:00:00.000Z" }, now)).toBe("recent");
+    expect(classifyCrewSession({ ...base, lastSeen: "2026-08-15T08:59:59.999Z" }, now)).toBe("expired");
+    expect(classifyCrewSession({ ...base, audioReady: false, lastSeen: "2026-08-15T11:59:30.000Z" }, now)).toBe("online");
+    expect(classifyCrewSession({ ...base, visibilityState: "hidden", lastSeen: "2026-08-15T11:59:30.000Z" }, now)).toBe("recent");
   });
 
   it("accepts a newest unexpired targeted command once", () => {
