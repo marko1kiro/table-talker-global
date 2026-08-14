@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { ANNOUNCEMENT_CATALOG, TABLE_AUDIO_IDS } from "../src/lib/remote-audio-domain";
+import {
+  announcementPlaybackStatus,
+  announcementPlaybackId,
+} from "../src/lib/announcement-playback";
 
 const source = readFileSync(
   new URL("../src/components/SoundboardGrid.tsx", import.meta.url),
@@ -29,6 +33,21 @@ it("derives all table and categorized announcement controls from shared metadata
   );
 });
 
+it("keeps announcement playback identity independent from renamed or duplicate labels", () => {
+  const first = announcementPlaybackId("first");
+  const second = announcementPlaybackId("second");
+
+  expect(first).toBe("announcement:first");
+  expect(second).toBe("announcement:second");
+  expect(announcementPlaybackStatus(first, first, null, null)).toBe("playing");
+  expect(announcementPlaybackStatus(first, null, first, null)).toBe("loading");
+  expect(announcementPlaybackStatus(first, null, null, first)).toBe("paused");
+  expect(announcementPlaybackStatus(second, first, null, null)).toBe("idle");
+  const crew = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
+  expect(crew).toContain("ANNOUNCEMENT_CATALOG.find");
+  expect(crew).toContain("const activeAudioLabel = activeAnnouncement?.label ?? activeAudioId;");
+});
+
 it("makes the crew route use the shared component and pass logical audio IDs", () => {
   const crew = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
   expect(crew).toContain('import { SoundboardGrid } from "@/components/SoundboardGrid"');
@@ -43,7 +62,8 @@ it("makes Super Admin use immediate shared-grid selection without audio dropdown
   const admin = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
   expect(admin).toContain('import { SoundboardGrid } from "@/components/SoundboardGrid"');
   expect(admin).toContain("<SoundboardGrid");
-  expect(admin).toContain("mutation.mutate(audioId)");
+  expect(admin).toContain("remoteCommandRequest(selectedTarget, audioId)");
+  expect(admin).toContain("mutation.mutate(request)");
   expect(admin).toContain("onSelect={(audioId) =>");
   expect(admin).toContain("Pilih crew siap audio terlebih dahulu.");
   expect(admin).not.toContain("Pilih audio");

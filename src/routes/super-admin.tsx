@@ -10,6 +10,8 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   canSelectRemoteAudio,
   commandStatus,
+  getSelectedRemoteTarget,
+  remoteCommandRequest,
   reconcileRemoteSelection,
 } from "@/lib/super-admin-state";
 import type { AudioId } from "@/lib/remote-audio-domain";
@@ -55,7 +57,8 @@ function SuperAdminPage() {
     refetchOnWindowFocus: true,
   });
   const mutation = useMutation({
-    mutationFn: (audioId: AudioId) => sendRemoteCommand({ data: { targetSessionId, audioId } }),
+    mutationFn: (request: { targetSessionId: string; audioId: AudioId }) =>
+      sendRemoteCommand({ data: request }),
     onSuccess: () => {
       setSendError("");
       queryClient.invalidateQueries({ queryKey: snapshotKey });
@@ -105,16 +108,23 @@ function SuperAdminPage() {
     if (nextTargetSessionId !== targetSessionId) setTargetSessionId(nextTargetSessionId);
   }, [sessions, targetSessionId]);
 
+  const selectedTarget = getSelectedRemoteTarget(
+    targetSessionId,
+    sessions.map((session) => ({
+      id: session.id,
+      eligible: session.eligible,
+      audioReady: session.audio_ready,
+    })),
+  );
   const controlsDisabled = !canSelectRemoteAudio({
     offline,
-    targetSessionId,
+    target: selectedTarget,
     pending: mutation.isPending,
   });
   const availableAudioIds = useMemo(
     () => new Set(catalog.map((audio) => audio.id as AudioId)),
     [catalog],
   );
-  const selectedTarget = sessions.find((session) => session.id === targetSessionId);
 
   return (
     <main className="min-h-[100svh] bg-background px-4 py-6 sm:px-6">
@@ -154,7 +164,7 @@ function SuperAdminPage() {
         </div>
         {selectedTarget && (
           <p className="mt-2 text-xs text-muted-foreground">
-            {selectedTarget.eligible && selectedTarget.audio_ready
+            {selectedTarget.eligible && selectedTarget.audioReady
               ? "Online dan siap audio."
               : "Target tidak siap audio."}
           </p>
@@ -175,16 +185,22 @@ function SuperAdminPage() {
             announcementDisabled={() => controlsDisabled}
             tableStatus={(tableNumber): TableStatus => {
               const audioId = `table:${tableNumber}` as AudioId;
-              return mutation.isPending && mutation.variables === audioId ? "loading" : "ready";
+              return mutation.isPending && mutation.variables.audioId === audioId
+                ? "loading"
+                : "ready";
             }}
             announcementStatus={(announcementId) => {
               const audioId = `announcement:${announcementId}` as AudioId;
-              return mutation.isPending && mutation.variables === audioId ? "loading" : "idle";
+              return mutation.isPending && mutation.variables.audioId === audioId
+                ? "loading"
+                : "idle";
             }}
             onSelect={(audioId) => {
+              const request = remoteCommandRequest(selectedTarget, audioId);
+              if (!request) return;
               setSendError("");
               mutation.reset();
-              mutation.mutate(audioId);
+              mutation.mutate(request);
             }}
           />
         </div>

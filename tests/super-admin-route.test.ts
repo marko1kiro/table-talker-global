@@ -3,6 +3,8 @@ import { expect, it, vi } from "vitest";
 import {
   commandStatus,
   canSelectRemoteAudio,
+  getSelectedRemoteTarget,
+  remoteCommandRequest,
   reconcileRemoteSelection,
 } from "../src/lib/super-admin-state";
 import { createInvalidationDebouncer, realtimeIsReady } from "../src/lib/super-admin-realtime";
@@ -56,16 +58,11 @@ it("shows remote unavailable copy only after a failed registration", () => {
 });
 
 it("enables a soundboard selection only for a valid online idle target", () => {
-  expect(canSelectRemoteAudio({ offline: false, targetSessionId: "crew", pending: false })).toBe(
-    true,
-  );
-  expect(canSelectRemoteAudio({ offline: true, targetSessionId: "crew", pending: false })).toBe(
-    false,
-  );
-  expect(canSelectRemoteAudio({ offline: false, targetSessionId: "", pending: false })).toBe(false);
-  expect(canSelectRemoteAudio({ offline: false, targetSessionId: "crew", pending: true })).toBe(
-    false,
-  );
+  const target = { id: "crew", eligible: true, audioReady: true };
+  expect(canSelectRemoteAudio({ offline: false, target, pending: false })).toBe(true);
+  expect(canSelectRemoteAudio({ offline: true, target, pending: false })).toBe(false);
+  expect(canSelectRemoteAudio({ offline: false, target: undefined, pending: false })).toBe(false);
+  expect(canSelectRemoteAudio({ offline: false, target, pending: true })).toBe(false);
 });
 
 it("clears a target removed from an updated eligible target snapshot", () => {
@@ -76,6 +73,24 @@ it("clears a target removed from an updated eligible target snapshot", () => {
     reconcileRemoteSelection("crew-1", [{ id: "crew-1", eligible: false, audioReady: true }]),
   ).toBe("");
   expect(reconcileRemoteSelection("crew-1", [])).toBe("");
+});
+
+it("rejects stale, ineligible, and audio-unready selected targets before dispatch", () => {
+  const sessions = [
+    { id: "ready", eligible: true, audioReady: true },
+    { id: "ineligible", eligible: false, audioReady: true },
+    { id: "audio-unready", eligible: true, audioReady: false },
+  ];
+
+  expect(getSelectedRemoteTarget("missing", sessions)).toBeUndefined();
+  expect(getSelectedRemoteTarget("ineligible", sessions)).toBeUndefined();
+  expect(getSelectedRemoteTarget("audio-unready", sessions)).toBeUndefined();
+  expect(canSelectRemoteAudio({ offline: false, target: undefined, pending: false })).toBe(false);
+  expect(remoteCommandRequest(undefined, "table:1")).toBeUndefined();
+  expect(remoteCommandRequest(getSelectedRemoteTarget("ready", sessions), "table:1")).toEqual({
+    targetSessionId: "ready",
+    audioId: "table:1",
+  });
 });
 
 it("shows sent commands as expired at their effective expiry time", () => {

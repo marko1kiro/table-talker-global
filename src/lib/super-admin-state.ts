@@ -1,22 +1,35 @@
+import type { AudioId } from "./remote-audio-domain";
+
+export type RemoteTarget = { id: string; eligible: boolean; audioReady: boolean };
+
 export type RemoteSelectionState = {
   offline: boolean;
-  targetSessionId: string;
+  target: RemoteTarget | undefined;
   pending: boolean;
 };
 
-export function canSelectRemoteAudio({ offline, targetSessionId, pending }: RemoteSelectionState) {
-  return !offline && Boolean(targetSessionId) && !pending;
+export function getSelectedRemoteTarget(
+  targetSessionId: string,
+  sessions: readonly RemoteTarget[],
+): RemoteTarget | undefined {
+  return sessions.find(
+    (session) => session.id === targetSessionId && session.eligible && session.audioReady,
+  );
+}
+
+export function canSelectRemoteAudio({ offline, target, pending }: RemoteSelectionState) {
+  return !offline && Boolean(target) && !pending;
+}
+
+export function remoteCommandRequest(target: RemoteTarget | undefined, audioId: AudioId) {
+  return target && { targetSessionId: target.id, audioId };
 }
 
 export function reconcileRemoteSelection(
   targetSessionId: string,
-  sessions: readonly { id: string; eligible: boolean; audioReady: boolean }[],
+  sessions: readonly RemoteTarget[],
 ) {
-  return sessions.some(
-    (session) => session.id === targetSessionId && session.eligible && session.audioReady,
-  )
-    ? targetSessionId
-    : "";
+  return getSelectedRemoteTarget(targetSessionId, sessions) ? targetSessionId : "";
 }
 
 export function commandStatus(

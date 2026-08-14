@@ -22,6 +22,7 @@ import {
 import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
 import { useRemoteCrew } from "@/hooks/use-remote-crew";
 import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
+import { announcementPlaybackId, announcementPlaybackStatus } from "@/lib/announcement-playback";
 
 export const Route = createFileRoute("/")({
   loader: () => getAuthStatus(),
@@ -61,11 +62,11 @@ function announcementAudioId(announcementId: string): AudioId {
 function SoundboardPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioControllerRef = useRef<ReturnType<typeof createAudioPlaybackController> | null>(null);
-  const activeAudioIdRef = useRef<number | string | null>(null);
+  const activeAudioIdRef = useRef<number | AudioId | null>(null);
   const playbackGenerationRef = useRef(createPlaybackGeneration());
-  const [playing, setPlaying] = useState<number | string | null>(null);
-  const [paused, setPaused] = useState<number | string | null>(null);
-  const [loading, setLoading] = useState<number | string | null>(null);
+  const [playing, setPlaying] = useState<number | AudioId | null>(null);
+  const [paused, setPaused] = useState<number | AudioId | null>(null);
+  const [loading, setLoading] = useState<number | AudioId | null>(null);
   const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(null);
   const [duplicateName, setDuplicateName] = useState(false);
 
@@ -140,7 +141,7 @@ function SoundboardPage() {
   }, [remoteCrew.duplicateName]);
 
   const play = useCallback(
-    async (id: number | string, directUrl?: string | null) => {
+    async (id: number | AudioId, directUrl?: string | null) => {
       // Kunci sinkron mencegah dua klik cepat memulai audio secara bersamaan.
       if (activeAudioIdRef.current !== null) return;
 
@@ -195,7 +196,7 @@ function SoundboardPage() {
   );
 
   const toggleAnnouncement = useCallback(
-    (id: string, url?: string | null) => {
+    (id: AudioId, url?: string | null) => {
       if (playing === id && audioRef.current) {
         audioRef.current.pause();
         activeAudioIdRef.current = null;
@@ -210,6 +211,11 @@ function SoundboardPage() {
   );
 
   const activeAudioId = playing ?? loading ?? paused;
+  const activeAnnouncement =
+    typeof activeAudioId === "string"
+      ? ANNOUNCEMENT_CATALOG.find(({ id }) => announcementPlaybackId(id) === activeAudioId)
+      : undefined;
+  const activeAudioLabel = activeAnnouncement?.label ?? activeAudioId;
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -270,36 +276,31 @@ function SoundboardPage() {
           drawerDisabled={false}
           announcementTriggerElevated={activeAudioId !== null}
           tableDisabled={() => activeAudioId !== null}
-          announcementDisabled={(audioId) => {
-            const announcement = ANNOUNCEMENT_CATALOG.find(
-              ({ id }) => `announcement:${id}` === audioId,
-            );
-            return (
-              loading !== null || (activeAudioId !== null && activeAudioId !== announcement?.label)
-            );
-          }}
+          announcementDisabled={(audioId) =>
+            loading !== null || (activeAudioId !== null && activeAudioId !== audioId)
+          }
           tableStatus={(tableNumber) => {
             if (playing === tableNumber) return "playing";
             if (loading === tableNumber) return "loading";
             return readyTables.has(tableNumber) ? "ready" : "empty";
           }}
-          announcementStatus={(announcementId) => {
-            const announcement = ANNOUNCEMENT_CATALOG.find(({ id }) => id === announcementId);
-            const id = announcement?.label;
-            if (playing === id) return "playing";
-            if (loading === id) return "loading";
-            return paused === id ? "paused" : "idle";
-          }}
+          announcementStatus={(announcementId) =>
+            announcementPlaybackStatus(
+              announcementPlaybackId(announcementId),
+              playing,
+              loading,
+              paused,
+            )
+          }
           onSelect={(audioId) => {
             if (audioId.startsWith("table:")) {
               void play(Number(audioId.slice("table:".length)));
               return;
             }
             const announcement = ANNOUNCEMENT_CATALOG.find(
-              ({ id }) => `announcement:${id}` === audioId,
+              ({ id }) => announcementPlaybackId(id) === audioId,
             );
-            if (announcement)
-              toggleAnnouncement(announcement.label, announcementAudioUrls[announcement.id]);
+            if (announcement) toggleAnnouncement(audioId, announcementAudioUrls[announcement.id]);
           }}
         />
 
@@ -325,7 +326,7 @@ function SoundboardPage() {
             className="brutal-border brutal-shadow-lg brutal-press flex items-center gap-2 bg-destructive px-5 py-3 font-display uppercase text-destructive-foreground"
           >
             <Square className="h-4 w-4" fill="currentColor" strokeWidth={3} />
-            Stop {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioId}
+            Stop {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioLabel}
           </button>
         </div>
       )}
