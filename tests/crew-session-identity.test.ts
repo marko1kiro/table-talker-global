@@ -31,7 +31,11 @@ describe("crew session identity", () => {
   });
 
   it("removes malformed, mismatched, and invalid stored identity", () => {
-    for (const value of ["{", JSON.stringify({ displayName: "", normalizedName: "" }), JSON.stringify({ displayName: "Crew", normalizedName: "other" })]) {
+    for (const value of [
+      "{",
+      JSON.stringify({ displayName: "", normalizedName: "" }),
+      JSON.stringify({ displayName: "Crew", normalizedName: "other" }),
+    ]) {
       const session = storage({ "table-talker.crew-identity": value });
       expect(readCrewSessionIdentity(session)).toBeNull();
       expect(session.getItem("table-talker.crew-identity")).toBeNull();
@@ -40,13 +44,21 @@ describe("crew session identity", () => {
 
   it("fails open when storage access throws", () => {
     const unavailable = {
-      getItem: () => { throw new Error("blocked"); },
-      setItem: () => { throw new Error("blocked"); },
-      removeItem: () => { throw new Error("blocked"); },
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
     };
 
     expect(readCrewSessionIdentity(unavailable)).toBeNull();
-    expect(writeCrewSessionIdentity(unavailable, { displayName: "Crew", normalizedName: "crew" })).toBeNull();
+    expect(
+      writeCrewSessionIdentity(unavailable, { displayName: "Crew", normalizedName: "crew" }),
+    ).toBeNull();
     expect(() => removeCrewSessionIdentity(unavailable)).not.toThrow();
   });
 

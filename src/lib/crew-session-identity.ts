@@ -28,7 +28,9 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
   } catch {
     try {
       storage.removeItem(CREW_SESSION_IDENTITY_KEY);
-    } catch {}
+    } catch {
+      return null;
+    }
     return null;
   }
 }
@@ -50,7 +52,9 @@ export function writeCrewSessionIdentity(
 export function removeCrewSessionIdentity(storage: StorageLike | null) {
   try {
     storage?.removeItem(CREW_SESSION_IDENTITY_KEY);
-  } catch {}
+  } catch {
+    return;
+  }
 }
 
 export function createSessionStorageAdapter(storage: StorageLike | null): StorageLike {
@@ -65,12 +69,16 @@ export function createSessionStorageAdapter(storage: StorageLike | null): Storag
     setItem: (key, value) => {
       try {
         storage?.setItem(key, value);
-      } catch {}
+      } catch {
+        return;
+      }
     },
     removeItem: (key) => {
       try {
         storage?.removeItem(key);
-      } catch {}
+      } catch {
+        return;
+      }
     },
   };
 }
