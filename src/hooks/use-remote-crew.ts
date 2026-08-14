@@ -21,6 +21,10 @@ export function canSendConnectedHeartbeat(channelTerminal: boolean, visibilitySt
   return !channelTerminal && visibilityState === "visible";
 }
 
+export function canReconnectPresence(visibilityState: string) {
+  return visibilityState === "visible";
+}
+
 export function shouldActivatePresence(status: string) {
   return status === "SUBSCRIBED";
 }
@@ -336,10 +340,15 @@ export function useRemoteCrew({
       );
     };
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void claimWhenVisible();
-      if (presenceActive && canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
-        void heartbeat("connected").catch(() => update(setOffline, true));
-      else if (!channelTerminal) disconnect();
+      if (document.visibilityState === "visible") {
+        if (channel) void client.removeChannel(channel);
+        channel = null;
+        channelTerminal = false;
+        presenceActive = false;
+        if (canReconnectPresence(document.visibilityState)) void claimWhenVisible();
+        return;
+      }
+      if (!channelTerminal) disconnect();
     };
 
     const ensureAuth = () => {
@@ -347,7 +356,13 @@ export function useRemoteCrew({
       return authInFlight;
     };
     const claimWhenVisible = async () => {
-      if (!userId || document.visibilityState !== "visible" || channel || claimInFlight) return;
+      if (
+        !userId ||
+        document.visibilityState !== "visible" ||
+        (channel && !channelTerminal) ||
+        claimInFlight
+      )
+        return;
       claimInFlight = (async () => {
         try {
           const { error: claimError } = await client.rpc(
@@ -408,6 +423,9 @@ export function useRemoteCrew({
               channelTerminal = true;
               stopHeartbeat();
               disconnect();
+              if (channel) void client.removeChannel(channel);
+              channel = null;
+              presenceActive = false;
               update(setOffline, true);
               if (active) setConnectionState("offline");
             });

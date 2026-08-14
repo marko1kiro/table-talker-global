@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   channelStateIsTerminal,
+  canReconnectPresence,
   canSendConnectedHeartbeat,
   createVisibleClaimCoordinator,
   crewClaimArgs,
@@ -119,6 +120,37 @@ describe("remote crew command processor", () => {
     await expect(getAnonymousUserId(client as never)).resolves.toBe("crew-1");
 
     expect(signInAnonymously).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses a restored authenticated UID without anonymous sign-in", async () => {
+    const signInAnonymously = vi.fn();
+    const client = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: { id: "restored-crew" } } }),
+        signInAnonymously,
+      },
+    };
+
+    await expect(getAnonymousUserId(client as never)).resolves.toBe("restored-crew");
+    expect(signInAnonymously).not.toHaveBeenCalled();
+  });
+
+  it("reconnects only from a visible page", () => {
+    expect(canReconnectPresence("visible")).toBe(true);
+    expect(canReconnectPresence("hidden")).toBe(false);
+  });
+
+  it("does not make hidden or missed commands replayable after reconnect", async () => {
+    const playRemoteAudio = vi.fn().mockResolvedValue(undefined);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio,
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      now: () => Date.parse("2026-08-12T10:00:08.000Z"),
+    });
+
+    await processor.process(command);
+    expect(playRemoteAudio).not.toHaveBeenCalled();
   });
 
   it("prunes expired replay IDs without evicting live duplicates", () => {
