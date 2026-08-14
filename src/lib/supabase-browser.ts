@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { browserSessionStorage, createSessionStorageAdapter } from "./crew-session-identity";
 
 let client: SupabaseClient | null = null;
 
@@ -7,7 +8,11 @@ export function getSupabaseBrowserClient(): SupabaseClient | null {
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !anonKey) return null;
   client ??= createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
+    auth: {
+      storage: createSessionStorageAdapter(browserSessionStorage()),
+      persistSession: true,
+      autoRefreshToken: true,
+    },
   });
   return client;
 }
