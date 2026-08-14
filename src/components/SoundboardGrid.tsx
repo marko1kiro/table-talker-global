@@ -79,7 +79,7 @@ export function SoundboardGrid({
           aria-expanded="false"
           disabled={drawerDisabled}
           className={`brutal-border brutal-shadow-lg brutal-press fixed right-4 z-30 flex items-center gap-2 bg-primary px-4 py-3 font-display text-sm uppercase text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:px-5 sm:text-base ${
-            announcementTriggerElevated ? "bottom-24" : "bottom-6"
+            announcementTriggerElevated ? "bottom-24" : "bottom-4"
           }`}
         >
           <Megaphone className="size-5 shrink-0" aria-hidden="true" />

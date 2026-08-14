@@ -10,7 +10,7 @@ const compactSource = source.replace(/\s+/g, " ");
 
 it("keeps the announcement trigger at the default bottom position", () => {
   expect(compactSource).toContain("announcementTriggerElevated = false");
-  expect(compactSource).toContain('announcementTriggerElevated ? "bottom-24" : "bottom-6"');
+  expect(compactSource).toContain('announcementTriggerElevated ? "bottom-24" : "bottom-4"');
 });
 
 it("derives all table and categorized announcement controls from shared metadata", () => {
