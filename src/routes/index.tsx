@@ -23,6 +23,11 @@ import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentity
 import { useRemoteCrew } from "@/hooks/use-remote-crew";
 import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
 import { announcementPlaybackId, announcementPlaybackStatus } from "@/lib/announcement-playback";
+import {
+  browserSessionStorage,
+  readCrewSessionIdentity,
+  writeCrewSessionIdentity,
+} from "@/lib/crew-session-identity";
 
 export const Route = createFileRoute("/")({
   loader: () => getAuthStatus(),
@@ -67,7 +72,10 @@ function SoundboardPage() {
   const [playing, setPlaying] = useState<number | AudioId | null>(null);
   const [paused, setPaused] = useState<number | AudioId | null>(null);
   const [loading, setLoading] = useState<number | AudioId | null>(null);
-  const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(null);
+  const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(() => {
+    const identity = readCrewSessionIdentity(browserSessionStorage());
+    return identity && { ...identity, audioReady: false };
+  });
   const [duplicateName, setDuplicateName] = useState(false);
 
   useEffect(() => {
@@ -225,7 +233,8 @@ function SoundboardPage() {
         unlockAudio={unlockAudio}
         onContinue={(identity) => {
           setDuplicateName(false);
-          setCrewIdentity(identity);
+          const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
+          setCrewIdentity({ ...(saved ?? identity), audioReady: identity.audioReady });
         }}
       />
       {(remoteCrew.needsAudioRecovery || !crewIdentity?.audioReady) && crewIdentity && (

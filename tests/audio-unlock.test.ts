@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAudioPlaybackController,
@@ -88,4 +89,13 @@ describe("bundled audio playback", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(audio.removeEventListener).toHaveBeenCalledTimes(3);
   });
+});
+
+it("hydrates a same-tab crew without persisting audio readiness", () => {
+  const route = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
+
+  expect(route).toContain("readCrewSessionIdentity(browserSessionStorage())");
+  expect(route).toContain("audioReady: false");
+  expect(route).toContain("writeCrewSessionIdentity(browserSessionStorage(), identity)");
+  expect(route).toContain("Aktifkan Suara");
 });
