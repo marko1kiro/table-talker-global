@@ -14,6 +14,7 @@
 
 import {
   ANNOUNCEMENT_CATALOG,
+  TABLE_AUDIO_IDS,
   TABLE_COUNT,
   getCatalogMetadata,
   type AnnouncementId,
@@ -58,14 +59,10 @@ export const tableAudioUrls: ReadonlyMap<number, string> = (() => {
 
 /** Peta id pengumuman -> URL audio. `null` kalau filenya belum ada di repo. */
 export const announcementAudioUrls: Readonly<Record<AnnouncementId, string | null>> = (() => {
-  const result: Record<AnnouncementId, string | null> = {
-    seating: null,
-    "himbauan-barang-bawaan-pelanggan": null,
-    "outside-food": null,
-    "no-smoking": null,
-    "larangan-gabung-meja": null,
-    "jam-buka-resto": null,
-  };
+  const result = Object.fromEntries(ANNOUNCEMENT_CATALOG.map(({ id }) => [id, null])) as Record<
+    AnnouncementId,
+    string | null
+  >;
   const valid = new Set<string>(ANNOUNCEMENT_IDS);
   for (const [path, url] of Object.entries(announcementModules)) {
     const stem = fileStem(path);
@@ -88,12 +85,12 @@ export const bundledAudioCatalog: readonly CatalogAudio[] = [
       ? [{ id: `announcement:${announcement.id}` as AudioId, label: announcement.label, url }]
       : [];
   }),
-  ...[...tableAudioUrls.entries()]
-    .sort(([a], [b]) => a - b)
-    .flatMap(([tableNumber, url]) => {
-      const metadata = getCatalogMetadata(`table:${tableNumber}`);
-      return metadata ? [{ ...metadata, url }] : [];
-    }),
+  ...TABLE_AUDIO_IDS.flatMap((id) => {
+    const tableNumber = Number(id.slice("table:".length));
+    const url = tableAudioUrls.get(tableNumber);
+    const metadata = getCatalogMetadata(id);
+    return url && metadata ? [{ ...metadata, url }] : [];
+  }),
 ];
 
 export function getTableAudioUrl(tableNumber: number): string | null {

@@ -2,14 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { AuthGate } from "@/components/AuthGate";
+import { SoundboardGrid } from "@/components/SoundboardGrid";
+import type { TableStatus } from "@/components/TableButton";
 import { getAuthStatus, loginSuperAdmin } from "@/lib/auth";
 import { getRemoteAdminSnapshot, sendRemoteCommand } from "@/lib/remote-audio.server";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
-  canPlayRemoteAudio,
+  canSelectRemoteAudio,
   commandStatus,
+  getSelectedRemoteTarget,
+  remoteCommandRequest,
   reconcileRemoteSelection,
 } from "@/lib/super-admin-state";
+import type { AudioId } from "@/lib/remote-audio-domain";
 import { createInvalidationDebouncer, realtimeIsReady } from "@/lib/super-admin-realtime";
 
 const snapshotKey = ["remote-admin-snapshot"] as const;
@@ -42,7 +47,6 @@ function SuperAdminRoute() {
 function SuperAdminPage() {
   const queryClient = useQueryClient();
   const [targetSessionId, setTargetSessionId] = useState("");
-  const [audioId, setAudioId] = useState("");
   const [sendError, setSendError] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("SUBSCRIBING");
   const [now, setNow] = useState(Date.now());
@@ -53,7 +57,8 @@ function SuperAdminPage() {
     refetchOnWindowFocus: true,
   });
   const mutation = useMutation({
-    mutationFn: () => sendRemoteCommand({ data: { targetSessionId, audioId } }),
+    mutationFn: (request: { targetSessionId: string; audioId: AudioId }) =>
+      sendRemoteCommand({ data: request }),
     onSuccess: () => {
       setSendError("");
       queryClient.invalidateQueries({ queryKey: snapshotKey });
@@ -92,28 +97,34 @@ function SuperAdminPage() {
   const commands = data && !data.offline ? data.commands : [];
 
   useEffect(() => {
-    const selection = reconcileRemoteSelection(
+    const nextTargetSessionId = reconcileRemoteSelection(
       targetSessionId,
-      audioId,
       sessions.map((session) => ({
         id: session.id,
         eligible: session.eligible,
         audioReady: session.audio_ready,
       })),
-      catalog.map((audio) => audio.id),
     );
-    if (selection.targetSessionId !== targetSessionId)
-      setTargetSessionId(selection.targetSessionId);
-    if (selection.audioId !== audioId) setAudioId(selection.audioId);
-  }, [audioId, catalog, sessions, targetSessionId]);
+    if (nextTargetSessionId !== targetSessionId) setTargetSessionId(nextTargetSessionId);
+  }, [sessions, targetSessionId]);
 
-  const canPlay = canPlayRemoteAudio({
-    offline,
+  const selectedTarget = getSelectedRemoteTarget(
     targetSessionId,
-    audioId,
+    sessions.map((session) => ({
+      id: session.id,
+      eligible: session.eligible,
+      audioReady: session.audio_ready,
+    })),
+  );
+  const controlsDisabled = !canSelectRemoteAudio({
+    offline,
+    target: selectedTarget,
     pending: mutation.isPending,
   });
-  const selectedTarget = sessions.find((session) => session.id === targetSessionId);
+  const availableAudioIds = useMemo(
+    () => new Set(catalog.map((audio) => audio.id as AudioId)),
+    [catalog],
+  );
 
   return (
     <main className="min-h-[100svh] bg-background px-4 py-6 sm:px-6">
@@ -131,7 +142,7 @@ function SuperAdminPage() {
             Pilih crew siap audio lalu kirim suara bundled.
           </p>
         )}
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-5">
           <label className="text-sm font-bold">
             Target crew
             <select
@@ -150,26 +161,10 @@ function SuperAdminPage() {
                 ))}
             </select>
           </label>
-          <label className="text-sm font-bold">
-            Audio
-            <select
-              value={audioId}
-              onChange={(event) => setAudioId(event.target.value)}
-              className="brutal-border mt-1 w-full bg-background px-3 py-2 font-normal"
-              disabled={offline}
-            >
-              <option value="">Pilih audio</option>
-              {catalog.map((audio) => (
-                <option key={audio.id} value={audio.id}>
-                  {audio.label}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
         {selectedTarget && (
           <p className="mt-2 text-xs text-muted-foreground">
-            {selectedTarget.eligible && selectedTarget.audio_ready
+            {selectedTarget.eligible && selectedTarget.audioReady
               ? "Online dan siap audio."
               : "Target tidak siap audio."}
           </p>
@@ -179,18 +174,36 @@ function SuperAdminPage() {
             {sendError || (mutation.data && "error" in mutation.data ? mutation.data.error : "")}
           </p>
         )}
-        <button
-          type="button"
-          onClick={() => {
-            setSendError("");
-            mutation.reset();
-            mutation.mutate();
-          }}
-          disabled={!canPlay}
-          className="brutal-border brutal-shadow brutal-press mt-5 w-full bg-accent px-4 py-3 font-display uppercase disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {mutation.isPending ? "Mengirim…" : "Play audio"}
-        </button>
+        {!selectedTarget && !offline && (
+          <p className="mt-3 text-sm font-bold">Pilih crew siap audio terlebih dahulu.</p>
+        )}
+        <div className="mt-5">
+          <SoundboardGrid
+            availableAudioIds={availableAudioIds}
+            drawerDisabled={controlsDisabled}
+            tableDisabled={() => controlsDisabled}
+            announcementDisabled={() => controlsDisabled}
+            tableStatus={(tableNumber): TableStatus => {
+              const audioId = `table:${tableNumber}` as AudioId;
+              return mutation.isPending && mutation.variables.audioId === audioId
+                ? "loading"
+                : "ready";
+            }}
+            announcementStatus={(announcementId) => {
+              const audioId = `announcement:${announcementId}` as AudioId;
+              return mutation.isPending && mutation.variables.audioId === audioId
+                ? "loading"
+                : "idle";
+            }}
+            onSelect={(audioId) => {
+              const request = remoteCommandRequest(selectedTarget, audioId);
+              if (!request) return;
+              setSendError("");
+              mutation.reset();
+              mutation.mutate(request);
+            }}
+          />
+        </div>
       </section>
       <section
         className="brutal-border mx-auto mt-6 max-w-4xl bg-card p-4 sm:p-6"

@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { expect, it, vi } from "vitest";
 import {
   commandStatus,
-  canPlayRemoteAudio,
+  canSelectRemoteAudio,
+  getSelectedRemoteTarget,
+  remoteCommandRequest,
   reconcileRemoteSelection,
 } from "../src/lib/super-admin-state";
 import { createInvalidationDebouncer, realtimeIsReady } from "../src/lib/super-admin-realtime";
@@ -55,59 +57,39 @@ it("shows remote unavailable copy only after a failed registration", () => {
   expect(route).toContain("remoteCrew.offline && crewIdentity");
 });
 
-it("enables Play only for a valid online idle selection", () => {
-  expect(
-    canPlayRemoteAudio({
-      offline: false,
-      targetSessionId: "crew",
-      audioId: "table:1",
-      pending: false,
-    }),
-  ).toBe(true);
-  expect(
-    canPlayRemoteAudio({
-      offline: true,
-      targetSessionId: "crew",
-      audioId: "table:1",
-      pending: false,
-    }),
-  ).toBe(false);
-  expect(
-    canPlayRemoteAudio({ offline: false, targetSessionId: "", audioId: "table:1", pending: false }),
-  ).toBe(false);
-  expect(
-    canPlayRemoteAudio({ offline: false, targetSessionId: "crew", audioId: "", pending: false }),
-  ).toBe(false);
-  expect(
-    canPlayRemoteAudio({
-      offline: false,
-      targetSessionId: "crew",
-      audioId: "table:1",
-      pending: true,
-    }),
-  ).toBe(false);
+it("enables a soundboard selection only for a valid online idle target", () => {
+  const target = { id: "crew", eligible: true, audioReady: true };
+  expect(canSelectRemoteAudio({ offline: false, target, pending: false })).toBe(true);
+  expect(canSelectRemoteAudio({ offline: true, target, pending: false })).toBe(false);
+  expect(canSelectRemoteAudio({ offline: false, target: undefined, pending: false })).toBe(false);
+  expect(canSelectRemoteAudio({ offline: false, target, pending: true })).toBe(false);
 });
 
-it("clears selections removed from an updated eligible target or catalog snapshot", () => {
+it("clears a target removed from an updated eligible target snapshot", () => {
   expect(
-    reconcileRemoteSelection(
-      "crew-1",
-      "table:1",
-      [{ id: "crew-1", eligible: true, audioReady: true }],
-      ["table:1"],
-    ),
-  ).toEqual({ targetSessionId: "crew-1", audioId: "table:1" });
+    reconcileRemoteSelection("crew-1", [{ id: "crew-1", eligible: true, audioReady: true }]),
+  ).toEqual("crew-1");
   expect(
-    reconcileRemoteSelection(
-      "crew-1",
-      "table:1",
-      [{ id: "crew-1", eligible: false, audioReady: true }],
-      ["table:1"],
-    ),
-  ).toEqual({ targetSessionId: "", audioId: "table:1" });
-  expect(reconcileRemoteSelection("crew-1", "table:1", [], [])).toEqual({
-    targetSessionId: "",
-    audioId: "",
+    reconcileRemoteSelection("crew-1", [{ id: "crew-1", eligible: false, audioReady: true }]),
+  ).toBe("");
+  expect(reconcileRemoteSelection("crew-1", [])).toBe("");
+});
+
+it("rejects stale, ineligible, and audio-unready selected targets before dispatch", () => {
+  const sessions = [
+    { id: "ready", eligible: true, audioReady: true },
+    { id: "ineligible", eligible: false, audioReady: true },
+    { id: "audio-unready", eligible: true, audioReady: false },
+  ];
+
+  expect(getSelectedRemoteTarget("missing", sessions)).toBeUndefined();
+  expect(getSelectedRemoteTarget("ineligible", sessions)).toBeUndefined();
+  expect(getSelectedRemoteTarget("audio-unready", sessions)).toBeUndefined();
+  expect(canSelectRemoteAudio({ offline: false, target: undefined, pending: false })).toBe(false);
+  expect(remoteCommandRequest(undefined, "table:1")).toBeUndefined();
+  expect(remoteCommandRequest(getSelectedRemoteTarget("ready", sessions), "table:1")).toEqual({
+    targetSessionId: "ready",
+    audioId: "table:1",
   });
 });
 
