@@ -93,8 +93,8 @@ useScreenWakeLock(identityHydrated);
 ## Error Handling
 
 - `request()` reject: ditangkap dan di-ignore. Tidak ada UI error, tidak ada crash. Ini termasuk kasus permission denied (tidak terjadi di browser yang support karena auto-granted), tab hidden saat request, dll.
-- `sentinel.addEventListener("release", ...)`: **tidak** digunakan — browser auto-release sudah di-handle oleh visibilitychange re-request; menambahkan listener release menambah kompleksitas tanpa manfaat untuk keep-alive sederhana ini.
-- Guard `sentinel !== null` mencegah request berulang.
+- `sentinel.addEventListener("release", ...)`: **dipakai**, agar re-request ulang andal. Browser auto-release sentinel saat tab hidden (per spek Wake Lock). Tanpa listener, sentinelRef tetap non-null setelah auto-release → saat kembali visible decision melihat "sudah ada sentinel" → tidak re-request → layar bisa tidur. Listener set sentinelRef null saat release; visibilitychange selanjutnya memicu re-request.
+- Guard `sentinel !== null` mencegah request berulang; request result juga ditolak saat `document.visibilityState !== "visible"` (request in-flight yang resolve setelah tab hidden tidak boleh menyimpan sentinel stale).
 
 ## Testing
 
