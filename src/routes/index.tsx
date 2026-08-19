@@ -20,8 +20,10 @@ import {
   unlockBundledAudio,
 } from "@/lib/audio";
 import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
+import { CrewMessageOverlay } from "@/components/CrewMessageOverlay";
 import { useRemoteCrew } from "@/hooks/use-remote-crew";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
+import { useCrewMessage } from "@/hooks/use-crew-message";
 import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
 import { announcementPlaybackId, announcementPlaybackStatus } from "@/lib/announcement-playback";
 import {
@@ -85,6 +87,7 @@ function SoundboardPage() {
   }, []);
 
   useScreenWakeLock(identityHydrated);
+  const crewMessage = useCrewMessage(identityHydrated);
 
   useEffect(() => {
     return () => {
@@ -296,11 +299,13 @@ function SoundboardPage() {
               ).map((announcement) => announcementAudioId(announcement.id)),
             ])
           }
-          drawerDisabled={false}
+          drawerDisabled={crewMessage.message !== null}
           announcementTriggerElevated={activeAudioId !== null}
-          tableDisabled={() => activeAudioId !== null}
+          tableDisabled={() => crewMessage.message !== null || activeAudioId !== null}
           announcementDisabled={(audioId) =>
-            loading !== null || (activeAudioId !== null && activeAudioId !== audioId)
+            crewMessage.message !== null ||
+            loading !== null ||
+            (activeAudioId !== null && activeAudioId !== audioId)
           }
           tableStatus={(tableNumber) => {
             if (playing === tableNumber) return "playing";
@@ -352,6 +357,10 @@ function SoundboardPage() {
             Stop {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioLabel}
           </button>
         </div>
+      )}
+
+      {crewMessage.message && (
+        <CrewMessageOverlay message={crewMessage.message} onClose={crewMessage.dismiss} />
       )}
     </div>
   );
