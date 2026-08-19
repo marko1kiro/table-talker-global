@@ -26,11 +26,19 @@ export function useScreenWakeLock(enabled: boolean) {
       }
       if (action === "request") {
         void requestScreenWakeLock().then((sentinel) => {
-          if (disposed || !enabledRef.current) {
+          if (
+            disposed ||
+            !enabledRef.current ||
+            !sentinel ||
+            document.visibilityState !== "visible"
+          ) {
             releaseScreenWakeLock(sentinel);
             return;
           }
           sentinelRef.current = sentinel;
+          sentinel?.addEventListener?.("release", () => {
+            if (sentinelRef.current === sentinel) sentinelRef.current = null;
+          });
         });
       }
     };

@@ -95,3 +95,13 @@ const indexSource = readFileSync(new URL("../src/routes/index.tsx", import.meta.
 it("activates wake lock in the crew soundboard page", () => {
   expect(indexSource).toContain("useScreenWakeLock(identityHydrated)");
 });
+
+const hookSource = readFileSync(
+  new URL("../src/hooks/use-screen-wake-lock.ts", import.meta.url),
+  "utf8",
+);
+
+it("re-requests after the browser auto-releases the wake lock on a hidden tab", () => {
+  expect(hookSource).toContain('sentinel?.addEventListener?.("release"');
+  expect(hookSource).toContain('document.visibilityState !== "visible"');
+});

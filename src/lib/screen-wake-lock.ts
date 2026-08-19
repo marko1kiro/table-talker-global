@@ -14,7 +14,10 @@ export function visibleWakeLockState({
   return "none";
 }
 
-export type WakeLockSentinelLike = { release(): Promise<void> };
+export type WakeLockSentinelLike = {
+  release(): Promise<void>;
+  addEventListener?(type: string, listener: (e: Event) => void): void;
+};
 
 type WakeLockLike = { request(type: "screen"): Promise<WakeLockSentinelLike> };
 
