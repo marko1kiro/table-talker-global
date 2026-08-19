@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getSupabaseBrowserClient } from "../lib/supabase-browser";
 import { getAnonymousUserId } from "./use-remote-crew";
@@ -22,22 +22,22 @@ export function useCrewMessage(enabled: boolean): CrewMessageState {
   const deliveredRef = useRef<Map<string, number>>(new Map());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearTimer = () => {
+  const clearTimer = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-  };
+  }, []);
 
-  const scheduleClose = () => {
+  const scheduleClose = useCallback(() => {
     clearTimer();
     timerRef.current = setTimeout(() => setMessage(null), CREW_MESSAGE_AUTO_CLOSE_MS);
-  };
+  }, [clearTimer]);
 
-  const dismiss = () => {
+  const dismiss = useCallback(() => {
     clearTimer();
     setMessage(null);
-  };
+  }, [clearTimer]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -86,7 +86,6 @@ export function useCrewMessage(enabled: boolean): CrewMessageState {
       clearTimer();
       if (channel) void client.removeChannel(channel);
     };
-  }, [enabled]);
-
+  }, [enabled, clearTimer, scheduleClose]);
   return { message, dismiss };
 }

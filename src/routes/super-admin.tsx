@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { AuthGate } from "@/components/AuthGate";
 import { SoundboardGrid } from "@/components/SoundboardGrid";
 import type { TableStatus } from "@/components/TableButton";
 import { getAuthStatus, loginSuperAdmin } from "@/lib/auth";
-import { getRemoteAdminSnapshot, sendRemoteCommand } from "@/lib/remote-audio.server";
+import {
+  getRemoteAdminSnapshot,
+  sendRemoteCommand,
+  sendCrewMessage,
+} from "@/lib/remote-audio.server";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   canSelectRemoteAudio,
@@ -14,6 +19,7 @@ import {
   remoteCommandRequest,
   reconcileRemoteSelection,
 } from "@/lib/super-admin-state";
+import { CREW_MESSAGE_MAX_LENGTH, validateCrewMessageRequest } from "@/lib/crew-message-domain";
 import type { AudioId } from "@/lib/remote-audio-domain";
 import { createInvalidationDebouncer, realtimeIsReady } from "@/lib/super-admin-realtime";
 
@@ -48,6 +54,7 @@ function SuperAdminPage() {
   const queryClient = useQueryClient();
   const [targetSessionId, setTargetSessionId] = useState("");
   const [sendError, setSendError] = useState("");
+  const [messageText, setMessageText] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("SUBSCRIBING");
   const [now, setNow] = useState(Date.now());
   const snapshot = useQuery({
@@ -64,6 +71,20 @@ function SuperAdminPage() {
       queryClient.invalidateQueries({ queryKey: snapshotKey });
     },
     onError: () => setSendError("Gagal mengirim perintah. Silakan coba lagi."),
+  });
+  const messageMutation = useMutation({
+    mutationFn: sendCrewMessage,
+    onSuccess: (result) => {
+      if ("error" in result) {
+        toast.error(result.error);
+      } else if ("ok" in result) {
+        toast.success("Pesan terkirim.");
+        setMessageText("");
+      } else {
+        toast.error("Realtime offline");
+      }
+    },
+    onError: () => toast.error("Gagal mengirim pesan."),
   });
 
   useEffect(() => {
@@ -176,6 +197,43 @@ function SuperAdminPage() {
               ? "Online dan siap audio."
               : "Target tidak siap audio."}
           </p>
+        )}
+        {selectedTarget && selectedTarget.state === "online" && (
+          <div className="mt-5">
+            <label className="text-sm font-bold">
+              Pesan ke{" "}
+              {sessions.find((s) => s.id === targetSessionId)?.display_name ?? selectedTarget.id}
+              <textarea
+                className="brutal-border mt-1 w-full bg-background px-3 py-2 font-normal"
+                maxLength={CREW_MESSAGE_MAX_LENGTH}
+                value={messageText}
+                onChange={(event) => setMessageText(event.target.value)}
+                placeholder="Ketik pesan (maks 200 karakter)..."
+                rows={3}
+                disabled={messageMutation.isPending || offline}
+              />
+            </label>
+            <button
+              type="button"
+              className="brutal-border brutal-press mt-2 w-full bg-accent px-3 py-2 font-display uppercase"
+              disabled={
+                !messageText.trim() ||
+                messageMutation.isPending ||
+                offline ||
+                targetSessionId === ""
+              }
+              onClick={() => {
+                const result = validateCrewMessageRequest({
+                  targetSessionId,
+                  message: messageText,
+                });
+                if ("error" in result) return toast.error(result.error);
+                messageMutation.mutate({ data: result });
+              }}
+            >
+              Kirim Pesan
+            </button>
+          </div>
         )}
         {(sendError || (mutation.data && "error" in mutation.data && mutation.data.error)) && (
           <p role="alert" className="mt-3 text-sm font-bold text-destructive">
