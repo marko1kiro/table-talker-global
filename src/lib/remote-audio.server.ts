@@ -9,6 +9,7 @@ import {
   getCatalogMetadata,
   sessionIsEligible,
 } from "./remote-audio-domain";
+import { CREW_MESSAGE_MAX_LENGTH } from "./crew-message-domain";
 
 type CrewSessionRow = {
   id: string;
@@ -153,6 +154,32 @@ export const sendRemoteCommand = createServerFn({ method: "POST" })
       });
       if (error?.message.includes("TARGET_NOT_ELIGIBLE")) {
         return { error: "Crew tidak sedang siap menerima audio." };
+      }
+      return error ? offline() : { ok: true as const };
+    } catch {
+      return offline();
+    }
+  });
+
+const crewMessageSchema = z.object({
+  targetSessionId: z.string().uuid(),
+  message: z.string().min(1).max(CREW_MESSAGE_MAX_LENGTH),
+});
+
+export const sendCrewMessage = createServerFn({ method: "POST" })
+  .validator(crewMessageSchema)
+  .handler(async ({ data }) => {
+    await requireSuperAdmin();
+    const client = getServiceClient();
+    if (!client) return offline();
+    try {
+      const { error } = await client.rpc("create_crew_message", {
+        p_target_session_id: data.targetSessionId,
+        p_message: data.message,
+        p_expires_in_seconds: 5,
+      });
+      if (error?.message.includes("MESSAGE_TOO_LONG")) {
+        return { error: "Pesan maksimal 200 karakter." };
       }
       return error ? offline() : { ok: true as const };
     } catch {
