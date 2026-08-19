@@ -21,6 +21,7 @@ import {
 } from "@/lib/audio";
 import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
 import { useRemoteCrew } from "@/hooks/use-remote-crew";
+import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
 import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
 import { announcementPlaybackId, announcementPlaybackStatus } from "@/lib/announcement-playback";
 import {
@@ -82,6 +83,8 @@ function SoundboardPage() {
     setCrewIdentity(identity && { ...identity, audioReady: false });
     setIdentityHydrated(true);
   }, []);
+
+  useScreenWakeLock(identityHydrated);
 
   useEffect(() => {
     return () => {
