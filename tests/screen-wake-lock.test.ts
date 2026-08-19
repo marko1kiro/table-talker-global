@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { visibleWakeLockState } from "../src/lib/screen-wake-lock";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  releaseScreenWakeLock,
+  requestScreenWakeLock,
+  visibleWakeLockState,
+} from "../src/lib/screen-wake-lock";
 
 describe("visibleWakeLockState", () => {
   it("requests when active and no sentinel while visible", () => {
@@ -21,5 +25,53 @@ describe("visibleWakeLockState", () => {
 
   it("does nothing when deactivated without a sentinel", () => {
     expect(visibleWakeLockState({ active: false, sentinelActive: false, visibility: "visible" })).toBe("none");
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("requestScreenWakeLock", () => {
+  it("requests the screen wake lock when supported", async () => {
+    const sentinel = { release: vi.fn() };
+    const request = vi.fn().mockResolvedValue(sentinel);
+    vi.stubGlobal("navigator", { wakeLock: { request } });
+
+    const result = await requestScreenWakeLock();
+
+    expect(request).toHaveBeenCalledWith("screen");
+    expect(result).toBe(sentinel);
+  });
+
+  it("returns null when the API is unsupported", async () => {
+    vi.stubGlobal("navigator", {});
+
+    const result = await requestScreenWakeLock();
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null silently when the request is rejected", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("denied"));
+    vi.stubGlobal("navigator", { wakeLock: { request } });
+
+    const result = await requestScreenWakeLock();
+
+    expect(result).toBeNull();
+  });
+});
+
+describe("releaseScreenWakeLock", () => {
+  it("releases the sentinel", () => {
+    const sentinel = { release: vi.fn() };
+
+    releaseScreenWakeLock(sentinel);
+
+    expect(sentinel.release).toHaveBeenCalledOnce();
+  });
+
+  it("does nothing for a null sentinel", () => {
+    expect(() => releaseScreenWakeLock(null)).not.toThrow();
   });
 });
