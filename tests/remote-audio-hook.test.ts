@@ -16,4 +16,10 @@ it("invalidates the channel synchronously and blocks late subscription after cle
   expect(hookSource).toMatch(
     /const currentChannel = channel;\s*channel = null;\s*if \(currentChannel\) void client\.removeChannel\(currentChannel\)/,
   );
+  expect(hookSource).toMatch(
+    /claim_pending_remote_command"\);\s*if \(!active\) return;[\s\S]*if \(data\) await processor\.process/,
+  );
+  expect(hookSource).toMatch(
+    /\(\{ new: row \}\) => \{\s*if \(!active \|\| channel !== nextChannel\) return;/,
+  );
 });

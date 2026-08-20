@@ -440,6 +440,7 @@ export function useRemoteCrew({
           });
           const catchUp = async () => {
             const { data, error } = await client.rpc("claim_pending_remote_command");
+            if (!active) return;
             if (error) {
               update(setDeliveryUncertain, true);
               return;
@@ -454,7 +455,10 @@ export function useRemoteCrew({
               table: "remote_commands",
               filter: `target_session_id=eq.${userId}`,
             },
-            ({ new: row }) => void processor.process(toRemoteCommand(row as RemoteCommandRow)),
+            ({ new: row }) => {
+              if (!active || channel !== nextChannel) return;
+              void processor.process(toRemoteCommand(row as RemoteCommandRow));
+            },
           );
           channel = nextChannel;
           nextChannel.subscribe(
