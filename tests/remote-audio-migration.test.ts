@@ -10,6 +10,10 @@ const broadcastMigrationPath = resolve(
   import.meta.dirname,
   "../supabase/migrations/20260813000000_super_admin_realtime_broadcast.sql",
 );
+const catchUpMigrationPath = resolve(
+  import.meta.dirname,
+  "../supabase/migrations/20260821010000_remote_audio_catch_up.sql",
+);
 const operationsPath = resolve(import.meta.dirname, "../docs/supabase-super-admin-remote-audio.md");
 
 function migration(): string {
@@ -18,6 +22,10 @@ function migration(): string {
 
 function broadcastMigration(): string {
   return readFileSync(broadcastMigrationPath, "utf8");
+}
+
+function catchUpMigration(): string {
+  return readFileSync(catchUpMigrationPath, "utf8");
 }
 
 function operations(): string {
@@ -103,6 +111,23 @@ describe("remote audio Supabase migration", () => {
       /create index remote_commands_sent_expires_at_idx on public\.remote_commands \(expires_at\) where status = 'sent'/i,
     );
     expect(migration()).toMatch(/create extension if not exists pg_cron/i);
+  });
+
+  it("allows authenticated crew to catch up only their newest pending command", () => {
+    expect(catchUpMigration()).toMatch(
+      /create or replace function public\.claim_pending_remote_command\(\)/i,
+    );
+    expect(catchUpMigration()).toMatch(
+      /target_session_id = auth\.uid\(\)[\s\S]*status = 'sent'[\s\S]*expires_at > now\(\)/i,
+    );
+    expect(catchUpMigration()).toMatch(/order by command\.created_at desc, command\.id desc/i);
+    expect(catchUpMigration()).toMatch(/limit 1/i);
+    expect(catchUpMigration()).toMatch(
+      /revoke all on function public\.claim_pending_remote_command\(\) from public, anon/i,
+    );
+    expect(catchUpMigration()).toMatch(
+      /grant execute on function public\.claim_pending_remote_command\(\) to authenticated/i,
+    );
   });
 
   it("broadcasts minimal invalidations without publishing protected tables", () => {
