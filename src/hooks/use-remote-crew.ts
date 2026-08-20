@@ -438,6 +438,14 @@ export function useRemoteCrew({
             onNeedsAudioRecovery: () => update(setNeedsAudioRecovery, true),
             onDeliveryUncertain: () => update(setDeliveryUncertain, true),
           });
+          const catchUp = async () => {
+            const { data, error } = await client.rpc("claim_pending_remote_command");
+            if (error) {
+              update(setDeliveryUncertain, true);
+              return;
+            }
+            if (data) await processor.process(toRemoteCommand(data as RemoteCommandRow));
+          };
           const nextChannel = client.channel(`remote-commands:${userId}`).on(
             "postgres_changes",
             {
@@ -455,6 +463,7 @@ export function useRemoteCrew({
               currentChannel: () => channel,
               activatePresence: () => {
                 if (active) setConnectionState("online");
+                void catchUp();
                 activatePresence();
               },
               stopHeartbeat,
