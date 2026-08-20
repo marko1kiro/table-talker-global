@@ -22,4 +22,7 @@ it("invalidates the channel synchronously and blocks late subscription after cle
   expect(hookSource).toMatch(
     /\(\{ new: row \}\) => \{\s*if \(!active \|\| channel !== nextChannel\) return;/,
   );
+  expect(hookSource).toContain(
+    'isVisible: () => active && document.visibilityState === "visible"',
+  );
 });

@@ -435,6 +435,7 @@ export function useRemoteCrew({
               }
             },
             now: Date.now,
+            isVisible: () => active && document.visibilityState === "visible",
             onNeedsAudioRecovery: () => update(setNeedsAudioRecovery, true),
             onDeliveryUncertain: () => update(setDeliveryUncertain, true),
           });
