@@ -10,3 +10,10 @@ it("claims a pending command after realtime subscribes", () => {
   );
   expect(hookSource).toMatch(/if \(data\) await processor\.process\(toRemoteCommand\(/);
 });
+
+it("invalidates the channel synchronously and blocks late subscription after cleanup", () => {
+  expect(hookSource).toMatch(/activatePresence:\s*\(\)\s*=>\s*\{\s*if \(!active\) return;/);
+  expect(hookSource).toMatch(
+    /const currentChannel = channel;\s*channel = null;\s*if \(currentChannel\) void client\.removeChannel\(currentChannel\)/,
+  );
+});

@@ -462,7 +462,8 @@ export function useRemoteCrew({
               channel: nextChannel,
               currentChannel: () => channel,
               activatePresence: () => {
-                if (active) setConnectionState("online");
+                if (!active) return;
+                setConnectionState("online");
                 void catchUp();
                 activatePresence();
               },
@@ -511,7 +512,9 @@ export function useRemoteCrew({
       window.removeEventListener("pagehide", disconnect);
       stopHeartbeat();
       disconnect();
-      if (channel) void client.removeChannel(channel);
+      const currentChannel = channel;
+      channel = null;
+      if (currentChannel) void client.removeChannel(currentChannel);
     };
   }, [registration]);
 
