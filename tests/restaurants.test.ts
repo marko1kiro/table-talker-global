@@ -26,3 +26,41 @@ it("backfills the pilot restaurant exactly once", () => {
     /insert into public\.restaurants \(code, display_name\)\s*values \('KAMPUNG-BULU', 'Mie Gacoan Kampung Bulu'\)\s*on conflict \(lower\(code\)\) do nothing;/i,
   );
 });
+
+import { describe } from "vitest";
+import {
+  normalizeRestaurantCode,
+  validateTenantLogin,
+  TENANT_PIN,
+} from "../src/lib/restaurant-domain";
+
+describe("normalizeRestaurantCode", () => {
+  it("trims and uppercases valid codes", () => {
+    expect(normalizeRestaurantCode(" kampung-bulu ")).toEqual({ code: "KAMPUNG-BULU" });
+  });
+
+  it("rejects empty, short, long, and invalid-character codes", () => {
+    expect(normalizeRestaurantCode("")).toEqual({ error: "Kode resto wajib diisi." });
+    expect(normalizeRestaurantCode("ab")).toEqual({
+      error: "Kode resto 3\u201332 karakter, huruf/angka/-/_ saja.",
+    });
+    expect(normalizeRestaurantCode("A".repeat(33))).toEqual({
+      error: "Kode resto 3\u201332 karakter, huruf/angka/-/_ saja.",
+    });
+    expect(normalizeRestaurantCode("BAD CODE!")).toEqual({
+      error: "Kode resto 3\u201332 karakter, huruf/angka/-/_ saja.",
+    });
+  });
+});
+
+describe("validateTenantLogin", () => {
+  it("accepts formal PIN with valid code", () => {
+    expect(validateTenantLogin({ code: "kampung-bulu", pin: TENANT_PIN })).toEqual({
+      code: "KAMPUNG-BULU",
+    });
+  });
+
+  it("rejects wrong PIN before touching the code", () => {
+    expect(validateTenantLogin({ code: "", pin: "000000" })).toEqual({ error: "PIN salah." });
+  });
+});
