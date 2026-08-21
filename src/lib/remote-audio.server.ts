@@ -51,7 +51,7 @@ const crewSessionColumns =
 const remoteCommandColumns =
   "id,target_session_id,audio_id,actor,created_at,expires_at,status,acknowledged_at,failure_reason";
 
-function getServiceClient() {
+export function getServiceClient() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   return typeof url === "string" && url && typeof key === "string" && key
