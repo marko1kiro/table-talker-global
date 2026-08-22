@@ -7,6 +7,9 @@ type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 export type CrewSessionIdentity = {
   displayName: string;
   normalizedName: string;
+  restaurantId: string;
+  restaurantCode: string;
+  restaurantDisplayName: string;
 };
 
 export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessionIdentity | null {
@@ -14,8 +17,20 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
   try {
     const raw = storage.getItem(CREW_SESSION_IDENTITY_KEY);
     if (!raw) return null;
-    const value = JSON.parse(raw) as { displayName?: unknown; normalizedName?: unknown };
-    if (typeof value.displayName !== "string" || typeof value.normalizedName !== "string") {
+    const value = JSON.parse(raw) as {
+      displayName?: unknown;
+      normalizedName?: unknown;
+      restaurantId?: unknown;
+      restaurantCode?: unknown;
+      restaurantDisplayName?: unknown;
+    };
+    if (
+      typeof value.displayName !== "string" ||
+      typeof value.normalizedName !== "string" ||
+      typeof value.restaurantId !== "string" ||
+      typeof value.restaurantCode !== "string" ||
+      typeof value.restaurantDisplayName !== "string"
+    ) {
       storage.removeItem(CREW_SESSION_IDENTITY_KEY);
       return null;
     }
@@ -24,7 +39,12 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
       storage.removeItem(CREW_SESSION_IDENTITY_KEY);
       return null;
     }
-    return normalized;
+    return {
+      ...normalized,
+      restaurantId: value.restaurantId,
+      restaurantCode: value.restaurantCode,
+      restaurantDisplayName: value.restaurantDisplayName,
+    };
   } catch {
     try {
       storage.removeItem(CREW_SESSION_IDENTITY_KEY);
@@ -42,8 +62,14 @@ export function writeCrewSessionIdentity(
   const normalized = normalizeCrewName(identity.displayName);
   if ("error" in normalized || !storage) return null;
   try {
-    storage.setItem(CREW_SESSION_IDENTITY_KEY, JSON.stringify(normalized));
-    return normalized;
+    const data = {
+      ...normalized,
+      restaurantId: identity.restaurantId,
+      restaurantCode: identity.restaurantCode,
+      restaurantDisplayName: identity.restaurantDisplayName,
+    };
+    storage.setItem(CREW_SESSION_IDENTITY_KEY, JSON.stringify(data));
+    return data;
   } catch {
     return null;
   }

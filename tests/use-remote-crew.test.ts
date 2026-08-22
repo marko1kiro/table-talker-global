@@ -43,7 +43,12 @@ describe("remote crew command processor", () => {
   });
 
   it("claims a foreground crew name visibly before realtime subscribes", () => {
-    const registration = { displayName: "Crew", normalizedName: "crew", audioReady: true };
+    const registration = {
+      displayName: "Crew",
+      normalizedName: "crew",
+      audioReady: true,
+      restaurantId: "test-restaurant-id",
+    };
 
     expect(crewClaimArgs(registration, "Browser", "visible")).toMatchObject({
       p_visibility_state: "visible",

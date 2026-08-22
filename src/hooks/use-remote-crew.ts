@@ -100,6 +100,7 @@ export type CrewRegistration = {
   displayName: string;
   normalizedName: string;
   audioReady: boolean;
+  restaurantId: string;
 };
 
 export function crewClaimArgs(
@@ -109,6 +110,7 @@ export function crewClaimArgs(
 ) {
   if (visibilityState !== "visible") return null;
   return {
+    p_restaurant_id: registration.restaurantId,
     p_display_name: registration.displayName,
     p_normalized_name: registration.normalizedName,
     p_device_description: deviceDescription,

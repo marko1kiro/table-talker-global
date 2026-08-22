@@ -16,17 +16,29 @@ function storage(seed: Record<string, string> = {}) {
 }
 
 describe("crew session identity", () => {
+  const restaurantFields = {
+    restaurantId: "test-restaurant-id",
+    restaurantCode: "KAMPUNG-BULU",
+    restaurantDisplayName: "Mie Gacoan Kampung Bulu",
+  };
+
   it("round-trips only normalized validated identity", () => {
     const session = storage();
-    const identity = { displayName: "  Crew   Pagi ", normalizedName: "ignored" };
+    const identity = {
+      displayName: "  Crew   Pagi ",
+      normalizedName: "ignored",
+      ...restaurantFields,
+    };
 
     expect(writeCrewSessionIdentity(session, identity)).toEqual({
       displayName: "Crew Pagi",
       normalizedName: "crew pagi",
+      ...restaurantFields,
     });
     expect(readCrewSessionIdentity(session)).toEqual({
       displayName: "Crew Pagi",
       normalizedName: "crew pagi",
+      ...restaurantFields,
     });
   });
 
@@ -57,7 +69,11 @@ describe("crew session identity", () => {
 
     expect(readCrewSessionIdentity(unavailable)).toBeNull();
     expect(
-      writeCrewSessionIdentity(unavailable, { displayName: "Crew", normalizedName: "crew" }),
+      writeCrewSessionIdentity(unavailable, {
+        displayName: "Crew",
+        normalizedName: "crew",
+        ...restaurantFields,
+      }),
     ).toBeNull();
     expect(() => removeCrewSessionIdentity(unavailable)).not.toThrow();
   });

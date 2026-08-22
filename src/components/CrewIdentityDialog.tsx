@@ -3,8 +3,11 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input";
 import type { CrewSessionIdentity } from "@/lib/crew-session-identity";
 import { normalizeCrewName } from "@/lib/remote-audio-domain";
+import { loginToRestaurant } from "@/lib/restaurants.server";
 
 export type CrewIdentity = CrewSessionIdentity & { audioReady: boolean };
+
+type Step = "restaurant" | "name";
 
 export function CrewIdentityDialog({
   open,
@@ -17,11 +20,47 @@ export function CrewIdentityDialog({
   onContinue: (identity: CrewIdentity) => void;
   unlockAudio: () => Promise<boolean>;
 }) {
+  const [step, setStep] = useState<Step>("restaurant");
+  const [code, setCode] = useState("");
+  const [pin, setPin] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [restaurantInfo, setRestaurantInfo] = useState<{
+    restaurantId: string;
+    restaurantCode: string;
+    restaurantDisplayName: string;
+  } | null>(null);
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
+  const submitRestaurant = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      const result = await loginToRestaurant({ data: { code, pin } });
+      if ("error" in result) {
+        setError(result.error as string);
+        setSubmitting(false);
+        return;
+      }
+      if ("offline" in result) {
+        setError(result.message);
+        setSubmitting(false);
+        return;
+      }
+      setRestaurantInfo({
+        restaurantId: result.restaurantId,
+        restaurantCode: result.restaurantCode,
+        restaurantDisplayName: result.displayName,
+      });
+      setStep("name");
+    } catch {
+      setError("Gagal terhubung ke server.");
+    }
+    setSubmitting(false);
+  };
+
+  const submitName = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const result = normalizeCrewName(name);
     if ("error" in result) {
@@ -31,7 +70,13 @@ export function CrewIdentityDialog({
     setSubmitting(true);
     setError("");
     const audioReady = await unlockAudio();
-    onContinue({ ...result, audioReady });
+    onContinue({
+      ...result,
+      audioReady,
+      restaurantId: restaurantInfo!.restaurantId,
+      restaurantCode: restaurantInfo!.restaurantCode,
+      restaurantDisplayName: restaurantInfo!.restaurantDisplayName,
+    });
     setSubmitting(false);
   };
 
@@ -43,40 +88,94 @@ export function CrewIdentityDialog({
         onEscapeKeyDown={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
       >
-        <DialogTitle className="font-display text-xl">
-          Bentar, tolong isi nama kamu dulu ya!
-        </DialogTitle>
-        <DialogDescription id="crew-identity-description">
-          Nama ini dipakai untuk remote control soundboard.
-        </DialogDescription>
-        <form className="space-y-4" onSubmit={submit}>
-          <label className="block text-sm font-bold" htmlFor="crew-name">
-            Nama kamu
-          </label>
-          <Input
-            id="crew-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            autoComplete="name"
-            required
-            autoFocus
-          />
-          {(error || duplicateName) && (
-            <div
-              role="alert"
-              className="brutal-border bg-destructive px-3 py-2 text-sm text-destructive-foreground"
-            >
-              {error || "Nama sedang dipakai crew yang online."}
-            </div>
-          )}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="brutal-border brutal-shadow brutal-press w-full bg-accent px-4 py-3 font-display disabled:opacity-60"
-          >
-            LANJUT!!
-          </button>
-        </form>
+        {step === "restaurant" ? (
+          <>
+            <DialogTitle className="font-display text-xl">
+              Masukkan Kode Resto & PIN
+            </DialogTitle>
+            <DialogDescription id="crew-identity-description">
+              Kode resto dipilih, PIN formal 123456.
+            </DialogDescription>
+            <form className="space-y-4" onSubmit={submitRestaurant}>
+              <label className="block text-sm font-bold" htmlFor="restaurant-code">
+                Kode Resto
+              </label>
+              <Input
+                id="restaurant-code"
+                value={code}
+                onChange={(event) => setCode(event.target.value.toUpperCase())}
+                placeholder="contoh: KAMPUNG-BULU"
+                autoComplete="organization"
+                required
+                autoFocus
+              />
+              <label className="block text-sm font-bold" htmlFor="restaurant-pin">
+                PIN
+              </label>
+              <Input
+                id="restaurant-pin"
+                type="password"
+                value={pin}
+                onChange={(event) => setPin(event.target.value)}
+                placeholder="123456"
+                autoComplete="off"
+                required
+              />
+              {error && (
+                <div
+                  role="alert"
+                  className="brutal-border bg-destructive px-3 py-2 text-sm text-destructive-foreground"
+                >
+                  {error}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="brutal-border brutal-shadow brutal-press w-full bg-accent px-4 py-3 font-display disabled:opacity-60"
+              >
+                LANJUT!!
+              </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <DialogTitle className="font-display text-xl">
+              Halo dari {restaurantInfo?.restaurantDisplayName}!
+            </DialogTitle>
+            <DialogDescription id="crew-identity-description">
+              Isi nama kamu untuk remote control soundboard.
+            </DialogDescription>
+            <form className="space-y-4" onSubmit={submitName}>
+              <label className="block text-sm font-bold" htmlFor="crew-name">
+                Nama kamu
+              </label>
+              <Input
+                id="crew-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                autoComplete="name"
+                required
+                autoFocus
+              />
+              {(error || duplicateName) && (
+                <div
+                  role="alert"
+                  className="brutal-border bg-destructive px-3 py-2 text-sm text-destructive-foreground"
+                >
+                  {error || "Nama sedang dipakai crew yang online."}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="brutal-border brutal-shadow brutal-press w-full bg-accent px-4 py-3 font-display disabled:opacity-60"
+              >
+                MASUK!!
+              </button>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
