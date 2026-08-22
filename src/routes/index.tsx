@@ -20,6 +20,7 @@ import {
   unlockBundledAudio,
 } from "@/lib/audio";
 import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
+import { SyncDialog } from "@/components/SyncDialog";
 import { CrewMessageOverlay } from "@/components/CrewMessageOverlay";
 import { useRemoteCrew } from "@/hooks/use-remote-crew";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
@@ -79,6 +80,7 @@ function SoundboardPage() {
   const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(null);
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [duplicateName, setDuplicateName] = useState(false);
+  const [audioSynced, setAudioSynced] = useState(false);
 
   useEffect(() => {
     const identity = readCrewSessionIdentity(browserSessionStorage());
@@ -249,10 +251,14 @@ function SoundboardPage() {
           unlockAudio={unlockAudio}
           onContinue={(identity) => {
             setDuplicateName(false);
+            setAudioSynced(false);
             const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
             setCrewIdentity({ ...(saved ?? identity), audioReady: identity.audioReady });
           }}
         />
+      )}
+      {crewIdentity?.restaurantId && !audioSynced && (
+        <SyncDialog restaurantId={crewIdentity.restaurantId} onSynced={() => setAudioSynced(true)} />
       )}
       {(remoteCrew.needsAudioRecovery || !crewIdentity?.audioReady) && crewIdentity && (
         <div className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 brutal-border bg-card p-3 text-center">
