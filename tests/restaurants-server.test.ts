@@ -11,3 +11,11 @@ it("exports createRestaurant bound to service-role client behind super admin", (
   expect(source).toContain('client.from("restaurants").insert');
   expect(source).toContain("restaurants_code_key");
 });
+
+it("exports loginToRestaurant with PIN validation and session creation", () => {
+  const source = server();
+  expect(source).toContain("loginToRestaurant");
+  expect(source).toContain("validateTenantLogin");
+  expect(source).toContain("Resto tidak aktif");
+  expect(source).toContain("restaurant_sessions");
+});
