@@ -4,6 +4,15 @@ import { requireSuperAdmin } from "./auth.server";
 import { normalizeRestaurantCode, validateTenantLogin } from "./restaurant-domain";
 import { getServiceClient } from "./remote-audio.server";
 
+export type ManifestItem = {
+  audioId: string;
+  label: string;
+  category: string;
+  r2Url: string;
+  contentHash: string;
+  byteSize: number;
+};
+
 function offline() {
   return { offline: true as const, message: "Realtime offline" };
 }
@@ -71,6 +80,38 @@ export const createRestaurant = createServerFn({ method: "POST" })
       if (error?.message.includes("restaurants_code_key"))
         return { error: "Kode resto sudah dipakai." };
       return error ? offline() : { ok: true as const };
+    } catch {
+      return offline();
+    }
+  });
+
+export const getRestaurantManifest = createServerFn({ method: "GET" })
+  .validator(z.object({ restaurantId: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    const client = getServiceClient();
+    if (!client) return offline();
+
+    try {
+      const { data: items, error } = await client
+        .from("audio_manifests")
+        .select("audio_id, label, category, r2_url, content_hash, byte_size")
+        .eq("restaurant_id", data.restaurantId)
+        .eq("active", true)
+        .order("category")
+        .order("ordering");
+
+      if (error) return offline();
+
+      const manifest: ManifestItem[] = (items ?? []).map((row) => ({
+        audioId: row.audio_id,
+        label: row.label,
+        category: row.category,
+        r2Url: row.r2_url,
+        contentHash: row.content_hash,
+        byteSize: row.byte_size,
+      }));
+
+      return { ok: true as const, manifest };
     } catch {
       return offline();
     }

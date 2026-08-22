@@ -19,3 +19,11 @@ it("exports loginToRestaurant with PIN validation and session creation", () => {
   expect(source).toContain("Resto tidak aktif");
   expect(source).toContain("restaurant_sessions");
 });
+
+it("exports getRestaurantManifest that queries active audio_manifests", () => {
+  const source = server();
+  expect(source).toContain("getRestaurantManifest");
+  expect(source).toContain('from("audio_manifests")');
+  expect(source).toContain("content_hash");
+  expect(source).toContain("byte_size");
+});
