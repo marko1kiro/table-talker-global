@@ -13,7 +13,7 @@ function History() {
   const now = useMemo(() => new Date(), []);
   const initial = normalizeHistoryRange({}, now);
   const [restaurantId, setRestaurantId] = useState("");
-  const [type, setType] = useState<"playback" | "sync">("playback");
+  const [type, setType] = useState<"playback" | "sync" | "broadcast">("playback");
   const [status, setStatus] = useState("");
   const [text, setText] = useState("");
   const [from, setFrom] = useState(initial.ok ? initial.from.slice(0, 10) : dateInput(now));
@@ -74,13 +74,14 @@ function History() {
           <select
             value={type}
             onChange={(event) => {
-              setType(event.target.value as "playback" | "sync");
+              setType(event.target.value as "playback" | "sync" | "broadcast");
               setStatus("");
               setPage(1);
             }}
           >
             <option value="playback">Playback</option>
             <option value="sync">Sinkronisasi</option>
+            <option value="broadcast">Broadcast</option>
           </select>
         </label>
         <label>
@@ -97,6 +98,13 @@ function History() {
               <>
                 <option value="played">Diputar</option>
                 <option value="failed">Gagal</option>
+              </>
+            ) : type === "broadcast" ? (
+              <>
+                <option value="delivered">Terkirim</option>
+                <option value="failed">Gagal</option>
+                <option value="rejected">Ditolak</option>
+                <option value="expired">Kedaluwarsa</option>
               </>
             ) : (
               <>

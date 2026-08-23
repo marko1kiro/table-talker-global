@@ -6,11 +6,12 @@ const file = (path: string) => readFileSync(new URL(`../${path}`, import.meta.ur
 it("protects bounded owner history queries", () => {
   const source = file("src/lib/owner-history.server.ts");
   expect(source).toContain("await requireSuperAdmin()");
-  expect(source).toContain('type: z.enum(["playback", "sync"])');
+  expect(source).toContain('type: z.enum(["playback", "sync", "broadcast"])');
   expect(source).toContain("normalizeHistoryRange");
   expect(source).toContain("normalizeHistorySearch");
   expect(source).toContain("PAGE_SIZE = 50");
   expect(source).toContain('.order("occurred_at", { ascending: false })');
+  expect(source).toContain("owner_broadcast_deliveries");
 });
 
 it("filters safe operational error fields and records resolution metadata", () => {
