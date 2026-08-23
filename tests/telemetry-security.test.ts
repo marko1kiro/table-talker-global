@@ -21,7 +21,7 @@ it("derives operational-error tenant identity from verified tenant token", () =>
 });
 
 it("requires playback restaurant_id and records actual claimed crew session ID", () => {
-  const migration = source("../supabase/migrations/20260823103000_secure_telemetry.sql");
+  const migration = source("../supabase/migrations/20260823103500_secure_telemetry.sql");
   expect(migration).toMatch(/alter column restaurant_id set not null/i);
 
   const identity = source("../src/lib/crew-session-identity.ts");

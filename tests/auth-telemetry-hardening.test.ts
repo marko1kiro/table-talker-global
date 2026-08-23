@@ -37,6 +37,27 @@ it("binds telemetry to a token minted for claimed crew session", () => {
   expect(playback).toContain("crewSessionId !== session.crewSessionId");
 });
 
+it("drops exact prior claim signature before replacing its return type", () => {
+  const migration = source("../supabase/migrations/20260823105000_crew_session_tokens.sql");
+  const drop = migration.indexOf("drop function if exists public.claim_crew_session(uuid, text, text, text, text, boolean, text)");
+  const create = migration.indexOf("create or replace function public.claim_crew_session");
+  const grant = migration.indexOf("grant execute on function public.claim_crew_session(uuid, text, text, text, text, boolean, text) to authenticated");
+  expect(drop).toBeGreaterThan(-1);
+  expect(drop).toBeLessThan(create);
+  expect(create).toBeLessThan(grant);
+});
+
+it("makes telemetry migration versions unique and backfills restaurant IDs before NOT NULL", () => {
+  const migration = source("../supabase/migrations/20260823103500_secure_telemetry.sql");
+  const backfill = migration.indexOf("update public.playback_events");
+  const removeUnattributable = migration.indexOf("delete from public.playback_events where restaurant_id is null");
+  const notNull = migration.indexOf("alter column restaurant_id set not null");
+  expect(backfill).toBeGreaterThan(-1);
+  expect(backfill).toBeLessThan(notNull);
+  expect(removeUnattributable).toBeGreaterThan(backfill);
+  expect(removeUnattributable).toBeLessThan(notNull);
+});
+
 it("uses database RPCs for login and operational-error rate limits", () => {
   const migration = source("../supabase/migrations/20260823104000_login_rate_limit.sql");
   expect(migration).toMatch(/create table public\.login_rate_limits/i);
@@ -46,8 +67,23 @@ it("uses database RPCs for login and operational-error rate limits", () => {
 
   const restaurants = source("../src/lib/restaurants.server.ts");
   expect(restaurants).toContain('rpc("check_tenant_login_rate_limit"');
+  expect(restaurants).toMatch(/const \{ data: limited, error: rateLimitError \} = await client\.rpc\("check_tenant_login_rate_limit"/);
+  expect(restaurants).toContain("if (rateLimitError || limited)");
   expect(restaurants).toContain('rpc("record_tenant_login_failure"');
   expect(restaurants).not.toContain("isTenantLoginRateLimited");
+});
+
+it("refreshes crew session token even when the session ID stays stable", () => {
+  const index = source("../src/routes/index.tsx");
+  expect(index).toContain("if (!identity) return;");
+  expect(index).not.toContain("identity.crewSessionId === crewSessionId) return");
+});
+
+it("gets localStorage client key outside dialog render", () => {
+  const dialog = source("../src/components/CrewIdentityDialog.tsx");
+  expect(dialog).toContain("function getClientKey()");
+  expect(dialog).not.toContain('const clientKey = typeof window === "undefined"');
+  expect(dialog).toContain("const clientKey = getClientKey();");
 });
 
 it("only writes bounded allowlisted operational errors with valid tenant session", () => {

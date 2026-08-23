@@ -41,11 +41,11 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
 
       const clientKeyHash = hashTenantSession(data.clientKey);
       if (!restaurant || lookupError) return { error: "Kode resto atau PIN salah." };
-      const { data: limited } = await client.rpc("check_tenant_login_rate_limit", {
+      const { data: limited, error: rateLimitError } = await client.rpc("check_tenant_login_rate_limit", {
         p_restaurant_id: restaurant.id,
         p_client_key_hash: clientKeyHash,
       });
-      if (limited) return { error: "Kode resto atau PIN salah." };
+      if (rateLimitError || limited) return { error: "Kode resto atau PIN salah." };
       if (!verifyRestaurantPin(data.pin, restaurant.pin_hash)) {
         await client.rpc("record_tenant_login_failure", {
           p_restaurant_id: restaurant.id,

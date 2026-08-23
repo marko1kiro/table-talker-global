@@ -54,3 +54,10 @@ it("retries only failed manifest items and shows a stable report code", () => {
   expect(source).toContain("res.manifest.filter");
   expect(source).toContain("Laporan:");
 });
+
+it("clears failed retry IDs when restaurant session changes", () => {
+  const source = component();
+  const sessionEffect = source.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[restaurantId, tenantToken\]\);/);
+  expect(sessionEffect).not.toBeNull();
+  expect(sessionEffect?.[0]).toContain("failedManifestRef.current = null");
+});

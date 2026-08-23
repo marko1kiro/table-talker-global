@@ -54,6 +54,13 @@ it("uses bounded memory mirror synchronously during pagehide without deleting ev
   expect(source).toContain("new Map(pagehideEventsRef.current.map");
 });
 
+it("includes required crew session token in pagehide telemetry payload", () => {
+  const source = eventFlush();
+  const pagehide = source.match(/const handlePageHide = \(\) => \{[\s\S]*?\n    \};/);
+  expect(pagehide).not.toBeNull();
+  expect(pagehide?.[0]).toMatch(/JSON\.stringify\(\{ tenantToken: batch\[0\]\.tenantToken, crewSessionToken, events: batch \}\)/);
+});
+
 it("prestages event in memory before awaiting IndexedDB", () => {
   const source = eventFlush();
   const recordEvent = source.match(/async \(event: PlaybackEvent\) => \{[\s\S]*?\n    \},/);

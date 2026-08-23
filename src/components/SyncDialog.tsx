@@ -114,6 +114,7 @@ export function SyncDialog({ restaurantId, tenantToken, onSynced }: SyncDialogPr
   };
 
   useEffect(() => {
+    failedManifestRef.current = null;
     runSync();
     return () => {
       runGateRef.current.cancel();

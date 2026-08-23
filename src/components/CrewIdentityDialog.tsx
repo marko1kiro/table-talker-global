@@ -9,6 +9,14 @@ export type CrewIdentity = CrewSessionIdentity & { audioReady: boolean };
 
 type Step = "restaurant" | "name";
 
+function getClientKey() {
+  const key = window.localStorage.getItem("table-talker.login-client-key");
+  if (key) return key;
+  const next = crypto.randomUUID();
+  window.localStorage.setItem("table-talker.login-client-key", next);
+  return next;
+}
+
 export function CrewIdentityDialog({
   open,
   duplicateName,
@@ -26,13 +34,6 @@ export function CrewIdentityDialog({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const clientKey = typeof window === "undefined" ? "server-client-key-000" : (() => {
-    const key = window.localStorage.getItem("table-talker.login-client-key");
-    if (key) return key;
-    const next = crypto.randomUUID();
-    window.localStorage.setItem("table-talker.login-client-key", next);
-    return next;
-  })();
   const [restaurantInfo, setRestaurantInfo] = useState<{
     restaurantId: string;
     restaurantCode: string;
@@ -47,6 +48,7 @@ export function CrewIdentityDialog({
     setSubmitting(true);
     setError("");
     try {
+      const clientKey = getClientKey();
       const result = await loginToRestaurant({ data: { code, pin, clientKey } });
       if ("error" in result) {
         setError(result.error as string);

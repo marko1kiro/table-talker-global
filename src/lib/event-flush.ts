@@ -8,7 +8,7 @@ const PAGEHIDE_MIRROR_LIMIT = BATCH_SIZE;
 
 type FlushFn = (events: PlaybackEvent[]) => Promise<{ ok: boolean; ids: string[] }>;
 
-export function useEventFlush(flushToServer: FlushFn) {
+export function useEventFlush(flushToServer: FlushFn, getCrewSessionToken: () => string) {
   const flushingRef = useRef(false);
   const pagehideEventsRef = useRef<PlaybackEvent[]>([]);
 
@@ -73,7 +73,8 @@ export function useEventFlush(flushToServer: FlushFn) {
       const events = pagehideEventsRef.current;
       const batch = events.filter((event) => event.tenantToken === events[0]?.tenantToken).slice(0, BATCH_SIZE);
       if (!batch.length) return;
-      const body = JSON.stringify({ tenantToken: batch[0].tenantToken, events: batch });
+      const crewSessionToken = getCrewSessionToken();
+      const body = JSON.stringify({ tenantToken: batch[0].tenantToken, crewSessionToken, events: batch });
       if (navigator.sendBeacon?.("/api/telemetry", new Blob([body], { type: "text/plain" }))) return;
       void fetch("/api/telemetry", {
         method: "POST",
@@ -85,7 +86,7 @@ export function useEventFlush(flushToServer: FlushFn) {
 
     window.addEventListener("pagehide", handlePageHide);
     return () => window.removeEventListener("pagehide", handlePageHide);
-  }, [flush]);
+  }, [getCrewSessionToken, flush]);
 
   return { recordEvent, flush };
 }

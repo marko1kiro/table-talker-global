@@ -88,7 +88,7 @@ function SoundboardPage() {
 
   const onCrewSessionId = useCallback((crewSessionId: string, crewSessionToken: string) => {
     const identity = crewIdentityRef.current;
-    if (!identity || identity.crewSessionId === crewSessionId) return;
+    if (!identity) return;
     const nextIdentity = { ...identity, crewSessionId, crewSessionToken };
     writeCrewSessionIdentity(browserSessionStorage(), nextIdentity);
     setCrewIdentity(nextIdentity);
@@ -103,7 +103,7 @@ function SoundboardPage() {
     return { ok: result.ok, ids: result.ids };
   }, []);
 
-  const { recordEvent } = useEventFlush(flushToServer);
+  const { recordEvent } = useEventFlush(flushToServer, () => crewIdentityRef.current?.crewSessionToken ?? "");
 
   useEffect(() => {
     const identity = readCrewSessionIdentity(browserSessionStorage());

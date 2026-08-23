@@ -8,6 +8,7 @@ create index crew_session_tokens_session_idx on public.crew_session_tokens (crew
 alter table public.crew_session_tokens enable row level security;
 revoke all on public.crew_session_tokens from public, anon, authenticated;
 
+drop function if exists public.claim_crew_session(uuid, text, text, text, text, boolean, text);
 create or replace function public.claim_crew_session(p_restaurant_id uuid, p_tenant_token text, p_display_name text, p_normalized_name text, p_device_description text, p_audio_ready boolean, p_visibility_state text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare result public.crew_sessions; v_token text := encode(gen_random_bytes(32), 'hex');
