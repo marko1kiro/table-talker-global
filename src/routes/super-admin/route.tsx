@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { createFileRoute, Link, Outlet, useRouter } from "@tanstack/react-router";
-import { Menu, X } from "lucide-react";
+import { Menu } from "lucide-react";
 import { AuthGate } from "@/components/AuthGate";
 import { getAuthStatus, loginSuperAdmin } from "@/lib/auth";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 const nav = [
   ["Dashboard", "/super-admin"],
@@ -51,32 +52,14 @@ function OwnerShell() {
       <aside className="brutal-border fixed inset-y-0 left-0 z-30 hidden w-64 bg-card p-4 md:block">
         <Navigation onNavigate={() => setMenuOpen(false)} />
       </aside>
-      {menuOpen && (
-        <div
-          className="fixed inset-0 z-40 md:hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Navigasi owner"
-        >
-          <button
-            type="button"
-            aria-label="Tutup navigasi owner"
-            onClick={() => setMenuOpen(false)}
-            className="absolute inset-0 bg-foreground/40"
-          />
-          <aside className="brutal-border relative h-full w-72 bg-card p-4">
-            <button
-              type="button"
-              aria-label="Tutup navigasi"
-              onClick={() => setMenuOpen(false)}
-              className="brutal-border brutal-press absolute right-4 top-4 bg-accent p-2"
-            >
-              <X className="size-5" />
-            </button>
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <SheetContent side="left" className="brutal-border w-72 bg-card p-4 md:hidden">
+          <SheetTitle className="sr-only">Navigasi owner</SheetTitle>
+          <div className="pt-6">
             <Navigation onNavigate={() => setMenuOpen(false)} />
-          </aside>
-        </div>
-      )}
+          </div>
+        </SheetContent>
+      </Sheet>
       <section className="mx-auto max-w-7xl p-4 pt-20 md:ml-64 md:p-8">
         <Outlet />
       </section>

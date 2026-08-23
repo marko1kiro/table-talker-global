@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { getOwnerDashboardSnapshot } from "@/lib/owner-dashboard.server";
+import { mergeDashboardHealth, type HealthStatus } from "@/lib/owner-dashboard-domain";
 
 const key = ["owner-dashboard"] as const;
 
@@ -44,6 +45,10 @@ function OwnerDashboard() {
     );
 
   const { health, aggregates } = snapshot.data;
+  const dashboardHealth = mergeDashboardHealth(health, {
+    status: realtime === "SUBSCRIBED" ? "healthy" : "unavailable",
+    message: realtime,
+  });
   const metrics = aggregates
     ? [
         {
@@ -84,15 +89,9 @@ function OwnerDashboard() {
   return (
     <Panel title="Dashboard">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {Object.entries({
-          ...health,
-          realtime: {
-            status: realtime === "SUBSCRIBED" ? "healthy" : "unavailable",
-            message: realtime,
-          },
-        } as Record<string, { status: string; message?: string }>).map(([name, result]) => (
+        {Object.entries(dashboardHealth).map(([name, result]) => (
           <div key={name} className="brutal-border p-3">
-            <p className="font-display uppercase">{name}</p>
+            <p className="font-display uppercase">{healthName(name)}</p>
             <p
               className={
                 result.status === "healthy"
@@ -100,7 +99,7 @@ function OwnerDashboard() {
                   : "font-bold text-destructive"
               }
             >
-              {result.status === "healthy" ? "Sehat" : (result.message ?? "Tidak tersedia")}
+              {healthLabel(result)}
             </p>
             {name === "realtime" && result.status !== "healthy" && (
               <button
@@ -139,6 +138,25 @@ function OwnerDashboard() {
       {snapshot.isFetching && <p className="mt-4 text-sm">Memperbarui...</p>}
       <Retry onClick={() => snapshot.refetch()} />
     </Panel>
+  );
+}
+
+function healthLabel(result: HealthStatus) {
+  if (result.status === "healthy") return "Sehat";
+  if (result.status === "timeout") return "Waktu habis";
+  return result.message ?? "Tidak tersedia";
+}
+
+function healthName(name: string) {
+  return (
+    (
+      {
+        database: "Database",
+        r2: "Penyimpanan R2",
+        api: "API dan Deployment",
+        realtime: "Realtime",
+      } as Record<string, string>
+    )[name] ?? name
   );
 }
 

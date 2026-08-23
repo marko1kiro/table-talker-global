@@ -33,8 +33,20 @@ it("keeps dashboard server-only, protected, bounded, and independently degraded"
   expect(server).toContain('new URL("/api/health", getRequest().url)');
   expect(server).toContain("fetch(apiHealthUrl)");
   expect(server).toContain("response.ok");
+  expect(server).toContain('apiResult.status === "fulfilled" ? apiResult.value');
   expect(server).not.toContain("getChannels");
   expect(server).toContain('rpc("owner_dashboard_snapshot", { p_since: since })');
+});
+
+it("uses accessible Sheet navigation and indexed dashboard predicates", () => {
+  const shell = source("../src/routes/super-admin/route.tsx");
+  const migration = source("../supabase/migrations/20260824001000_owner_dashboard_rpc.sql");
+  expect(shell).toContain('from "@/components/ui/sheet"');
+  expect(shell).toContain("<Sheet");
+  expect(shell).not.toContain('role="dialog"');
+  expect(migration).toContain("playback_events (status, event_timestamp desc)");
+  expect(migration).toContain("crew_sessions (connection_state, visibility_state, last_seen desc)");
+  expect(migration).toContain("greatest(now() - interval '30 days', least(p_since, now()))");
 });
 
 it("serves a safe no-store API health response before SSR", () => {
@@ -54,7 +66,7 @@ it("uses service-only dashboard RPC with browser roles revoked", () => {
     "create or replace function public.owner_dashboard_snapshot(p_since timestamptz)",
   );
   expect(migration).toContain(
-    "resolved_at is null and occurred_at >= p_since and stage = 'sync_cache'",
+    "resolved_at is null and occurred_at >= (select since from bounds) and stage = 'sync_cache'",
   );
   expect(migration).toContain("operational_errors_unresolved_stage_occurred_idx");
   expect(migration).toContain(

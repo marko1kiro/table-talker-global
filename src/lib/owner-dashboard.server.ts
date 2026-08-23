@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { requireSuperAdmin } from "./auth.server";
-import { mergeDashboardHealth, withTimeout, type HealthStatus } from "./owner-dashboard-domain";
+import { withTimeout, type HealthStatus } from "./owner-dashboard-domain";
 import { getR2Health } from "./r2.server";
 import { getServiceClient } from "./remote-audio.server";
 
@@ -47,16 +47,14 @@ export const getOwnerDashboardSnapshot = createServerFn({ method: "GET" }).handl
       : { health: unavailable("Database tidak merespons."), aggregates: null };
   const r2 = r2Result.status === "fulfilled" ? r2Result.value : unavailable("R2 tidak merespons.");
   const api =
-    apiResult.status === "fulfilled" && apiResult.value.status === "healthy"
-      ? apiResult.value
-      : unavailable("API tidak merespons.");
+    apiResult.status === "fulfilled" ? apiResult.value : unavailable("API tidak merespons.");
 
   return {
-    health: mergeDashboardHealth({
+    health: {
       database: database.health,
       r2,
       api,
-    }),
+    },
     aggregates: database.aggregates,
     deployment: process.env.VERCEL_ENV
       ? { provider: "vercel", environment: process.env.VERCEL_ENV }

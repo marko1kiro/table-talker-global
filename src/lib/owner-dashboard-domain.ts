@@ -5,8 +5,19 @@ export type HealthStatus = {
   message?: string;
 };
 
-export function mergeDashboardHealth<T extends Record<string, HealthStatus>>(health: T): T {
-  return health;
+export function mergeDashboardHealth<T extends Record<string, HealthStatus>>(
+  health: T,
+  realtime: HealthStatus,
+): T & { realtime: HealthStatus } {
+  return { ...health, realtime };
+}
+
+export function clampDashboardSince(value: string, now = Date.now()): string {
+  const timestamp = Date.parse(value);
+  const maximumAge = now - 30 * 24 * 60 * 60 * 1000;
+  return new Date(
+    Math.min(now, Math.max(maximumAge, Number.isNaN(timestamp) ? now : timestamp)),
+  ).toISOString();
 }
 
 export function withTimeout<T>(
