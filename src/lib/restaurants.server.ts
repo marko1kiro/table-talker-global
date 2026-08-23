@@ -1,15 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { validateRestaurantCode } from "./restaurant-domain";
 import { getServiceClient } from "./remote-audio.server";
 import {
-  createTenantSession,
   hashTenantSession,
-  hashRestaurantPin,
-  verifyRestaurantPin,
   verifyActiveTenantSession,
 } from "./tenant-session.server";
+import { createOpaqueRestaurantToken } from "./restaurant-session.server";
 
 export type ManifestItem = {
   audioId: string;
@@ -24,6 +23,13 @@ function offline() {
   return { offline: true as const, message: "Realtime offline" };
 }
 
+function verifyLegacyRestaurantPin(pin: string, pinHash: string | null): boolean {
+  if (!pinHash || !/^[a-f0-9]{64}$/i.test(pinHash)) return false;
+  const expected = Buffer.from(pinHash, "hex");
+  const candidate = createHash("sha256").update(pin).digest();
+  return timingSafeEqual(candidate, expected);
+}
+
 export const loginToRestaurant = createServerFn({ method: "POST" })
   .validator(z.object({ code: z.string(), pin: z.string(), clientKey: z.string().min(16).max(200) }))
   .handler(async ({ data }) => {
@@ -35,7 +41,7 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
       if ("error" in validated) return { error: validated.error };
        const { data: restaurant, error: lookupError } = await client
         .from("restaurants")
-        .select("id, code, display_name, is_active, deactivated_reason, pin_hash")
+        .select("id, code, code_version, display_name, is_active, deactivated_reason, pin_hash")
         .ilike("code", validated.code)
         .single();
 
@@ -46,7 +52,7 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
         p_client_key_hash: clientKeyHash,
       });
       if (rateLimitError || limited) return { error: "Kode resto atau PIN salah." };
-      if (!verifyRestaurantPin(data.pin, restaurant.pin_hash)) {
+      if (!verifyLegacyRestaurantPin(data.pin, restaurant.pin_hash)) {
         await client.rpc("record_tenant_login_failure", {
           p_restaurant_id: restaurant.id,
           p_client_key_hash: clientKeyHash,
@@ -72,11 +78,12 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
 
       if (sessionError) return offline();
 
-      const tenantToken = createTenantSession(restaurant.id);
+      const tenantToken = createOpaqueRestaurantToken();
        const { error: accessError } = await client.from("restaurant_access_tokens").insert({
          token_hash: hashTenantSession(tenantToken),
          restaurant_id: restaurant.id,
-         expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          code_version: restaurant.code_version,
+          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });
       if (accessError) return offline();
 
@@ -128,7 +135,7 @@ export const setRestaurantPin = createServerFn({ method: "POST" })
     try {
       const { error } = await client
         .from("restaurants")
-        .update({ pin_hash: hashRestaurantPin(data.pin) })
+        .update({ pin_hash: createHash("sha256").update(data.pin).digest("hex") })
         .eq("id", data.restaurantId);
       return error ? offline() : { ok: true as const };
     } catch {

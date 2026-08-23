@@ -12,11 +12,11 @@ it("exports createRestaurant bound to service-role client behind super admin", (
   expect(source).toContain("restaurants_code_key");
 });
 
-it("exports loginToRestaurant with server-only PIN verification and scoped token", () => {
+it("exports loginToRestaurant with opaque token scoped to credential version", () => {
   const source = server();
   expect(source).toContain("loginToRestaurant");
-  expect(source).toContain("verifyRestaurantPin");
-  expect(source).toContain("createTenantSession");
+  expect(source).toContain("createOpaqueRestaurantToken");
+  expect(source).toContain("code_version: restaurant.code_version");
   expect(source).toContain('rpc("check_tenant_login_rate_limit"');
   expect(source).toContain("pin_hash");
   expect(source).toContain("Resto tidak aktif");

@@ -11,10 +11,11 @@ it("drops obsolete RPCs without revoking missing signatures", () => {
 });
 
 it("uses active database-backed tenant sessions for server tenant access", () => {
-  const tenant = source("../src/lib/tenant-session.server.ts");
+  const tenant = source("../src/lib/restaurant-session.server.ts");
   expect(tenant).toContain("verifyActiveTenantSession");
   expect(tenant).toContain("restaurant_access_tokens");
   expect(tenant).toContain('"is_active", true');
+  expect(tenant).toContain("data.code_version !== data.restaurants.code_version");
 
   for (const path of [
     "../src/lib/restaurants.server.ts",
@@ -105,10 +106,11 @@ it("accepts stable sync report codes without accepting arbitrary report codes", 
   expect(errors).toContain("OPERATIONS_REPORT_CODES.has(data.error.reportCode)");
 });
 
-it("limits session-storage tenant token lifetime and documents XSS exposure", () => {
-  const tenant = source("../src/lib/tenant-session.server.ts");
-  expect(tenant).toContain("const TOKEN_MAX_AGE_SECONDS = 60 * 60");
-  expect(tenant).not.toContain("60 * 60 * 12");
+it("uses opaque random tenant tokens and documents XSS exposure", () => {
+  const tenant = source("../src/lib/restaurant-session.server.ts");
+  expect(tenant).toContain("randomBytes(32)");
+  expect(tenant).toContain('toString("base64url")');
+  expect(tenant).not.toContain("createHmac");
 
   const identity = source("../src/lib/crew-session-identity.ts");
   expect(identity).toContain("sessionStorage");
