@@ -84,11 +84,15 @@ export function RestaurantCredentialDialog({
     onOpenChange(false);
   };
 
-  const title = mode === "create" ? "Buat Resto" : mode === "view" ? "Kode Resto" : "Ganti Kode Resto";
+  const title =
+    mode === "create" ? "Buat Resto" : mode === "view" ? "Kode Resto" : "Ganti Kode Resto";
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent aria-describedby="restaurant-credential-description" className="brutal-border brutal-shadow-lg">
+      <DialogContent
+        aria-describedby="restaurant-credential-description"
+        className="brutal-border brutal-shadow-lg"
+      >
         <DialogTitle className="font-display text-xl">{title}</DialogTitle>
         <DialogDescription id="restaurant-credential-description">
           {restaurant ? restaurant.displayName : "Masukkan Nama Resto dan Kode Resto baru."}
@@ -96,23 +100,84 @@ export function RestaurantCredentialDialog({
         {mode === "view" ? (
           <div className="space-y-4">
             <Input aria-label="Kode Resto" type="password" value={viewedCode} readOnly />
-            <button type="button" className="brutal-border brutal-press w-full bg-accent px-4 py-3 font-display" disabled={pending} onClick={() => void reveal()}>
+            <button
+              type="button"
+              className="brutal-border brutal-press w-full bg-accent px-4 py-3 font-display"
+              disabled={pending}
+              onClick={() => void reveal()}
+            >
               Tampilkan Kode Resto
             </button>
-            {error && <p role="alert" className="text-sm font-bold text-destructive">{error}</p>}
+            {error && (
+              <p role="alert" className="text-sm font-bold text-destructive">
+                {error}
+              </p>
+            )}
           </div>
         ) : (
           <form className="space-y-4" onSubmit={(event) => void submit(event)}>
             {mode === "create" ? (
-              <label className="block text-sm font-bold" htmlFor="restaurant-display-name">Nama Resto<Input id="restaurant-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>
+              <label className="block text-sm font-bold" htmlFor="restaurant-display-name">
+                Nama Resto
+                <Input
+                  id="restaurant-display-name"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  required
+                />
+              </label>
             ) : (
-              <label className="block text-sm font-bold" htmlFor="restaurant-name-confirmation">Ketik ulang Nama Resto<Input id="restaurant-name-confirmation" value={displayNameConfirmation} onChange={(event) => setDisplayNameConfirmation(event.target.value)} required /></label>
+              <label className="block text-sm font-bold" htmlFor="restaurant-name-confirmation">
+                Ketik ulang Nama Resto
+                <Input
+                  id="restaurant-name-confirmation"
+                  value={displayNameConfirmation}
+                  onChange={(event) => setDisplayNameConfirmation(event.target.value)}
+                  required
+                />
+              </label>
             )}
-            <label className="block text-sm font-bold" htmlFor="restaurant-new-code">Kode Resto<Input id="restaurant-new-code" type={showCode ? "text" : "password"} value={code} onChange={(event) => setCode(event.target.value)} required /></label>
-            {mode === "rotate" && <label className="block text-sm font-bold" htmlFor="restaurant-code-confirmation">Ketik ulang Kode Resto<Input id="restaurant-code-confirmation" type={showCode ? "text" : "password"} value={codeConfirmation} onChange={(event) => setCodeConfirmation(event.target.value)} required /></label>}
-            <button type="button" className="underline" onClick={() => setShowCode((value) => !value)}>Tampilkan input Kode Resto</button>
-            {error && <p role="alert" className="text-sm font-bold text-destructive">{error}</p>}
-            <button type="submit" disabled={pending} className="brutal-border brutal-press w-full bg-accent px-4 py-3 font-display disabled:opacity-60">{pending ? "Menyimpan..." : "Simpan"}</button>
+            <label className="block text-sm font-bold" htmlFor="restaurant-new-code">
+              Kode Resto
+              <Input
+                id="restaurant-new-code"
+                type={showCode ? "text" : "password"}
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                required
+              />
+            </label>
+            {mode === "rotate" && (
+              <label className="block text-sm font-bold" htmlFor="restaurant-code-confirmation">
+                Ketik ulang Kode Resto
+                <Input
+                  id="restaurant-code-confirmation"
+                  type={showCode ? "text" : "password"}
+                  value={codeConfirmation}
+                  onChange={(event) => setCodeConfirmation(event.target.value)}
+                  required
+                />
+              </label>
+            )}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => setShowCode((value) => !value)}
+            >
+              Tampilkan input Kode Resto
+            </button>
+            {error && (
+              <p role="alert" className="text-sm font-bold text-destructive">
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={pending}
+              className="brutal-border brutal-press w-full bg-accent px-4 py-3 font-display disabled:opacity-60"
+            >
+              {pending ? "Menyimpan..." : "Simpan"}
+            </button>
           </form>
         )}
       </DialogContent>

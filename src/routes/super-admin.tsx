@@ -13,11 +13,7 @@ import {
   sendCrewMessage,
 } from "@/lib/remote-audio.server";
 import { listRestaurants } from "@/lib/restaurants.server";
-import {
-  listManifestItems,
-  toggleManifestItem,
-  upsertManifestItem,
-} from "@/lib/manifest.server";
+import { listManifestItems, toggleManifestItem, upsertManifestItem } from "@/lib/manifest.server";
 import { requestR2Upload } from "@/lib/upload.server";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
@@ -342,7 +338,13 @@ function AudioManagementSection() {
         Kelola audio manifest per resto. Upload file MP3 ke R2, atur label dan kategori.
       </p>
       <div className="mt-4">
-        <button type="button" className="brutal-border brutal-press mb-4 bg-accent px-3 py-2 font-display" onClick={() => setCredentialDialog({ mode: "create" })}>Buat Resto</button>
+        <button
+          type="button"
+          className="brutal-border brutal-press mb-4 bg-accent px-3 py-2 font-display"
+          onClick={() => setCredentialDialog({ mode: "create" })}
+        >
+          Buat Resto
+        </button>
         <label className="text-sm font-bold">
           Pilih Resto
           <select
@@ -351,21 +353,50 @@ function AudioManagementSection() {
             className="brutal-border mt-1 w-full bg-background px-3 py-2 font-normal"
           >
             <option value="">Pilih resto</option>
-            {restaurants.map((r: { id: string; display_name: string; catalog_version: number | null }) => (
-              <option key={r.id} value={r.id}>
-                {r.display_name} (v{r.catalog_version ?? 0})
-              </option>
-            ))}
+            {restaurants.map(
+              (r: { id: string; display_name: string; catalog_version: number | null }) => (
+                <option key={r.id} value={r.id}>
+                  {r.display_name} (v{r.catalog_version ?? 0})
+                </option>
+              ),
+            )}
           </select>
         </label>
       </div>
       <div className="mt-4 space-y-2" aria-label="Daftar resto">
         {restaurants.map((restaurant: { id: string; display_name: string }) => (
-          <div key={restaurant.id} className="brutal-border flex flex-wrap items-center justify-between gap-2 p-2">
-            <span>{restaurant.display_name} <span className="font-mono text-xs">{restaurant.id}</span></span>
+          <div
+            key={restaurant.id}
+            className="brutal-border flex flex-wrap items-center justify-between gap-2 p-2"
+          >
+            <span>
+              {restaurant.display_name} <span className="font-mono text-xs">{restaurant.id}</span>
+            </span>
             <span className="flex gap-2">
-              <button type="button" className="underline" onClick={() => setCredentialDialog({ mode: "view", restaurant: { id: restaurant.id, displayName: restaurant.display_name } })}>Lihat Kode</button>
-              <button type="button" className="underline" onClick={() => setCredentialDialog({ mode: "rotate", restaurant: { id: restaurant.id, displayName: restaurant.display_name } })}>Ganti Kode</button>
+              <button
+                type="button"
+                className="underline"
+                onClick={() =>
+                  setCredentialDialog({
+                    mode: "view",
+                    restaurant: { id: restaurant.id, displayName: restaurant.display_name },
+                  })
+                }
+              >
+                Lihat Kode
+              </button>
+              <button
+                type="button"
+                className="underline"
+                onClick={() =>
+                  setCredentialDialog({
+                    mode: "rotate",
+                    restaurant: { id: restaurant.id, displayName: restaurant.display_name },
+                  })
+                }
+              >
+                Ganti Kode
+              </button>
             </span>
           </div>
         ))}
@@ -373,12 +404,18 @@ function AudioManagementSection() {
       {selectedRestaurantId && (
         <ManifestItemsList
           restaurantId={selectedRestaurantId}
-          onUploadComplete={() =>
-            queryClient.invalidateQueries({ queryKey: ["restaurants-list"] })
-          }
+          onUploadComplete={() => queryClient.invalidateQueries({ queryKey: ["restaurants-list"] })}
         />
       )}
-      {credentialDialog && <RestaurantCredentialDialog open mode={credentialDialog.mode} restaurant={credentialDialog.restaurant} onOpenChange={(open) => !open && setCredentialDialog(null)} onComplete={() => queryClient.invalidateQueries({ queryKey: ["restaurants-list"] })} />}
+      {credentialDialog && (
+        <RestaurantCredentialDialog
+          open
+          mode={credentialDialog.mode}
+          restaurant={credentialDialog.restaurant}
+          onOpenChange={(open) => !open && setCredentialDialog(null)}
+          onComplete={() => queryClient.invalidateQueries({ queryKey: ["restaurants-list"] })}
+        />
+      )}
     </section>
   );
 }
@@ -456,7 +493,9 @@ function ManifestItemsList({
           },
         });
         if (!manifestResult || !("ok" in manifestResult) || !manifestResult.ok) {
-          setUploadError("error" in manifestResult ? manifestResult.error : "Gagal simpan manifest.");
+          setUploadError(
+            "error" in manifestResult ? manifestResult.error : "Gagal simpan manifest.",
+          );
           return;
         }
         setAudioId("");
@@ -507,9 +546,7 @@ function ManifestItemsList({
             className="brutal-border bg-card px-3 py-2 text-sm"
           />
         </div>
-        {uploadError && (
-          <p className="mt-2 text-xs font-bold text-destructive">{uploadError}</p>
-        )}
+        {uploadError && <p className="mt-2 text-xs font-bold text-destructive">{uploadError}</p>}
         <button
           type="button"
           className="brutal-border brutal-press mt-2 w-full bg-accent px-3 py-2 font-display uppercase text-sm"
@@ -532,37 +569,47 @@ function ManifestItemsList({
             </tr>
           </thead>
           <tbody>
-            {items.map((item: { id: string; audio_id: string; label: string; category: string; active: boolean }) => (
-              <tr key={item.id} className="border-b align-top">
-                <td className="p-2 font-mono text-xs">{item.audio_id}</td>
-                <td className="p-2">{item.label}</td>
-                <td className="p-2">{item.category}</td>
-                <td className="p-2">
-                  <span className={item.active ? "text-green-600" : "text-muted-foreground"}>
-                    {item.active ? "Aktif" : "Nonaktif"}
-                  </span>
-                </td>
-                <td className="p-2">
-                  <button
-                    type="button"
-                    className="text-xs underline"
-                    onClick={async () => {
-                      const result = await toggleManifestItem({
-                        data: { restaurantId, audioId: item.audio_id, active: !item.active },
-                      });
-                      if (!result || !("ok" in result) || !result.ok) {
-                        toast.error("error" in result ? result.error : "Gagal mengubah status.");
-                        return;
-                      }
-                      onUploadComplete();
-                      queryClient.invalidateQueries({ queryKey: ["manifest-items", restaurantId] });
-                    }}
-                  >
-                    {item.active ? "Nonaktifkan" : "Aktifkan"}
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {items.map(
+              (item: {
+                id: string;
+                audio_id: string;
+                label: string;
+                category: string;
+                active: boolean;
+              }) => (
+                <tr key={item.id} className="border-b align-top">
+                  <td className="p-2 font-mono text-xs">{item.audio_id}</td>
+                  <td className="p-2">{item.label}</td>
+                  <td className="p-2">{item.category}</td>
+                  <td className="p-2">
+                    <span className={item.active ? "text-green-600" : "text-muted-foreground"}>
+                      {item.active ? "Aktif" : "Nonaktif"}
+                    </span>
+                  </td>
+                  <td className="p-2">
+                    <button
+                      type="button"
+                      className="text-xs underline"
+                      onClick={async () => {
+                        const result = await toggleManifestItem({
+                          data: { restaurantId, audioId: item.audio_id, active: !item.active },
+                        });
+                        if (!result || !("ok" in result) || !result.ok) {
+                          toast.error("error" in result ? result.error : "Gagal mengubah status.");
+                          return;
+                        }
+                        onUploadComplete();
+                        queryClient.invalidateQueries({
+                          queryKey: ["manifest-items", restaurantId],
+                        });
+                      }}
+                    >
+                      {item.active ? "Nonaktifkan" : "Aktifkan"}
+                    </button>
+                  </td>
+                </tr>
+              ),
+            )}
           </tbody>
         </table>
         {items.length === 0 && (

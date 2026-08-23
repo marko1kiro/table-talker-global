@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
-import { verifyActiveTenantSession, verifyCrewSessionToken } from "./tenant-session.server";
 
 const eventSchema = z.object({
   id: z.string().uuid(),
@@ -26,9 +25,15 @@ export async function ingestPlaybackEventBatch(data: z.infer<typeof playbackEven
   if (!client) return { ok: false as const, ids: [] as string[] };
 
   try {
+    const { verifyActiveTenantSession, verifyCrewSessionToken } =
+      await import("./tenant-session.server");
     const tenant = await verifyActiveTenantSession(client, data.tenantToken);
     if (!tenant) return { ok: false as const, ids: [] as string[] };
-    const session = await verifyCrewSessionToken(client, data.crewSessionToken, tenant.restaurantId);
+    const session = await verifyCrewSessionToken(
+      client,
+      data.crewSessionToken,
+      tenant.restaurantId,
+    );
     if (!session || data.events.some((event) => event.crewSessionId !== session.crewSessionId))
       return { ok: false as const, ids: [] as string[] };
     const sessionIds = [...new Set(data.events.map((event) => event.crewSessionId))];

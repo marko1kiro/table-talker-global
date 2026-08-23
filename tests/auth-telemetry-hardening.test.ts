@@ -5,9 +5,13 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), "u
 
 it("drops obsolete RPCs without revoking missing signatures", () => {
   const migration = source("../supabase/migrations/20260823100000_fix_tenant_rpcs.sql");
-  const drop = migration.indexOf("drop function if exists public.claim_crew_session(uuid, text, text, text, boolean, text)");
+  const drop = migration.indexOf(
+    "drop function if exists public.claim_crew_session(uuid, text, text, text, boolean, text)",
+  );
   expect(drop).toBeGreaterThan(-1);
-  expect(migration).not.toContain("revoke all on function public.claim_crew_session(uuid, text, text, text, boolean, text)");
+  expect(migration).not.toContain(
+    "revoke all on function public.claim_crew_session(uuid, text, text, text, boolean, text)",
+  );
 });
 
 it("uses active database-backed tenant sessions for server tenant access", () => {
@@ -40,9 +44,13 @@ it("binds telemetry to a token minted for claimed crew session", () => {
 
 it("drops exact prior claim signature before replacing its return type", () => {
   const migration = source("../supabase/migrations/20260823105000_crew_session_tokens.sql");
-  const drop = migration.indexOf("drop function if exists public.claim_crew_session(uuid, text, text, text, text, boolean, text)");
+  const drop = migration.indexOf(
+    "drop function if exists public.claim_crew_session(uuid, text, text, text, text, boolean, text)",
+  );
   const create = migration.indexOf("create or replace function public.claim_crew_session");
-  const grant = migration.indexOf("grant execute on function public.claim_crew_session(uuid, text, text, text, text, boolean, text) to authenticated");
+  const grant = migration.indexOf(
+    "grant execute on function public.claim_crew_session(uuid, text, text, text, text, boolean, text) to authenticated",
+  );
   expect(drop).toBeGreaterThan(-1);
   expect(drop).toBeLessThan(create);
   expect(create).toBeLessThan(grant);
@@ -51,7 +59,9 @@ it("drops exact prior claim signature before replacing its return type", () => {
 it("makes telemetry migration versions unique and backfills restaurant IDs before NOT NULL", () => {
   const migration = source("../supabase/migrations/20260823103500_secure_telemetry.sql");
   const backfill = migration.indexOf("update public.playback_events");
-  const removeUnattributable = migration.indexOf("delete from public.playback_events where restaurant_id is null");
+  const removeUnattributable = migration.indexOf(
+    "delete from public.playback_events where restaurant_id is null",
+  );
   const notNull = migration.indexOf("alter column restaurant_id set not null");
   expect(backfill).toBeGreaterThan(-1);
   expect(backfill).toBeLessThan(notNull);
@@ -67,8 +77,10 @@ it("uses database RPCs for login and operational-error rate limits", () => {
   expect(migration).toMatch(/create function public\.record_tenant_login_failure/i);
 
   const restaurants = source("../src/lib/restaurants.server.ts");
-  expect(restaurants).toContain('rpc("check_tenant_login_rate_limit"');
-  expect(restaurants).toMatch(/const \{ data: limited, error: rateLimitError \} = await client\.rpc\("check_tenant_login_rate_limit"/);
+  expect(restaurants).toContain("check_tenant_login_rate_limit");
+  expect(restaurants).toMatch(
+    /const \{ data: limited, error: rateLimitError \} = await client\.rpc\([\s\S]*"check_tenant_login_rate_limit"/,
+  );
   expect(restaurants).toContain("if (rateLimitError || limited)");
   expect(restaurants).toContain('rpc("clear_tenant_login_failures"');
   expect(restaurants).not.toContain("isTenantLoginRateLimited");

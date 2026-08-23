@@ -31,7 +31,12 @@ import {
   writeCrewSessionIdentity,
 } from "@/lib/crew-session-identity";
 import { useEventFlush } from "@/lib/event-flush";
-import { clearQueuedEvents, generateEventId, generateDeviceId, type PlaybackEvent } from "@/lib/event-queue";
+import {
+  clearQueuedEvents,
+  generateEventId,
+  generateDeviceId,
+  type PlaybackEvent,
+} from "@/lib/event-queue";
 import { ingestPlaybackEvents } from "@/lib/playback-events.server";
 
 export const Route = createFileRoute("/")({
@@ -98,12 +103,19 @@ function SoundboardPage() {
 
   const flushToServer = useCallback(async (events: PlaybackEvent[]) => {
     const result = await ingestPlaybackEvents({
-      data: { tenantToken: events[0]?.tenantToken ?? "", crewSessionToken: crewIdentityRef.current?.crewSessionToken ?? "", events },
+      data: {
+        tenantToken: events[0]?.tenantToken ?? "",
+        crewSessionToken: crewIdentityRef.current?.crewSessionToken ?? "",
+        events,
+      },
     });
     return { ok: result.ok, ids: result.ids };
   }, []);
 
-  const { recordEvent } = useEventFlush(flushToServer, () => crewIdentityRef.current?.crewSessionToken ?? "");
+  const { recordEvent } = useEventFlush(
+    flushToServer,
+    () => crewIdentityRef.current?.crewSessionToken ?? "",
+  );
 
   useEffect(() => {
     const identity = readCrewSessionIdentity(browserSessionStorage());
@@ -155,7 +167,7 @@ function SoundboardPage() {
   }, [getAudioController]);
 
   const playRemoteAudio = useCallback(
-      async (audioId: AudioId) => {
+    async (audioId: AudioId) => {
       if (!audioSynced) throw new Error("Audio belum selesai disinkronkan.");
       const restaurantId = crewIdentityRef.current?.restaurantId;
       const url = restaurantId ? await getCachedAudioUrl(restaurantId, audioId) : null;
@@ -381,7 +393,7 @@ function SoundboardPage() {
           Remote control tidak tersedia. Soundboard tetap bisa dipakai.
         </p>
       )}
-        <Header readyCount={availableAudioIds.size} totalCount={TABLE_COUNT} />
+      <Header readyCount={availableAudioIds.size} totalCount={TABLE_COUNT} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
         <div className="mb-4 flex items-center justify-between gap-3">

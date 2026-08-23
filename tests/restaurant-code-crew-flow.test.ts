@@ -24,3 +24,15 @@ it("blocks soundboard until sync and clears tenant state when version-bound acce
   expect(hook).toContain("client.removeChannel");
   expect(source("src/components/SyncDialog.tsx")).toContain("onSessionInvalid");
 });
+
+it("does not pull Node credential crypto into crew browser bundle", () => {
+  const server = source("src/lib/restaurants.server.ts");
+  expect(server).not.toContain('from "./restaurant-code.server"');
+  expect(server).not.toContain('from "./restaurant-session.server"');
+  expect(source("src/lib/playback-events.server.ts")).not.toContain(
+    'from "./tenant-session.server"',
+  );
+  expect(source("src/lib/operational-errors.server.ts")).not.toContain(
+    'from "./tenant-session.server"',
+  );
+});

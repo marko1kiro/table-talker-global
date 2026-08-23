@@ -31,7 +31,12 @@ function isOfflineResult(data: unknown): data is { offline: true; message: strin
   return typeof data === "object" && data !== null && "offline" in data;
 }
 
-export function SyncDialog({ restaurantId, tenantToken, onSynced, onSessionInvalid }: SyncDialogProps) {
+export function SyncDialog({
+  restaurantId,
+  tenantToken,
+  onSynced,
+  onSessionInvalid,
+}: SyncDialogProps) {
   const [state, setState] = useState<SyncState>({ phase: "idle" });
   const runGateRef = useRef(createSyncRunGate());
   const failedManifestRef = useRef<Set<string> | null>(null);
@@ -49,14 +54,24 @@ export function SyncDialog({ restaurantId, tenantToken, onSynced, onSessionInval
 
       if (isOfflineResult(res)) {
         reportSyncError("SYNC_OFFLINE", res.message);
-        setState({ phase: "error", message: "Tidak dapat terhubung ke server.", failedIds: [], reportCode: "SYNC_OFFLINE" });
+        setState({
+          phase: "error",
+          message: "Tidak dapat terhubung ke server.",
+          failedIds: [],
+          reportCode: "SYNC_OFFLINE",
+        });
         return;
       }
 
       if (!res.ok || !res.manifest) {
         if ("error" in res && res.error === "Sesi resto tidak valid.") onSessionInvalid();
         reportSyncError("SYNC_MANIFEST", "Manifest request failed.");
-        setState({ phase: "error", message: "Gagal memuat manifest audio.", failedIds: [], reportCode: "SYNC_MANIFEST" });
+        setState({
+          phase: "error",
+          message: "Gagal memuat manifest audio.",
+          failedIds: [],
+          reportCode: "SYNC_MANIFEST",
+        });
         return;
       }
 
@@ -76,17 +91,16 @@ export function SyncDialog({ restaurantId, tenantToken, onSynced, onSessionInval
         : res.manifest;
       if (manifest.length === 0) failedManifestRef.current = null;
       const syncItems = manifest.length > 0 ? manifest : res.manifest;
-      setState({ phase: "syncing", progress: { current: 0, total: syncItems.length, label: "Memulai..." } });
+      setState({
+        phase: "syncing",
+        progress: { current: 0, total: syncItems.length, label: "Memulai..." },
+      });
 
-      const result = await syncManifest(
-        restaurantId,
-        syncItems,
-        (progress: SyncProgress) => {
-          if (runGateRef.current.isCurrent(runId)) {
-            setState({ phase: "syncing", progress });
-          }
-        },
-      );
+      const result = await syncManifest(restaurantId, syncItems, (progress: SyncProgress) => {
+        if (runGateRef.current.isCurrent(runId)) {
+          setState({ phase: "syncing", progress });
+        }
+      });
 
       if (!runGateRef.current.isCurrent(runId)) return;
 
@@ -96,9 +110,10 @@ export function SyncDialog({ restaurantId, tenantToken, onSynced, onSessionInval
         onSynced(res.manifest.map(({ audioId }) => audioId));
       } else {
         failedManifestRef.current = new Set(result.failedIds);
-        const reportCode = result.message?.includes("Cache Storage") || result.message?.includes("Web Crypto")
-          ? "SYNC_CACHE"
-          : "SYNC_DOWNLOAD";
+        const reportCode =
+          result.message?.includes("Cache Storage") || result.message?.includes("Web Crypto")
+            ? "SYNC_CACHE"
+            : "SYNC_DOWNLOAD";
         reportSyncError(reportCode, result.message ?? result.failedIds.join(","));
         setState({
           phase: "error",
@@ -109,8 +124,16 @@ export function SyncDialog({ restaurantId, tenantToken, onSynced, onSessionInval
       }
     } catch (error) {
       if (runGateRef.current.isCurrent(runId)) {
-        reportSyncError("SYNC_MANIFEST", error instanceof Error ? error.message : "Unknown sync error.");
-        setState({ phase: "error", message: "Terjadi kesalahan.", failedIds: [], reportCode: "SYNC_MANIFEST" });
+        reportSyncError(
+          "SYNC_MANIFEST",
+          error instanceof Error ? error.message : "Unknown sync error.",
+        );
+        setState({
+          phase: "error",
+          message: "Terjadi kesalahan.",
+          failedIds: [],
+          reportCode: "SYNC_MANIFEST",
+        });
       }
     }
   };
@@ -175,8 +198,8 @@ export function SyncDialog({ restaurantId, tenantToken, onSynced, onSessionInval
                 <WifiOff className="h-4 w-4 text-destructive" />
                 <p className="text-sm font-medium">Sinkronisasi Gagal</p>
               </div>
-               <p className="text-sm text-muted-foreground">{state.message}</p>
-               <p className="text-xs text-muted-foreground">Laporan: {state.reportCode}</p>
+              <p className="text-sm text-muted-foreground">{state.message}</p>
+              <p className="text-xs text-muted-foreground">Laporan: {state.reportCode}</p>
               <Button onClick={runSync} className="w-full" size="sm">
                 Coba Lagi
               </Button>

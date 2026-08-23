@@ -2,14 +2,28 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
-import { hashTenantSession, verifyActiveTenantSession, verifyCrewSessionToken } from "./tenant-session.server";
 
 const OPERATIONS_ERROR_CODES = new Set([
-  "tenant_login", "sync_cache", "playback", "realtime", "r2_upload", "rpc", "server",
+  "tenant_login",
+  "sync_cache",
+  "playback",
+  "realtime",
+  "r2_upload",
+  "rpc",
+  "server",
 ]);
 const OPERATIONS_REPORT_CODES = new Set([
-  "tenant_login", "sync_cache", "playback", "realtime", "r2_upload", "rpc", "server",
-  "SYNC_MANIFEST", "SYNC_OFFLINE", "SYNC_CACHE", "SYNC_DOWNLOAD",
+  "tenant_login",
+  "sync_cache",
+  "playback",
+  "realtime",
+  "r2_upload",
+  "rpc",
+  "server",
+  "SYNC_MANIFEST",
+  "SYNC_OFFLINE",
+  "SYNC_CACHE",
+  "SYNC_DOWNLOAD",
 ]);
 
 const errorReportSchema = z.object({
@@ -21,16 +35,34 @@ const errorReportSchema = z.object({
 });
 
 export const reportOperationalError = createServerFn({ method: "POST" })
-  .validator(z.object({ tenantToken: z.string(), crewSessionToken: z.string().optional(), error: errorReportSchema }))
+  .validator(
+    z.object({
+      tenantToken: z.string(),
+      crewSessionToken: z.string().optional(),
+      error: errorReportSchema,
+    }),
+  )
   .handler(async ({ data }) => {
     const client = getServiceClient();
     if (!client) return { ok: false as const };
+    const { hashTenantSession, verifyActiveTenantSession, verifyCrewSessionToken } =
+      await import("./tenant-session.server");
     const tenant = await verifyActiveTenantSession(client, data.tenantToken);
-    if (!tenant || !OPERATIONS_ERROR_CODES.has(data.error.stage) || !OPERATIONS_REPORT_CODES.has(data.error.reportCode)) return { ok: false as const };
+    if (
+      !tenant ||
+      !OPERATIONS_ERROR_CODES.has(data.error.stage) ||
+      !OPERATIONS_REPORT_CODES.has(data.error.reportCode)
+    )
+      return { ok: false as const };
     if (data.error.crewSessionId) {
       if (!data.crewSessionToken) return { ok: false as const };
-      const session = await verifyCrewSessionToken(client, data.crewSessionToken, tenant.restaurantId);
-      if (!session || session.crewSessionId !== data.error.crewSessionId) return { ok: false as const };
+      const session = await verifyCrewSessionToken(
+        client,
+        data.crewSessionToken,
+        tenant.restaurantId,
+      );
+      if (!session || session.crewSessionId !== data.error.crewSessionId)
+        return { ok: false as const };
     }
 
     try {

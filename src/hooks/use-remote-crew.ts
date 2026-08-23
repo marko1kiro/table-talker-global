@@ -30,7 +30,9 @@ export function shouldActivatePresence(status: string) {
 }
 
 function isInvalidSessionError(error: unknown) {
-  return /INVALID_|Sesi resto tidak valid/i.test(error instanceof Error ? error.message : String(error));
+  return /INVALID_|Sesi resto tidak valid/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
 }
 
 export function createChannelStatusHandler<T extends object>({
@@ -446,11 +448,11 @@ export function useRemoteCrew({
             update(setOffline, !/duplicate|unique/i.test(claimError.message));
             return;
           }
-           if (
-             typeof claimedSession?.session?.id === "string" &&
-             typeof claimedSession?.session_token === "string"
-           )
-             onCrewSessionId?.(claimedSession.session.id, claimedSession.session_token);
+          if (
+            typeof claimedSession?.session?.id === "string" &&
+            typeof claimedSession?.session_token === "string"
+          )
+            onCrewSessionId?.(claimedSession.session.id, claimedSession.session_token);
           update(setDuplicateName, false);
           update(setOffline, true);
           if (active) setConnectionState("connecting");
