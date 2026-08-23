@@ -110,7 +110,7 @@ function OwnerDashboard() {
                 }}
                 className="brutal-border brutal-press mt-2 bg-accent px-2 py-1 text-xs font-bold uppercase"
               >
-                Reconnect realtime
+                Sambungkan ulang Realtime
               </button>
             )}
           </div>

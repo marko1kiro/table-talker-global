@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { requireSuperAdmin } from "./auth.server";
-import { withTimeout, type HealthStatus } from "./owner-dashboard-domain";
+import { clampDashboardSince, withTimeout, type HealthStatus } from "./owner-dashboard-domain";
 import { getR2Health } from "./r2.server";
 import { getServiceClient } from "./remote-audio.server";
 
-type Aggregates = {
+export type OwnerDashboardAggregates = {
   total_restaurants: number;
   active_restaurants: number;
   active_crew_devices: number;
@@ -16,34 +16,40 @@ type Aggregates = {
 
 const unavailable = (message: string): HealthStatus => ({ status: "unavailable", message });
 
-export const getOwnerDashboardSnapshot = createServerFn({ method: "GET" }).handler(async () => {
-  await requireSuperAdmin();
-  const client = getServiceClient();
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const apiHealthUrl = new URL("/api/health", getRequest().url);
-  const apiProbe = fetch(apiHealthUrl).then((response) =>
-    response.ok ? { status: "healthy" as const } : unavailable("API tidak merespons."),
-  );
-  const databaseProbe = client
-    ? Promise.resolve(client.rpc("owner_dashboard_snapshot", { p_since: since })).then(
-        ({ data, error }) =>
-          error || !data
-            ? { health: unavailable("Database tidak merespons."), aggregates: null }
-            : { health: { status: "healthy" as const }, aggregates: data as Aggregates },
-      )
-    : Promise.resolve({ health: unavailable("Supabase belum dikonfigurasi."), aggregates: null });
+type SnapshotCoreDependencies = {
+  since: string;
+  now?: number;
+  rpc: (since: string) => Promise<OwnerDashboardAggregates>;
+  r2Probe: () => Promise<HealthStatus>;
+  apiProbe: () => Promise<HealthStatus>;
+  timeout?: typeof withTimeout;
+};
+
+function isHealthStatus(value: unknown): value is HealthStatus {
+  return typeof value === "object" && value !== null && "status" in value;
+}
+
+export async function getOwnerDashboardSnapshotCore({
+  since,
+  now,
+  rpc,
+  r2Probe,
+  apiProbe,
+  timeout = withTimeout,
+}: SnapshotCoreDependencies) {
+  const clampedSince = clampDashboardSince(since, now);
 
   const [databaseResult, r2Result, apiResult] = await Promise.allSettled([
-    withTimeout(databaseProbe, 4_000),
-    withTimeout(getR2Health(), 4_000),
-    withTimeout(apiProbe, 4_000),
+    timeout(rpc(clampedSince), 4_000),
+    timeout(r2Probe(), 4_000),
+    timeout(apiProbe(), 4_000),
   ]);
 
   const database =
     databaseResult.status === "fulfilled"
-      ? "health" in databaseResult.value
-        ? databaseResult.value
-        : { health: databaseResult.value, aggregates: null }
+      ? isHealthStatus(databaseResult.value)
+        ? { health: databaseResult.value, aggregates: null }
+        : { health: { status: "healthy" as const }, aggregates: databaseResult.value }
       : { health: unavailable("Database tidak merespons."), aggregates: null };
   const r2 = r2Result.status === "fulfilled" ? r2Result.value : unavailable("R2 tidak merespons.");
   const api =
@@ -56,6 +62,30 @@ export const getOwnerDashboardSnapshot = createServerFn({ method: "GET" }).handl
       api,
     },
     aggregates: database.aggregates,
+  };
+}
+
+export const getOwnerDashboardSnapshot = createServerFn({ method: "GET" }).handler(async () => {
+  await requireSuperAdmin();
+  const client = getServiceClient();
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const apiHealthUrl = new URL("/api/health", getRequest().url);
+  const snapshot = await getOwnerDashboardSnapshotCore({
+    since,
+    rpc: async (p_since) => {
+      if (!client) throw new Error("Supabase belum dikonfigurasi.");
+      const { data, error } = await client.rpc("owner_dashboard_snapshot", { p_since });
+      if (error || !data) throw new Error("Database tidak merespons.");
+      return data as OwnerDashboardAggregates;
+    },
+    r2Probe: getR2Health,
+    apiProbe: async () => {
+      const response = await fetch(apiHealthUrl);
+      return response.ok ? { status: "healthy" } : unavailable("API tidak merespons.");
+    },
+  });
+  return {
+    ...snapshot,
     deployment: process.env.VERCEL_ENV
       ? { provider: "vercel", environment: process.env.VERCEL_ENV }
       : null,

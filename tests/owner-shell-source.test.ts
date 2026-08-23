@@ -26,6 +26,7 @@ it("replaces remote audio route with protected owner shell routes", () => {
 it("keeps dashboard server-only, protected, bounded, and independently degraded", () => {
   const server = source("../src/lib/owner-dashboard.server.ts");
   expect(server).toContain("await requireSuperAdmin();");
+  expect(server).toContain("getOwnerDashboardSnapshotCore");
   expect(server).toContain("Promise.allSettled");
   expect(server).toContain("getServiceClient");
   expect(server).toContain("getR2Health");
@@ -35,7 +36,7 @@ it("keeps dashboard server-only, protected, bounded, and independently degraded"
   expect(server).toContain("response.ok");
   expect(server).toContain('apiResult.status === "fulfilled" ? apiResult.value');
   expect(server).not.toContain("getChannels");
-  expect(server).toContain('rpc("owner_dashboard_snapshot", { p_since: since })');
+  expect(server).toContain('rpc("owner_dashboard_snapshot", { p_since })');
 });
 
 it("uses accessible Sheet navigation and indexed dashboard predicates", () => {
@@ -46,7 +47,9 @@ it("uses accessible Sheet navigation and indexed dashboard predicates", () => {
   expect(shell).not.toContain('role="dialog"');
   expect(migration).toContain("playback_events (status, event_timestamp desc)");
   expect(migration).toContain("crew_sessions (connection_state, visibility_state, last_seen desc)");
-  expect(migration).toContain("greatest(now() - interval '30 days', least(p_since, now()))");
+  expect(migration).toContain(
+    "greatest(now() - interval '30 days', least(coalesce(p_since, now()), now()))",
+  );
 });
 
 it("serves a safe no-store API health response before SSR", () => {
@@ -85,7 +88,7 @@ it("keeps owner soundboard-free and makes operational metric cards navigable", (
   expect(dashboard).toContain('to: "/super-admin/restaurants"');
   expect(dashboard).toContain('to: "/super-admin/history"');
   expect(dashboard).toContain('to: "/super-admin/error-log"');
-  expect(dashboard).toContain("Reconnect realtime");
+  expect(dashboard).toContain("Sambungkan ulang Realtime");
 });
 
 it("uses fixed R2 health object probe without exposing credentials", () => {

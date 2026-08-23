@@ -16,7 +16,7 @@ set search_path = public
 set statement_timeout = '3000ms'
 as $$
   with bounds as (
-    select greatest(now() - interval '30 days', least(p_since, now())) as since
+    select greatest(now() - interval '30 days', least(coalesce(p_since, now()), now())) as since
   )
   select jsonb_build_object(
     'total_restaurants', (select count(*) from restaurants),
