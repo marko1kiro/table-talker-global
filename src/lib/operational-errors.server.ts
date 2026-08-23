@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
 
 const errorReportSchema = z.object({
@@ -42,6 +43,7 @@ export const listOperationalErrors = createServerFn({ method: "GET" })
     }),
   )
   .handler(async ({ data }) => {
+    await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return { errors: [], total: 0 };
 
@@ -73,6 +75,7 @@ export const listOperationalErrors = createServerFn({ method: "GET" })
 export const resolveOperationalError = createServerFn({ method: "POST" })
   .validator(z.object({ errorId: z.string().uuid() }))
   .handler(async ({ data }) => {
+    await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return { ok: false as const };
 

@@ -98,6 +98,7 @@ export const deleteManifestItem = createServerFn({ method: "POST" })
 export const listManifestItems = createServerFn({ method: "GET" })
   .validator(z.object({ restaurantId: z.string().uuid() }))
   .handler(async ({ data }) => {
+    await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
 

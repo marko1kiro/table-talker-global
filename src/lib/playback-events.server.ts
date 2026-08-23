@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
 
 const eventSchema = z.object({
@@ -50,6 +51,7 @@ export const ingestPlaybackEvents = createServerFn({ method: "POST" })
 export const cleanupOldPlaybackEvents = createServerFn({ method: "POST" })
   .validator(z.object({ olderThanDays: z.number().int().min(1).default(30) }))
   .handler(async ({ data }) => {
+    await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return { deleted: 0 };
 

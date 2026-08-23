@@ -119,6 +119,7 @@ export const getRestaurantManifest = createServerFn({ method: "GET" })
 
 export const listRestaurants = createServerFn({ method: "GET" })
   .handler(async () => {
+    await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
 
