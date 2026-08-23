@@ -26,12 +26,20 @@ export function CrewIdentityDialog({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const clientKey = typeof window === "undefined" ? "server-client-key-000" : (() => {
+    const key = window.localStorage.getItem("table-talker.login-client-key");
+    if (key) return key;
+    const next = crypto.randomUUID();
+    window.localStorage.setItem("table-talker.login-client-key", next);
+    return next;
+  })();
   const [restaurantInfo, setRestaurantInfo] = useState<{
     restaurantId: string;
     restaurantCode: string;
     restaurantDisplayName: string;
     tenantToken: string;
     crewSessionId: string;
+    crewSessionToken: string;
   } | null>(null);
 
   const submitRestaurant = async (event: FormEvent<HTMLFormElement>) => {
@@ -39,7 +47,7 @@ export function CrewIdentityDialog({
     setSubmitting(true);
     setError("");
     try {
-      const result = await loginToRestaurant({ data: { code, pin } });
+      const result = await loginToRestaurant({ data: { code, pin, clientKey } });
       if ("error" in result) {
         setError(result.error as string);
         setSubmitting(false);
@@ -56,6 +64,7 @@ export function CrewIdentityDialog({
         restaurantDisplayName: result.displayName,
         tenantToken: result.tenantToken,
         crewSessionId: "",
+        crewSessionToken: "",
       });
       setStep("name");
     } catch {
@@ -82,6 +91,7 @@ export function CrewIdentityDialog({
       restaurantDisplayName: restaurantInfo!.restaurantDisplayName,
       tenantToken: restaurantInfo!.tenantToken,
       crewSessionId: restaurantInfo!.crewSessionId,
+      crewSessionToken: restaurantInfo!.crewSessionToken,
     });
     setSubmitting(false);
   };

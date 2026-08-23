@@ -2,7 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
-import { verifyTenantSession } from "./tenant-session.server";
+import { hashTenantSession, verifyActiveTenantSession, verifyCrewSessionToken } from "./tenant-session.server";
+
+const OPERATIONS_ERROR_CODES = new Set([
+  "tenant_login", "sync_cache", "playback", "realtime", "r2_upload", "rpc", "server",
+]);
 
 const errorReportSchema = z.object({
   stage: z.string().max(60),
@@ -13,19 +17,28 @@ const errorReportSchema = z.object({
 });
 
 export const reportOperationalError = createServerFn({ method: "POST" })
-  .validator(z.object({ tenantToken: z.string().optional(), error: errorReportSchema }))
+  .validator(z.object({ tenantToken: z.string(), crewSessionToken: z.string().optional(), error: errorReportSchema }))
   .handler(async ({ data }) => {
     const client = getServiceClient();
     if (!client) return { ok: false as const };
-    const tenant = data.tenantToken ? verifyTenantSession(data.tenantToken) : null;
-    if (data.tenantToken && !tenant) return { ok: false as const };
+    const tenant = await verifyActiveTenantSession(client, data.tenantToken);
+    if (!tenant || !OPERATIONS_ERROR_CODES.has(data.error.stage) || !OPERATIONS_ERROR_CODES.has(data.error.reportCode)) return { ok: false as const };
+    if (data.error.crewSessionId) {
+      if (!data.crewSessionToken) return { ok: false as const };
+      const session = await verifyCrewSessionToken(client, data.crewSessionToken, tenant.restaurantId);
+      if (!session || session.crewSessionId !== data.error.crewSessionId) return { ok: false as const };
+    }
 
     try {
+      const { data: allowed } = await client.rpc("check_operational_error_rate_limit", {
+        p_key_hash: hashTenantSession(data.crewSessionToken ?? data.tenantToken),
+      });
+      if (!allowed) return { ok: false as const };
       const { error } = await client.from("operational_errors").insert({
-        restaurant_id: tenant?.restaurantId ?? null,
+        restaurant_id: tenant.restaurantId,
         stage: data.error.stage,
         report_code: data.error.reportCode,
-        detail: data.error.detail ?? null,
+        detail: data.error.detail?.replace(/[^\x20-\x7E]/g, " ").slice(0, 500) ?? null,
         device_id: data.error.deviceId ?? null,
         crew_session_id: data.error.crewSessionId ?? null,
       });

@@ -17,7 +17,7 @@ it("exports loginToRestaurant with server-only PIN verification and scoped token
   expect(source).toContain("loginToRestaurant");
   expect(source).toContain("verifyRestaurantPin");
   expect(source).toContain("createTenantSession");
-  expect(source).toContain("isTenantLoginRateLimited");
+  expect(source).toContain('rpc("check_tenant_login_rate_limit"');
   expect(source).toContain("pin_hash");
   expect(source).toContain("Resto tidak aktif");
   expect(source).toContain("restaurant_sessions");

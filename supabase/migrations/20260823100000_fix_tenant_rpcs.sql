@@ -1,9 +1,5 @@
 drop index if exists public.crew_sessions_online_name_key;
 
-revoke all on function public.create_crew_message(uuid, text, bigint) from public, anon, authenticated, service_role;
-revoke all on function public.create_crew_message(uuid, text, uuid, bigint) from public, anon, authenticated, service_role;
-revoke all on function public.create_remote_command(uuid, text, text) from public, anon, authenticated, service_role;
-
 drop function if exists public.create_crew_message(uuid, text, uuid, bigint);
 drop function if exists public.create_crew_message(uuid, text, bigint);
 drop function if exists public.create_remote_command(uuid, text, text);
@@ -138,7 +134,6 @@ begin
 end;
 $$;
 
-revoke all on function public.claim_crew_session(uuid, text, text, text, boolean, text) from public, anon, authenticated, service_role;
 grant execute on function public.claim_crew_session(uuid, text, text, text, text, boolean, text) to authenticated;
 grant execute on function public.create_remote_command(uuid, text, text) to service_role;
 grant execute on function public.create_crew_message(uuid, text, bigint) to service_role;

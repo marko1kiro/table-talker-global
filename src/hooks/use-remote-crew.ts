@@ -314,7 +314,7 @@ export function useRemoteCrew({
 }: {
   registration: CrewRegistration | null;
   playRemoteAudio: (audioId: AudioId) => Promise<void>;
-  onCrewSessionId?: (crewSessionId: string) => void;
+  onCrewSessionId?: (crewSessionId: string, crewSessionToken: string) => void;
 }) {
   const [offline, setOffline] = useState(false);
   const [connectionState, setConnectionState] = useState<"offline" | "connecting" | "online">(
@@ -422,7 +422,11 @@ export function useRemoteCrew({
             update(setOffline, !/duplicate|unique/i.test(claimError.message));
             return;
           }
-          if (typeof claimedSession?.id === "string") onCrewSessionId?.(claimedSession.id);
+           if (
+             typeof claimedSession?.session?.id === "string" &&
+             typeof claimedSession?.session_token === "string"
+           )
+             onCrewSessionId?.(claimedSession.session.id, claimedSession.session_token);
           update(setDuplicateName, false);
           update(setOffline, true);
           if (active) setConnectionState("connecting");

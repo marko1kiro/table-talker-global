@@ -6,7 +6,7 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), "u
 it("derives playback tenant identity from verified tenant token", () => {
   const playback = source("../src/lib/playback-events.server.ts");
   expect(playback).toContain("tenantToken: z.string()");
-  expect(playback).toContain("verifyTenantSession");
+  expect(playback).toContain("verifyActiveTenantSession");
   expect(playback).toContain("restaurant_id: tenant.restaurantId");
   expect(playback).not.toContain("restaurant_id: e.restaurantId");
   expect(playback).not.toContain("crew_session_id: e.crewSessionId");
@@ -15,8 +15,8 @@ it("derives playback tenant identity from verified tenant token", () => {
 it("derives operational-error tenant identity from verified tenant token", () => {
   const errors = source("../src/lib/operational-errors.server.ts");
   expect(errors).toContain("tenantToken: z.string()");
-  expect(errors).toContain("verifyTenantSession");
-  expect(errors).toContain("restaurant_id: tenant?.restaurantId ?? null");
+  expect(errors).toContain("verifyActiveTenantSession");
+  expect(errors).toContain("restaurant_id: tenant.restaurantId");
   expect(errors).not.toContain("restaurant_id: data.error.restaurantId");
 });
 

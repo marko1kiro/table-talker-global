@@ -12,6 +12,7 @@ export type CrewSessionIdentity = {
   restaurantDisplayName: string;
   tenantToken: string;
   crewSessionId: string;
+  crewSessionToken: string;
 };
 
 export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessionIdentity | null {
@@ -26,7 +27,8 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
       restaurantCode?: unknown;
       restaurantDisplayName?: unknown;
       tenantToken?: unknown;
-      crewSessionId?: unknown;
+    crewSessionId?: unknown;
+      crewSessionToken?: unknown;
     };
     if (
       typeof value.displayName !== "string" ||
@@ -36,7 +38,8 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
       typeof value.restaurantDisplayName !== "string" ||
       typeof value.tenantToken !== "string" ||
       !value.tenantToken ||
-      typeof value.crewSessionId !== "string"
+       typeof value.crewSessionId !== "string" ||
+       typeof value.crewSessionToken !== "string"
     ) {
       storage.removeItem(CREW_SESSION_IDENTITY_KEY);
       return null;
@@ -52,7 +55,8 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
       restaurantCode: value.restaurantCode,
       restaurantDisplayName: value.restaurantDisplayName,
       tenantToken: value.tenantToken,
-      crewSessionId: value.crewSessionId,
+       crewSessionId: value.crewSessionId,
+       crewSessionToken: value.crewSessionToken,
     };
   } catch {
     try {
@@ -77,7 +81,8 @@ export function writeCrewSessionIdentity(
       restaurantCode: identity.restaurantCode,
       restaurantDisplayName: identity.restaurantDisplayName,
       tenantToken: identity.tenantToken,
-      crewSessionId: identity.crewSessionId,
+       crewSessionId: identity.crewSessionId,
+       crewSessionToken: identity.crewSessionToken,
     };
     storage.setItem(CREW_SESSION_IDENTITY_KEY, JSON.stringify(data));
     return data;
@@ -121,6 +126,7 @@ export function createSessionStorageAdapter(storage: StorageLike | null): Storag
 }
 
 export function browserSessionStorage(): StorageLike | null {
+  // sessionStorage survives reloads but is readable by XSS; token expiry limits exposure.
   if (typeof window === "undefined") return null;
   try {
     return window.sessionStorage;

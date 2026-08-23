@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
-import { verifyTenantSession } from "./tenant-session.server";
+import { verifyActiveTenantSession, verifyCrewSessionToken } from "./tenant-session.server";
 
 const eventSchema = z.object({
   id: z.string().uuid(),
@@ -17,17 +17,20 @@ const eventSchema = z.object({
 
 export const playbackEventBatchSchema = z.object({
   tenantToken: z.string(),
+  crewSessionToken: z.string(),
   events: z.array(eventSchema).min(1).max(50),
 });
 
 export async function ingestPlaybackEventBatch(data: z.infer<typeof playbackEventBatchSchema>) {
-  const tenant = verifyTenantSession(data.tenantToken);
-  if (!tenant) return { ok: false as const, ids: [] as string[] };
-
   const client = getServiceClient();
   if (!client) return { ok: false as const, ids: [] as string[] };
 
   try {
+    const tenant = await verifyActiveTenantSession(client, data.tenantToken);
+    if (!tenant) return { ok: false as const, ids: [] as string[] };
+    const session = await verifyCrewSessionToken(client, data.crewSessionToken, tenant.restaurantId);
+    if (!session || data.events.some((event) => event.crewSessionId !== session.crewSessionId))
+      return { ok: false as const, ids: [] as string[] };
     const sessionIds = [...new Set(data.events.map((event) => event.crewSessionId))];
     const { data: sessions, error: sessionError } = await client
       .from("crew_sessions")

@@ -25,7 +25,7 @@ it("uses guarded atomic catalog mutation and reads current version only", () => 
   expect(manifest).toContain('rpc("mutate_catalog"');
   expect(manifest).not.toContain("bumpCatalogVersion");
   expect(manifest).toMatch(/\.eq\("catalog_version", restaurant\.catalog_version\)/);
-  expect(restaurants).toContain("verifyTenantSession(data.tenantToken)");
+  expect(restaurants).toContain("verifyActiveTenantSession(client, data.tenantToken)");
   expect(restaurants).toMatch(/\.eq\("catalog_version", restaurant\.catalog_version\)/);
   expect(restaurants).toContain("version: restaurant.catalog_version");
   expect(admin).not.toContain("bumpCatalogVersion");

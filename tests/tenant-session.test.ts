@@ -26,7 +26,7 @@ it("verifies stored SHA-256 PIN hashes and signs expiring restaurant tokens", ()
   expect(verifyRestaurantPin("wrong", hash)).toBe(false);
 
   const token = createTenantSession("restaurant-id", 1_000);
-  expect(verifyTenantSession(token, 1_001)).toEqual({ restaurantId: "restaurant-id", expiresAt: 43_201_000 });
+  expect(verifyTenantSession(token, 1_001)).toEqual({ restaurantId: "restaurant-id", expiresAt: 3_601_000 });
   expect(verifyTenantSession(`${token}x`, 1_001)).toBeNull();
 });
 

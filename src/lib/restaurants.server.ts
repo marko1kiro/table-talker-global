@@ -4,14 +4,11 @@ import { requireSuperAdmin } from "./auth.server";
 import { normalizeRestaurantCode } from "./restaurant-domain";
 import { getServiceClient } from "./remote-audio.server";
 import {
-  clearTenantLoginFailures,
   createTenantSession,
   hashTenantSession,
-  isTenantLoginRateLimited,
-  recordTenantLoginFailure,
   hashRestaurantPin,
   verifyRestaurantPin,
-  verifyTenantSession,
+  verifyActiveTenantSession,
 } from "./tenant-session.server";
 
 export type ManifestItem = {
@@ -28,7 +25,7 @@ function offline() {
 }
 
 export const loginToRestaurant = createServerFn({ method: "POST" })
-  .validator(z.object({ code: z.string(), pin: z.string() }))
+  .validator(z.object({ code: z.string(), pin: z.string(), clientKey: z.string().min(16).max(200) }))
   .handler(async ({ data }) => {
     const client = getServiceClient();
     if (!client) return offline();
@@ -36,16 +33,24 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
     try {
       const validated = normalizeRestaurantCode(data.code);
       if ("error" in validated) return { error: validated.error };
-      if (isTenantLoginRateLimited(validated.code)) return { error: "Terlalu banyak percobaan. Coba lagi nanti." };
-
-      const { data: restaurant, error: lookupError } = await client
+       const { data: restaurant, error: lookupError } = await client
         .from("restaurants")
         .select("id, code, display_name, is_active, deactivated_reason, pin_hash")
         .ilike("code", validated.code)
         .single();
 
-      if (lookupError || !restaurant || !verifyRestaurantPin(data.pin, restaurant.pin_hash)) {
-        recordTenantLoginFailure(validated.code);
+      const clientKeyHash = hashTenantSession(data.clientKey);
+      if (!restaurant || lookupError) return { error: "Kode resto atau PIN salah." };
+      const { data: limited } = await client.rpc("check_tenant_login_rate_limit", {
+        p_restaurant_id: restaurant.id,
+        p_client_key_hash: clientKeyHash,
+      });
+      if (limited) return { error: "Kode resto atau PIN salah." };
+      if (!verifyRestaurantPin(data.pin, restaurant.pin_hash)) {
+        await client.rpc("record_tenant_login_failure", {
+          p_restaurant_id: restaurant.id,
+          p_client_key_hash: clientKeyHash,
+        });
         return { error: "Kode resto atau PIN salah." };
       }
       if (!restaurant.is_active)
@@ -53,7 +58,10 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
           error: `Resto tidak aktif.${restaurant.deactivated_reason ? ` ${restaurant.deactivated_reason}` : ""}`,
         };
 
-      clearTenantLoginFailures(validated.code);
+      await client.rpc("clear_tenant_login_failures", {
+        p_restaurant_id: restaurant.id,
+        p_client_key_hash: clientKeyHash,
+      });
 
       const { error: sessionError } = await client
         .from("restaurant_sessions")
@@ -65,12 +73,10 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
       if (sessionError) return offline();
 
       const tenantToken = createTenantSession(restaurant.id);
-      const tenant = verifyTenantSession(tenantToken);
-      if (!tenant) return offline();
-      const { error: accessError } = await client.from("restaurant_access_tokens").insert({
-        token_hash: hashTenantSession(tenantToken),
-        restaurant_id: restaurant.id,
-        expires_at: new Date(tenant.expiresAt).toISOString(),
+       const { error: accessError } = await client.from("restaurant_access_tokens").insert({
+         token_hash: hashTenantSession(tenantToken),
+         restaurant_id: restaurant.id,
+         expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });
       if (accessError) return offline();
 
@@ -137,12 +143,12 @@ export const getRestaurantManifest = createServerFn({ method: "GET" })
     if (!client) return offline();
 
     try {
-      const tenant = verifyTenantSession(data.tenantToken);
+      const tenant = await verifyActiveTenantSession(client, data.tenantToken);
       if (!tenant || tenant.restaurantId !== data.restaurantId) return { error: "Sesi resto tidak valid." };
 
       const { data: restaurant, error: restaurantError } = await client
         .from("restaurants")
-        .select("catalog_version")
+        .select("catalog_version, is_active")
         .eq("id", data.restaurantId)
         .single();
       if (restaurantError || !restaurant) return offline();

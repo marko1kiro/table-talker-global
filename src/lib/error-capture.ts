@@ -16,6 +16,7 @@ type ReportOptions = {
   tenantToken?: string;
   deviceId?: string;
   crewSessionId?: string;
+  crewSessionToken?: string;
 };
 
 let lastCapturedError: Error | null = null;
@@ -34,7 +35,8 @@ export async function captureError(options: ReportOptions): Promise<void> {
   try {
     await reportOperationalError({
       data: {
-        tenantToken: options.tenantToken,
+        tenantToken: options.tenantToken ?? "",
+        crewSessionToken: options.crewSessionToken,
         error: {
           stage: options.stage,
           reportCode: options.reportCode,

@@ -1,10 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { getAuthSecret } from "./auth.server";
 
-const TOKEN_MAX_AGE_SECONDS = 60 * 60 * 12;
-const MAX_ATTEMPTS = 5;
-const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
-const attempts = new Map<string, { count: number; resetAt: number }>();
+const TOKEN_MAX_AGE_SECONDS = 60 * 60;
 
 type TenantSessionPayload = { restaurantId: string; expiresAt: number };
 
@@ -31,23 +28,6 @@ export function hashTenantSession(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function isTenantLoginRateLimited(key: string, now = Date.now()): boolean {
-  const attempt = attempts.get(key);
-  return Boolean(attempt && attempt.resetAt > now && attempt.count >= MAX_ATTEMPTS);
-}
-
-export function recordTenantLoginFailure(key: string, now = Date.now()) {
-  const previous = attempts.get(key);
-  const attempt = !previous || previous.resetAt <= now
-    ? { count: 1, resetAt: now + ATTEMPT_WINDOW_MS }
-    : { ...previous, count: previous.count + 1 };
-  attempts.set(key, attempt);
-}
-
-export function clearTenantLoginFailures(key: string) {
-  attempts.delete(key);
-}
-
 export function createTenantSession(restaurantId: string, now = Date.now()): string {
   const payload = encode(JSON.stringify({ restaurantId, expiresAt: now + TOKEN_MAX_AGE_SECONDS * 1000 }));
   return `${payload}.${sign(payload)}`;
@@ -66,4 +46,30 @@ export function verifyTenantSession(token: string, now = Date.now()): TenantSess
   } catch {
     return null;
   }
+}
+
+export async function verifyActiveTenantSession(client: any, token: string) {
+  const tenant = verifyTenantSession(token);
+  if (!tenant) return null;
+  const { data, error } = await client
+    .from("restaurant_access_tokens")
+    .select("restaurant_id, restaurants!inner(is_active)")
+    .eq("token_hash", hashTenantSession(token))
+    .eq("restaurant_id", tenant.restaurantId)
+    .gt("expires_at", new Date().toISOString())
+    .eq("is_active", true)
+    .maybeSingle();
+  return error || !data ? null : tenant;
+}
+
+export async function verifyCrewSessionToken(client: any, token: string, restaurantId: string) {
+  const { data, error } = await client
+    .from("crew_session_tokens")
+    .select("crew_session_id, restaurants!inner(is_active)")
+    .eq("token_hash", hashTenantSession(token))
+    .eq("restaurant_id", restaurantId)
+    .gt("expires_at", new Date().toISOString())
+    .eq("is_active", true)
+    .maybeSingle();
+  return error || !data ? null : { crewSessionId: data.crew_session_id as string };
 }

@@ -86,10 +86,10 @@ function SoundboardPage() {
   const crewIdentityRef = useRef<CrewIdentity | null>(null);
   crewIdentityRef.current = crewIdentity;
 
-  const onCrewSessionId = useCallback((crewSessionId: string) => {
+  const onCrewSessionId = useCallback((crewSessionId: string, crewSessionToken: string) => {
     const identity = crewIdentityRef.current;
     if (!identity || identity.crewSessionId === crewSessionId) return;
-    const nextIdentity = { ...identity, crewSessionId };
+    const nextIdentity = { ...identity, crewSessionId, crewSessionToken };
     writeCrewSessionIdentity(browserSessionStorage(), nextIdentity);
     setCrewIdentity(nextIdentity);
   }, []);
@@ -98,7 +98,7 @@ function SoundboardPage() {
 
   const flushToServer = useCallback(async (events: PlaybackEvent[]) => {
     const result = await ingestPlaybackEvents({
-      data: { tenantToken: events[0]?.tenantToken ?? "", events },
+      data: { tenantToken: events[0]?.tenantToken ?? "", crewSessionToken: crewIdentityRef.current?.crewSessionToken ?? "", events },
     });
     return { ok: result.ok, ids: result.ids };
   }, []);
