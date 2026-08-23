@@ -17,7 +17,7 @@ import {
   toggleManifestItem,
   upsertManifestItem,
 } from "@/lib/manifest.server";
-import { uploadAudioToR2 } from "@/lib/upload.server";
+import { requestR2Upload } from "@/lib/upload.server";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   canSelectRemoteAudio,
@@ -402,17 +402,35 @@ function ManifestItemsList({
       setUploading(true);
       setUploadError("");
       try {
+        if (uploadFile.type !== "audio/mpeg") {
+          setUploadError("File harus MP3.");
+          return;
+        }
         const buffer = await uploadFile.arrayBuffer();
-        const result = await uploadAudioToR2({
+        const digest = await crypto.subtle.digest("SHA-256", buffer);
+        const contentHash = Array.from(new Uint8Array(digest), (byte) =>
+          byte.toString(16).padStart(2, "0"),
+        ).join("");
+        const result = await requestR2Upload({
           data: {
             restaurantId,
             audioId: audioId.trim(),
-            buffer: Array.from(new Uint8Array(buffer)),
-            fileName: uploadFile.name,
+            contentType: "audio/mpeg",
+            byteSize: uploadFile.size,
+            contentHash,
           },
         });
         if (!result || !("ok" in result) || !result.ok) {
-          setUploadError("error" in result ? result.error : "Upload gagal.");
+          setUploadError("error" in result && result.error ? result.error : "Upload gagal.");
+          return;
+        }
+        const response = await fetch(result.putUrl, {
+          method: "PUT",
+          headers: result.headers,
+          body: uploadFile,
+        });
+        if (!response.ok) {
+          setUploadError("Upload ke R2 gagal.");
           return;
         }
         const manifestResult = await upsertManifestItem({

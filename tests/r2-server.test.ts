@@ -20,18 +20,20 @@ it("reads CF_ACCOUNT_ID, CF_R2_ACCESS_KEY_ID, CF_R2_SECRET_ACCESS_KEY env vars",
   expect(source).toContain("CF_R2_SECRET_ACCESS_KEY");
 });
 
-it("exports uploadToR2, deleteFromR2, r2PublicUrl, r2Key", () => {
+it("exports presigned upload, deleteFromR2, r2PublicUrl, r2Key", () => {
   const source = r2Server();
-  expect(source).toContain("export async function uploadToR2");
+  expect(source).toContain("export async function createPresignedR2Upload");
+  expect(source).toContain("@aws-sdk/s3-request-presigner");
   expect(source).toContain("export async function deleteFromR2");
   expect(source).toContain("export function r2PublicUrl");
   expect(source).toContain("export function r2Key");
 });
 
-it("uses immutable cache headers for R2 uploads", () => {
+it("uses immutable cache headers and only accepts NotFound from HeadObject", () => {
   const source = r2Server();
   expect(source).toContain("immutable");
   expect(source).toContain("max-age=31536000");
+  expect(source).toContain('error.name === "NotFound"');
 });
 
 it("r2Key generates path with restaurant ID and hash", () => {

@@ -1,11 +1,21 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
-import { computeHash } from "./audio-sync";
+import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  S3ServiceException,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { ANNOUNCEMENT_CATALOG } from "./remote-audio-domain";
 
 const R2_ACCOUNT_ID = process.env.CF_ACCOUNT_ID ?? "";
 const R2_ACCESS_KEY_ID = process.env.CF_R2_ACCESS_KEY_ID ?? "";
 const R2_SECRET_ACCESS_KEY = process.env.CF_R2_SECRET_ACCESS_KEY ?? "";
 const R2_BUCKET = process.env.CF_R2_BUCKET ?? "table-talker-static";
 const R2_PUBLIC_BASE = process.env.CF_R2_PUBLIC_URL ?? "https://static.xdirga.xyz";
+export const R2_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+const R2_UPLOAD_CONTENT_TYPE = "audio/mpeg";
+const R2_UPLOAD_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
 let client: S3Client | null = null;
 
@@ -30,44 +40,77 @@ export function r2PublicUrl(key: string): string {
 }
 
 export function r2Key(restaurantId: string, audioId: string, hash: string): string {
-  const safeAudio = audioId.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const safeAudio = audioId.replace(":", "_");
   return `restaurants/${restaurantId}/${safeAudio}/${hash}.mp3`;
 }
 
-export async function uploadToR2(
-  restaurantId: string,
-  audioId: string,
-  buffer: ArrayBuffer,
-): Promise<{ key: string; url: string; hash: string; byteSize: number } | null> {
+type R2UploadRequest = {
+  restaurantId: string;
+  audioId: string;
+  contentType: string;
+  byteSize: number;
+  contentHash: string;
+};
+
+export function validateR2UploadRequest(input: R2UploadRequest): R2UploadRequest {
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(input.restaurantId))
+    throw new Error("Restaurant tidak valid.");
+  if (!isAllowedAudioId(input.audioId)) throw new Error("Audio ID tidak valid.");
+  if (input.contentType !== R2_UPLOAD_CONTENT_TYPE) throw new Error("File harus MP3.");
+  if (!Number.isInteger(input.byteSize) || input.byteSize < 1 || input.byteSize > R2_UPLOAD_MAX_BYTES)
+    throw new Error("Ukuran file harus 1-10 MB.");
+  if (!/^[0-9a-f]{64}$/.test(input.contentHash)) throw new Error("Hash file tidak valid.");
+  return input;
+}
+
+function isAllowedAudioId(audioId: string): boolean {
+  if (/^table:(?:[1-9]|[1-9][0-9]|100)$/.test(audioId)) return true;
+  if (ANNOUNCEMENT_CATALOG.some((item) => audioId === `announcement:${item.id}`)) return true;
+  return /^custom:[a-z0-9][a-z0-9_-]{0,99}$/.test(audioId);
+}
+
+function hexToBase64(value: string): string {
+  return Buffer.from(value, "hex").toString("base64");
+}
+
+export async function createPresignedR2Upload(input: R2UploadRequest) {
   const s3 = getClient();
-  if (!s3) return null;
+  if (!s3) throw new Error("R2 belum dikonfigurasi.");
+
+  const { restaurantId, audioId, contentHash, byteSize } = validateR2UploadRequest(input);
+  const key = r2Key(restaurantId, audioId, contentHash);
 
   try {
-    const hash = await computeHash(buffer);
-    const key = r2Key(restaurantId, audioId, hash);
-
-    // Check if already exists
-    try {
-      await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key }));
-      return { key, url: r2PublicUrl(key), hash, byteSize: buffer.byteLength };
-    } catch {
-      // Not found — proceed with upload
-    }
-
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: key,
-        Body: new Uint8Array(buffer),
-        ContentType: "audio/mpeg",
-        CacheControl: "public, max-age=31536000, immutable",
-      }),
-    );
-
-    return { key, url: r2PublicUrl(key), hash, byteSize: buffer.byteLength };
-  } catch {
-    return null;
+    await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+  } catch (error) {
+    if (!(error instanceof S3ServiceException && error.name === "NotFound")) throw error;
   }
+
+  const checksum = hexToBase64(contentHash);
+  const putUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      ContentType: R2_UPLOAD_CONTENT_TYPE,
+      CacheControl: R2_UPLOAD_CACHE_CONTROL,
+      ChecksumSHA256: checksum,
+    }),
+    { expiresIn: 60 },
+  );
+
+  return {
+    putUrl,
+    key,
+    url: r2PublicUrl(key),
+    hash: contentHash,
+    byteSize,
+    headers: {
+      "content-type": R2_UPLOAD_CONTENT_TYPE,
+      "cache-control": R2_UPLOAD_CACHE_CONTROL,
+      "x-amz-checksum-sha256": checksum,
+    },
+  };
 }
 
 export async function deleteFromR2(key: string): Promise<boolean> {
