@@ -20,11 +20,10 @@ function offline() {
   return { offline: true as const, message: "Realtime offline" };
 }
 
-const serverCredentialModules = createServerOnlyFn(async () => {
-  const code = await import(/* @vite-ignore */ "./restaurant-code.server");
-  const session = await import(/* @vite-ignore */ "./restaurant-session.server");
-  return { ...code, ...session };
-});
+const serverCredentialModules = createServerOnlyFn(async () => ({
+  ...(await import("./restaurant-code.server")),
+  ...(await import("./restaurant-session.server")),
+}));
 
 export const loginToRestaurant = createServerFn({ method: "POST" })
   .validator(z.object({ code: z.string(), clientKey: z.string().min(16).max(200) }))
