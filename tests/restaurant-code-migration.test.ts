@@ -10,7 +10,7 @@ it("adds derived credential fields without SQL plaintext backfill", () => {
   expect(sql).toMatch(/add column credential_rotated_at timestamptz/i);
   expect(sql).toMatch(/unique.*code_hash|code_hash.*unique/is);
   expect(sql).not.toMatch(/insert into public\.restaurants.*code/is);
-  expect(sql).not.toMatch(/update public\.restaurants.*set.*code_hash/is);
+  expect(sql).not.toMatch(/update public\.restaurants\s+set\s+code_hash\s*=\s*.*\bcode\b/is);
 });
 
 it("binds opaque token rows and RPC authorization to current credential version", () => {

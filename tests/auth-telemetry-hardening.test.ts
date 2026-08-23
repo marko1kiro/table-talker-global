@@ -70,7 +70,7 @@ it("uses database RPCs for login and operational-error rate limits", () => {
   expect(restaurants).toContain('rpc("check_tenant_login_rate_limit"');
   expect(restaurants).toMatch(/const \{ data: limited, error: rateLimitError \} = await client\.rpc\("check_tenant_login_rate_limit"/);
   expect(restaurants).toContain("if (rateLimitError || limited)");
-  expect(restaurants).toContain('rpc("record_tenant_login_failure"');
+  expect(restaurants).toContain('rpc("clear_tenant_login_failures"');
   expect(restaurants).not.toContain("isTenantLoginRateLimited");
 });
 

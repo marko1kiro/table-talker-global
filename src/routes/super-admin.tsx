@@ -345,9 +345,9 @@ function AudioManagementSection() {
             className="brutal-border mt-1 w-full bg-background px-3 py-2 font-normal"
           >
             <option value="">Pilih resto</option>
-            {restaurants.map((r: { id: string; code: string; display_name: string; catalog_version: number | null }) => (
+            {restaurants.map((r: { id: string; display_name: string; catalog_version: number | null }) => (
               <option key={r.id} value={r.id}>
-                {r.code} — {r.display_name} (v{r.catalog_version ?? 0})
+                {r.display_name} (v{r.catalog_version ?? 0})
               </option>
             ))}
           </select>

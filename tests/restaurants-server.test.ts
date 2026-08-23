@@ -9,7 +9,8 @@ it("exports createRestaurant bound to service-role client behind super admin", (
   expect(source).toContain('createServerFn({ method: "POST" })');
   expect(source).toContain("await requireSuperAdmin();");
   expect(source).toContain('client.from("restaurants").insert');
-  expect(source).toContain("restaurants_code_key");
+  expect(source).toContain("code_hash");
+  expect(source).toContain("code_encrypted");
 });
 
 it("exports loginToRestaurant with opaque token scoped to credential version", () => {
@@ -18,8 +19,8 @@ it("exports loginToRestaurant with opaque token scoped to credential version", (
   expect(source).toContain("createOpaqueRestaurantToken");
   expect(source).toContain("code_version: restaurant.code_version");
   expect(source).toContain('rpc("check_tenant_login_rate_limit"');
-  expect(source).toContain("pin_hash");
-  expect(source).toContain("Resto tidak aktif");
+  expect(source).toContain('eq("code_hash", codeHash)');
+  expect(source).toContain("Kode Resto salah.");
   expect(source).toContain("restaurant_sessions");
 });
 

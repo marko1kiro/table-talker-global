@@ -30,13 +30,11 @@ export function CrewIdentityDialog({
 }) {
   const [step, setStep] = useState<Step>("restaurant");
   const [code, setCode] = useState("");
-  const [pin, setPin] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [restaurantInfo, setRestaurantInfo] = useState<{
     restaurantId: string;
-    restaurantCode: string;
     restaurantDisplayName: string;
     tenantToken: string;
     crewSessionId: string;
@@ -49,20 +47,14 @@ export function CrewIdentityDialog({
     setError("");
     try {
       const clientKey = getClientKey();
-      const result = await loginToRestaurant({ data: { code, pin, clientKey } });
+      const result = await loginToRestaurant({ data: { code, clientKey } });
       if ("error" in result) {
         setError(result.error as string);
         setSubmitting(false);
         return;
       }
-      if ("offline" in result) {
-        setError(result.message);
-        setSubmitting(false);
-        return;
-      }
       setRestaurantInfo({
         restaurantId: result.restaurantId,
-        restaurantCode: result.restaurantCode,
         restaurantDisplayName: result.displayName,
         tenantToken: result.tenantToken,
         crewSessionId: "",
@@ -89,7 +81,6 @@ export function CrewIdentityDialog({
       ...result,
       audioReady,
       restaurantId: restaurantInfo!.restaurantId,
-      restaurantCode: restaurantInfo!.restaurantCode,
       restaurantDisplayName: restaurantInfo!.restaurantDisplayName,
       tenantToken: restaurantInfo!.tenantToken,
       crewSessionId: restaurantInfo!.crewSessionId,
@@ -108,9 +99,9 @@ export function CrewIdentityDialog({
       >
         {step === "restaurant" ? (
           <>
-            <DialogTitle className="font-display text-xl">Masukkan Kode Resto & PIN</DialogTitle>
+            <DialogTitle className="font-display text-xl">Masukkan Kode Resto</DialogTitle>
             <DialogDescription id="crew-identity-description">
-              Masukkan kode resto dan PIN yang diberikan administrator.
+              Masukkan kode resto yang diberikan administrator.
             </DialogDescription>
             <form className="space-y-4" onSubmit={submitRestaurant}>
               <label className="block text-sm font-bold" htmlFor="restaurant-code">
@@ -119,23 +110,11 @@ export function CrewIdentityDialog({
               <Input
                 id="restaurant-code"
                 value={code}
-                onChange={(event) => setCode(event.target.value.toUpperCase())}
-                placeholder="contoh: KAMPUNG-BULU"
+                onChange={(event) => setCode(event.target.value)}
+                placeholder="Kode Resto"
                 autoComplete="organization"
                 required
                 autoFocus
-              />
-              <label className="block text-sm font-bold" htmlFor="restaurant-pin">
-                PIN
-              </label>
-              <Input
-                id="restaurant-pin"
-                type="password"
-                value={pin}
-                onChange={(event) => setPin(event.target.value)}
-                placeholder="PIN resto"
-                autoComplete="off"
-                required
               />
               {error && (
                 <div

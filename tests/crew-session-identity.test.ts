@@ -18,7 +18,6 @@ function storage(seed: Record<string, string> = {}) {
 describe("crew session identity", () => {
   const restaurantFields = {
     restaurantId: "test-restaurant-id",
-    restaurantCode: "KAMPUNG-BULU",
     restaurantDisplayName: "Mie Gacoan Kampung Bulu",
     tenantToken: "signed-tenant-session",
     crewSessionId: "",

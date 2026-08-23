@@ -8,7 +8,6 @@ export type CrewSessionIdentity = {
   displayName: string;
   normalizedName: string;
   restaurantId: string;
-  restaurantCode: string;
   restaurantDisplayName: string;
   tenantToken: string;
   crewSessionId: string;
@@ -24,7 +23,6 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
       displayName?: unknown;
       normalizedName?: unknown;
       restaurantId?: unknown;
-      restaurantCode?: unknown;
       restaurantDisplayName?: unknown;
       tenantToken?: unknown;
     crewSessionId?: unknown;
@@ -34,7 +32,6 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
       typeof value.displayName !== "string" ||
       typeof value.normalizedName !== "string" ||
       typeof value.restaurantId !== "string" ||
-      typeof value.restaurantCode !== "string" ||
       typeof value.restaurantDisplayName !== "string" ||
       typeof value.tenantToken !== "string" ||
       !value.tenantToken ||
@@ -52,7 +49,6 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
     return {
       ...normalized,
       restaurantId: value.restaurantId,
-      restaurantCode: value.restaurantCode,
       restaurantDisplayName: value.restaurantDisplayName,
       tenantToken: value.tenantToken,
        crewSessionId: value.crewSessionId,
@@ -78,7 +74,6 @@ export function writeCrewSessionIdentity(
     const data = {
       ...normalized,
       restaurantId: identity.restaurantId,
-      restaurantCode: identity.restaurantCode,
       restaurantDisplayName: identity.restaurantDisplayName,
       tenantToken: identity.tenantToken,
        crewSessionId: identity.crewSessionId,
