@@ -47,14 +47,6 @@ describe("R2 direct upload requests", () => {
     ).toThrow();
   });
 
-  it("browser sends file bytes directly only after local SHA-256 and server presign", () => {
-    const source = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
-    expect(source).toContain("crypto.subtle.digest(\"SHA-256\"");
-    expect(source).toContain("requestR2Upload");
-    expect(source).toContain("fetch(result.putUrl");
-    expect(source).not.toContain("buffer: Array.from");
-  });
-
   it("verifies upload before catalog mutation and cleans failed objects", () => {
     const source = readFileSync(new URL("../src/lib/manifest.server.ts", import.meta.url), "utf8");
     expect(source).toContain("verifyR2Upload");

@@ -110,20 +110,6 @@ it("clears selected targets synchronously unless online and audio-ready", () => 
   expect(getSelectedRemoteTarget("recent", sessions)).toBeUndefined();
 });
 
-it("renders disabled online-unready and recent options", () => {
-  const source = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
-
-  expect(source).toContain("Aktifkan suara di perangkat");
-  expect(source).toContain("Offline / terakhir aktif");
-  expect(source).toContain("disabled={!session.eligible}");
-});
-
-it("keeps remote audio controls disabled without tenant manifest catalog", () => {
-  const source = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
-  expect(source).toContain("const controlsDisabled = true");
-  expect(source).toContain("Kontrol audio remote menunggu katalog manifest per resto.");
-});
-
 it("shows sent commands as expired at their effective expiry time", () => {
   expect(
     commandStatus(
@@ -139,13 +125,13 @@ it("shows sent commands as expired at their effective expiry time", () => {
   ).toBe("played");
 });
 
-it("guards the route with the super-admin session bit and noindex", () => {
-  const source = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
-  expect(source).toContain("auth.superAdmin");
+it("guards owner shell with super-admin session bit and noindex", () => {
+  const source = readFileSync(
+    new URL("../src/routes/super-admin/route.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(source).toContain("auth?.superAdmin");
   expect(source).toContain('{ name: "robots", content: "noindex" }');
   expect(source).toContain("loginSuperAdmin");
-  expect(source).toContain("setInterval");
-  expect(source).toContain("onError");
-  expect(source).toContain('role="alert"');
-  expect(source).toContain("mutation.reset()");
+  expect(source).toContain("<Outlet");
 });

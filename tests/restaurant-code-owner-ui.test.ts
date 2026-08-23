@@ -19,9 +19,12 @@ it("uses password controls, explicit reveal, confirmation, and clears credential
   expect(ui).not.toContain("sessionStorage");
 });
 
-it("shows restaurant controls only in owner page and never lists credential values", () => {
-  const page = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
-  expect(page).toContain("RestaurantCredentialDialog");
-  expect(page).toContain("display_name");
+it("keeps restaurant route free of credential values before restaurant phase", () => {
+  const page = readFileSync(
+    new URL("../src/routes/super-admin/restaurants/index.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(page).toContain("Belum tersedia.");
+  expect(page).not.toContain("RestaurantCredentialDialog");
   expect(page).not.toMatch(/toast\.(success|error)\([^)]*code/i);
 });

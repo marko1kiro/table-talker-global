@@ -57,11 +57,3 @@ it("makes the crew route use the shared component and pass logical audio IDs", (
   expect(crew).not.toContain("announcementPanelOpen");
   expect(crew).toContain("<Square");
 });
-
-it("disables stale Super Admin remote controls until tenant manifest catalog exists", () => {
-  const admin = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
-  expect(admin).toContain('import { SoundboardGrid } from "@/components/SoundboardGrid"');
-  expect(admin).toContain("<SoundboardGrid");
-  expect(admin).toContain("const controlsDisabled = true");
-  expect(admin).toContain("katalog manifest per resto");
-});

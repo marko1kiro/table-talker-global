@@ -1,5 +1,6 @@
 import {
   DeleteObjectCommand,
+  HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -39,6 +40,20 @@ export function r2PublicUrl(key: string): string {
   return `${R2_PUBLIC_BASE}/${key}`;
 }
 
+export async function getR2Health(): Promise<{
+  status: "healthy" | "unavailable";
+  message?: string;
+}> {
+  const s3 = getClient();
+  if (!s3) return { status: "unavailable", message: "R2 belum dikonfigurasi." };
+  try {
+    await s3.send(new HeadBucketCommand({ Bucket: R2_BUCKET }));
+    return { status: "healthy" };
+  } catch {
+    return { status: "unavailable", message: "R2 tidak merespons." };
+  }
+}
+
 export function r2Key(restaurantId: string, audioId: string, hash: string): string {
   const safeAudio = audioId.replace(":", "_");
   return `restaurants/${restaurantId}/${safeAudio}/${hash}.mp3`;
@@ -57,7 +72,11 @@ export function validateR2UploadRequest(input: R2UploadRequest): R2UploadRequest
     throw new Error("Restaurant tidak valid.");
   if (!isAllowedAudioId(input.audioId)) throw new Error("Audio ID tidak valid.");
   if (input.contentType !== R2_UPLOAD_CONTENT_TYPE) throw new Error("File harus MP3.");
-  if (!Number.isInteger(input.byteSize) || input.byteSize < 1 || input.byteSize > R2_UPLOAD_MAX_BYTES)
+  if (
+    !Number.isInteger(input.byteSize) ||
+    input.byteSize < 1 ||
+    input.byteSize > R2_UPLOAD_MAX_BYTES
+  )
     throw new Error("Ukuran file harus 1-10 MB.");
   if (!/^[0-9a-f]{64}$/.test(input.contentHash)) throw new Error("Hash file tidak valid.");
   return input;
