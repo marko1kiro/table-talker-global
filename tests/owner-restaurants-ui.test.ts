@@ -31,4 +31,11 @@ it("audio route hashes MP3 browser uploads and uses owner catalog actions", () =
   expect(audio).toContain("pendingItem");
   expect(audio).toContain("mutationError");
   expect(audio).not.toContain(".then(refresh)");
+  expect(audio).toMatch(
+    /const mutate[\s\S]*?catch \(cause\)[\s\S]*?finally[\s\S]*?setPendingItem\(""\)/,
+  );
+  expect(audio).toMatch(
+    /AlertDialogTrigger asChild>[\s\S]*?disabled=\{pendingItem === item\.audio_id\}/,
+  );
+  expect(audio).toMatch(/AlertDialogAction[\s\S]*?disabled=\{pendingItem === item\.audio_id\}/);
 });

@@ -53,10 +53,15 @@ function Audio() {
   const mutate = async (key: string, action: () => Promise<{ ok: boolean; message?: string }>) => {
     setPendingItem(key);
     setMutationError("");
-    const result = await action();
-    if (result.ok) refresh();
-    else setMutationError(result.message ?? "Mutasi katalog gagal.");
-    setPendingItem("");
+    try {
+      const result = await action();
+      if (result.ok) refresh();
+      else setMutationError(result.message ?? "Mutasi katalog gagal.");
+    } catch (cause) {
+      setMutationError(cause instanceof Error ? cause.message : "Mutasi katalog gagal.");
+    } finally {
+      setPendingItem("");
+    }
   };
   const upload = async () => {
     if (
@@ -174,11 +179,14 @@ function Audio() {
                     </button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <button type="button">Hapus</button>
+                        <button type="button" disabled={pendingItem === item.audio_id}>
+                          Hapus
+                        </button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogTitle>Hapus audio?</AlertDialogTitle>
                         <AlertDialogAction
+                          disabled={pendingItem === item.audio_id}
                           onClick={() =>
                             void mutate(item.audio_id, () =>
                               deleteManifestItem({
