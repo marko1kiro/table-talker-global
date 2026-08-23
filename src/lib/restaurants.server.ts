@@ -1,7 +1,9 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { validateRestaurantCode } from "./restaurant-domain";
 import { getServiceClient } from "./remote-audio.server";
+import { getLoginRateLimitBuckets } from "./login-request-ip.server";
 
 export type ManifestItem = {
   audioId: string;
@@ -43,28 +45,51 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
       const validated = validateRestaurantCode(data.code);
       const valid = "code" in validated;
       const codeHash = hashRestaurantCode(valid ? validated.code : "INVALID", key);
-      const clientKeyHash = hashOpaqueRestaurantToken(data.clientKey);
-      const { data: limited, error: rateLimitError } = await client.rpc(
-        "check_tenant_login_rate_limit",
-        { p_lookup_hash: codeHash, p_client_key_hash: clientKeyHash },
+      const { clientKeyHash, ipKeyHash } = getLoginRateLimitBuckets(
+        getRequest().headers,
+        data.clientKey,
+        hashOpaqueRestaurantToken,
       );
-      if (rateLimitError || limited) return { error: CODE_ERROR };
+      const [clientLimit, ipLimit] = await Promise.all([
+        client.rpc("check_tenant_login_rate_limit", {
+          p_lookup_hash: codeHash,
+          p_bucket_hash: clientKeyHash,
+        }),
+        client.rpc("check_tenant_login_rate_limit", {
+          p_lookup_hash: codeHash,
+          p_bucket_hash: ipKeyHash,
+        }),
+      ]);
+      if (clientLimit.error || ipLimit.error || clientLimit.data || ipLimit.data)
+        return { error: CODE_ERROR };
       const { data: restaurant, error: lookupError } = await client
         .from("restaurants")
         .select("id, code_version, display_name, is_active")
         .eq("code_hash", codeHash)
         .single();
       if (!valid || !restaurant || lookupError || !restaurant.is_active) {
-        await client.rpc("record_tenant_login_failure", {
-          p_lookup_hash: codeHash,
-          p_client_key_hash: clientKeyHash,
-        });
+        await Promise.all([
+          client.rpc("record_tenant_login_failure", {
+            p_lookup_hash: codeHash,
+            p_bucket_hash: clientKeyHash,
+          }),
+          client.rpc("record_tenant_login_failure", {
+            p_lookup_hash: codeHash,
+            p_bucket_hash: ipKeyHash,
+          }),
+        ]);
         return { error: CODE_ERROR };
       }
-      await client.rpc("clear_tenant_login_failures", {
-        p_lookup_hash: codeHash,
-        p_client_key_hash: clientKeyHash,
-      });
+      await Promise.all([
+        client.rpc("clear_tenant_login_failures", {
+          p_lookup_hash: codeHash,
+          p_bucket_hash: clientKeyHash,
+        }),
+        client.rpc("clear_tenant_login_failures", {
+          p_lookup_hash: codeHash,
+          p_bucket_hash: ipKeyHash,
+        }),
+      ]);
       const { error: sessionError } = await client
         .from("restaurant_sessions")
         .upsert(

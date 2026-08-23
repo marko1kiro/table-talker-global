@@ -203,7 +203,7 @@ credential fields.
 
     `RESTAURANT_CODE_FILE` is only a file path, never credential content. Script rejects insecure files and never prints code, hash, or ciphertext.
 
-7. Reprovision approved pilot after deploying this compatibility release. Existing pilot lookup/encryption use legacy HKDF purposes, so login remains compatible until reprovision; new derived purposes become authoritative after rotation. Do not add credential value to files, shell history, SQL, fixtures, logs, or CI.
+7. Reprovision every active restaurant credential after deploying this release. Pilot sudah direprovisioning. Fallback HKDF legacy sudah dihapus, jadi semua kredensial wajib reprovisioning sebelum login. Do not add credential value to files, shell history, SQL, fixtures, logs, or CI.
 8. Enable feature flag after monitoring provisioning audit records. Apply cleanup only then: `npx supabase db push --include-all`. Migration `20260823120000_remove_legacy_restaurant_code.sql` aborts if any restaurant lacks derived credentials.
 
 The reprovision script prints restaurant display name and UUID only. It computes hash and ciphertext in memory, then calls service-role-only `rotate_restaurant_credentials` RPC. It never prints credential material.

@@ -78,10 +78,8 @@ it("uses database RPCs for login and operational-error rate limits", () => {
 
   const restaurants = source("../src/lib/restaurants.server.ts");
   expect(restaurants).toContain("check_tenant_login_rate_limit");
-  expect(restaurants).toMatch(
-    /const \{ data: limited, error: rateLimitError \} = await client\.rpc\([\s\S]*"check_tenant_login_rate_limit"/,
-  );
-  expect(restaurants).toContain("if (rateLimitError || limited)");
+  expect(restaurants).toContain('client.rpc("check_tenant_login_rate_limit"');
+  expect(restaurants).toContain("clientLimit.error || ipLimit.error");
   expect(restaurants).toContain('rpc("clear_tenant_login_failures"');
   expect(restaurants).not.toContain("isTenantLoginRateLimited");
 });
@@ -147,6 +145,27 @@ it("rate limits every restaurant-code failure by opaque lookup and client hashes
   expect(restaurants).toContain(
     "if (!valid || !restaurant || lookupError || !restaurant.is_active)",
   );
+});
+
+it("rate limits restaurant-code failures by server-derived IP even when client keys rotate", () => {
+  const migration = source("../supabase/migrations/20260823132000_server_ip_login_rate_limit.sql");
+  expect(migration).toMatch(/tenant_login_rate_limits.*bucket_hash/is);
+  expect(migration).toMatch(/p_lookup_hash text, p_bucket_hash text/i);
+  expect(migration).toMatch(/rename column client_key_hash to bucket_hash/i);
+
+  const restaurants = source("../src/lib/restaurants.server.ts");
+  expect(restaurants).toContain('import { getRequest } from "@tanstack/react-start/server"');
+  const requestIp = source("../src/lib/login-request-ip.server.ts");
+  expect(requestIp).toContain('headers.get("x-vercel-forwarded-for")');
+  expect(requestIp).toContain('headers.get("x-forwarded-for")?.split(",")[0]');
+  expect(requestIp).toContain('headers.get("x-real-ip")');
+  expect(restaurants).toContain("getLoginRateLimitBuckets(");
+  expect(restaurants).toContain("p_bucket_hash: clientKeyHash");
+  expect(restaurants).toContain("p_bucket_hash: ipKeyHash");
+  expect(restaurants).toMatch(
+    /Promise\.all\(\[\s*client\.rpc\("check_tenant_login_rate_limit"[\s\S]*ipKeyHash/s,
+  );
+  expect(restaurants).not.toMatch(/validator\(z\.object\([^)]*ip:/s);
 });
 
 it("gets localStorage client key outside dialog render", () => {

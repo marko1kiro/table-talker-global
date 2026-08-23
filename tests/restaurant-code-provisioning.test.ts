@@ -47,5 +47,8 @@ it("documents server-only key rules and staged rollout without credential values
   expect(env).not.toContain("VITE_RESTAURANT_CODE_ENCRYPTION_KEY");
   expect(readme).toContain("provision-restaurant-code.mjs");
   expect(readme).toContain("20260823120000_remove_legacy_restaurant_code.sql");
+  expect(readme).toContain("Pilot sudah direprovisioning");
+  expect(readme).not.toContain("legacy HKDF purposes");
+  expect(readme).not.toContain("login remains compatible until reprovision");
   expect(`${env}\n${readme}`).not.toContain("KAMPUNG-BULU");
 });
