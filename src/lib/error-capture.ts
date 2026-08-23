@@ -1,27 +1,50 @@
-// Captures the original Error out-of-band so server.ts can recover the stack
-// when h3 has already swallowed the throw into a generic 500 Response.
+import { reportOperationalError } from "./operational-errors.server";
 
-let lastCapturedError: { error: unknown; at: number } | undefined;
-const TTL_MS = 5_000;
+export type ErrorStage =
+  | "tenant_login"
+  | "sync_cache"
+  | "playback"
+  | "realtime"
+  | "r2_upload"
+  | "rpc"
+  | "server";
 
-function record(error: unknown) {
-  lastCapturedError = { error, at: Date.now() };
-}
+type ReportOptions = {
+  stage: ErrorStage;
+  reportCode: string;
+  detail?: string;
+  restaurantId?: string | null;
+  deviceId?: string;
+  crewSessionId?: string;
+};
 
-if (typeof globalThis.addEventListener === "function") {
-  globalThis.addEventListener("error", (event) => record((event as ErrorEvent).error ?? event));
-  globalThis.addEventListener("unhandledrejection", (event) =>
-    record((event as PromiseRejectionEvent).reason),
-  );
-}
+let lastCapturedError: Error | null = null;
 
-export function consumeLastCapturedError(): unknown {
-  if (!lastCapturedError) return undefined;
-  if (Date.now() - lastCapturedError.at > TTL_MS) {
-    lastCapturedError = undefined;
-    return undefined;
-  }
-  const { error } = lastCapturedError;
-  lastCapturedError = undefined;
+export function consumeLastCapturedError(): Error | null {
+  const error = lastCapturedError;
+  lastCapturedError = null;
   return error;
+}
+
+export function captureSsrError(error: Error): void {
+  lastCapturedError = error;
+}
+
+export async function captureError(options: ReportOptions): Promise<void> {
+  try {
+    await reportOperationalError({
+      data: {
+        error: {
+          restaurantId: options.restaurantId ?? null,
+          stage: options.stage,
+          reportCode: options.reportCode,
+          detail: options.detail?.slice(0, 1000) ?? null,
+          deviceId: options.deviceId ?? null,
+          crewSessionId: options.crewSessionId ?? null,
+        },
+      },
+    });
+  } catch {
+    // Fire-and-forget — never block the UI
+  }
 }
