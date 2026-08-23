@@ -1,3 +1,5 @@
+create extension if not exists pgcrypto with schema extensions;
+
 create table public.tenant_login_rate_limits (
   lookup_hash text not null,
   client_key_hash text not null check (client_key_hash ~ '^[a-f0-9]{64}$'),
@@ -37,7 +39,7 @@ returns public.crew_sessions language plpgsql security definer set search_path =
 declare result public.crew_sessions;
 begin
   if auth.uid() is null then raise exception 'UNAUTHORIZED'; end if;
-  if not exists (select 1 from public.crew_session_tokens cst join public.restaurants r on r.id = cst.restaurant_id join public.crew_sessions cs on cs.id = cst.crew_session_id where cst.crew_session_id = auth.uid() and cst.token_hash = encode(digest(p_session_token, 'sha256'), 'hex') and cst.expires_at > now() and cst.code_version = r.code_version and r.is_active and cs.restaurant_id = r.id) then raise exception 'INVALID_CREW_SESSION'; end if;
+  if not exists (select 1 from public.crew_session_tokens cst join public.restaurants r on r.id = cst.restaurant_id join public.crew_sessions cs on cs.id = cst.crew_session_id where cst.crew_session_id = auth.uid() and cst.token_hash = encode(extensions.digest(convert_to(p_session_token, 'UTF8'), 'sha256'), 'hex') and cst.expires_at > now() and cst.code_version = r.code_version and r.is_active and cs.restaurant_id = r.id) then raise exception 'INVALID_CREW_SESSION'; end if;
   if p_visibility_state not in ('visible', 'hidden') or p_connection_state not in ('connected', 'disconnected') then raise exception 'INVALID_PRESENCE'; end if;
   update public.crew_sessions set audio_ready = p_audio_ready, visibility_state = p_visibility_state, connection_state = case when p_visibility_state = 'visible' then p_connection_state else 'disconnected' end, last_seen = now(), offline_at = case when p_visibility_state = 'visible' and p_connection_state = 'connected' then null else now() end, updated_at = now() where id = auth.uid() returning * into result;
   if result.id is null then raise exception 'SESSION_NOT_FOUND'; end if;
@@ -50,7 +52,7 @@ create function public.claim_pending_remote_command(p_session_token text)
 returns public.remote_commands language sql stable security definer set search_path = public as $$
   select command from public.remote_commands command
   where command.target_session_id = auth.uid() and command.status = 'sent' and command.expires_at > now()
-    and exists (select 1 from public.crew_session_tokens cst join public.restaurants r on r.id = cst.restaurant_id join public.crew_sessions cs on cs.id = cst.crew_session_id where cst.crew_session_id = auth.uid() and cst.token_hash = encode(digest(p_session_token, 'sha256'), 'hex') and cst.expires_at > now() and cst.code_version = r.code_version and r.is_active and cs.restaurant_id = r.id)
+    and exists (select 1 from public.crew_session_tokens cst join public.restaurants r on r.id = cst.restaurant_id join public.crew_sessions cs on cs.id = cst.crew_session_id where cst.crew_session_id = auth.uid() and cst.token_hash = encode(extensions.digest(convert_to(p_session_token, 'UTF8'), 'sha256'), 'hex') and cst.expires_at > now() and cst.code_version = r.code_version and r.is_active and cs.restaurant_id = r.id)
   order by command.created_at desc, command.id desc limit 1;
 $$;
 
@@ -60,7 +62,7 @@ returns public.remote_commands language plpgsql security definer set search_path
 declare result public.remote_commands;
 begin
   if auth.uid() is null then raise exception 'UNAUTHORIZED'; end if;
-  if not exists (select 1 from public.crew_session_tokens cst join public.restaurants r on r.id = cst.restaurant_id join public.crew_sessions cs on cs.id = cst.crew_session_id where cst.crew_session_id = auth.uid() and cst.token_hash = encode(digest(p_session_token, 'sha256'), 'hex') and cst.expires_at > now() and cst.code_version = r.code_version and r.is_active and cs.restaurant_id = r.id) then raise exception 'INVALID_CREW_SESSION'; end if;
+  if not exists (select 1 from public.crew_session_tokens cst join public.restaurants r on r.id = cst.restaurant_id join public.crew_sessions cs on cs.id = cst.crew_session_id where cst.crew_session_id = auth.uid() and cst.token_hash = encode(extensions.digest(convert_to(p_session_token, 'UTF8'), 'sha256'), 'hex') and cst.expires_at > now() and cst.code_version = r.code_version and r.is_active and cs.restaurant_id = r.id) then raise exception 'INVALID_CREW_SESSION'; end if;
   if p_status not in ('played', 'failed') then raise exception 'INVALID_STATUS'; end if;
   update public.remote_commands set status = p_status, acknowledged_at = now(), failure_reason = case when p_status = 'failed' then left(coalesce(nullif(p_failure_reason, ''), 'Pemutaran audio gagal.'), 160) else null end where id = p_command_id and target_session_id = auth.uid() and status = 'sent' and expires_at > now() returning * into result;
   if result.id is null then raise exception 'COMMAND_NOT_ACKNOWLEDGEABLE'; end if;

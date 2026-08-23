@@ -108,7 +108,7 @@ it("requires active version-bound crew tokens for every remote command RPC", () 
       new RegExp(`create function public\\.${name}\\([\\s\\S]*p_session_token text`, "i"),
     );
   expect(migration).toMatch(
-    /crew_session_tokens[\s\S]*token_hash = encode\(digest\(p_session_token, 'sha256'\), 'hex'\)[\s\S]*expires_at > now\(\)[\s\S]*code_version = r\.code_version[\s\S]*r\.is_active/is,
+    /crew_session_tokens[\s\S]*token_hash = encode\(extensions\.digest\(convert_to\(p_session_token, 'UTF8'\), 'sha256'\), 'hex'\)[\s\S]*expires_at > now\(\)[\s\S]*code_version = r\.code_version[\s\S]*r\.is_active/is,
   );
   expect(migration).toMatch(
     /grant execute on function public\.rotate_restaurant_credentials\(uuid, text, text, integer\), public\.deactivate_restaurant_credentials\(uuid, integer\) to service_role/i,
@@ -119,6 +119,16 @@ it("requires active version-bound crew tokens for every remote command RPC", () 
   expect(hook).toContain("crewSessionToken = claimedSession.session_token");
   expect(hook).toMatch(
     /client\.rpc\("claim_pending_remote_command",\s*\{\s*p_session_token: crewSessionToken,?\s*\}\)/,
+  );
+});
+
+it("uses pgcrypto digest portably in credential revocation RPCs", () => {
+  const migration = source(
+    "../supabase/migrations/20260823131000_credential_revocation_contracts.sql",
+  );
+  expect(migration).toMatch(/create extension if not exists pgcrypto with schema extensions/i);
+  expect(migration).toMatch(
+    /extensions\.digest\(convert_to\(p_session_token, 'UTF8'\), 'sha256'\)/i,
   );
 });
 
