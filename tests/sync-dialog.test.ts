@@ -26,9 +26,9 @@ it("renders progress bar and Coba Lagi button", () => {
   expect(source).toContain("progress");
 });
 
-it("calls onSynced when sync completes", () => {
+it("passes verified manifest audio IDs to onSynced when sync completes", () => {
   const source = component();
-  expect(source).toContain("onSynced()");
+  expect(source).toContain("onSynced(res.manifest.map(({ audioId }) => audioId))");
 });
 
 it("blocks UI with fixed overlay (no cancel button)", () => {

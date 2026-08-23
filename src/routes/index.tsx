@@ -9,16 +9,13 @@ import { Footer } from "@/components/Footer";
 import { SoundboardGrid } from "@/components/SoundboardGrid";
 import {
   TABLE_COUNT,
-  announcementAudioUrls,
-  getBundledAudioUrl,
-  getTableAudioUrl,
   createAudioPlaybackController,
   createPlaybackGeneration,
   getUnlockAudioUrl,
   runIfPlaybackCurrent,
-  readyTables,
   unlockBundledAudio,
 } from "@/lib/audio";
+import { getCachedAudioUrl } from "@/lib/audio-sync";
 import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
 import { SyncDialog } from "@/components/SyncDialog";
 import { CrewMessageOverlay } from "@/components/CrewMessageOverlay";
@@ -84,6 +81,8 @@ function SoundboardPage() {
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [duplicateName, setDuplicateName] = useState(false);
   const [audioSynced, setAudioSynced] = useState(false);
+  const [availableAudioIds, setAvailableAudioIds] = useState<ReadonlySet<AudioId>>(new Set());
+  const objectUrlRef = useRef<string | null>(null);
   const crewIdentityRef = useRef<CrewIdentity | null>(null);
   crewIdentityRef.current = crewIdentity;
 
@@ -117,6 +116,7 @@ function SoundboardPage() {
 
   useEffect(() => {
     return () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
       audioControllerRef.current?.stop();
       audioControllerRef.current = null;
       audioRef.current = null;
@@ -126,6 +126,8 @@ function SoundboardPage() {
   const stop = useCallback(() => {
     playbackGenerationRef.current.next();
     audioControllerRef.current?.stop();
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = null;
     activeAudioIdRef.current = null;
     setPlaying(null);
     setPaused(null);
@@ -137,6 +139,8 @@ function SoundboardPage() {
     audioRef.current = audio;
     audioControllerRef.current ??= createAudioPlaybackController(audio, (token) => {
       if (!playbackGenerationRef.current.isCurrent(token)) return;
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
       activeAudioIdRef.current = null;
       setPlaying(null);
       setPaused(null);
@@ -151,13 +155,16 @@ function SoundboardPage() {
   }, [getAudioController]);
 
   const playRemoteAudio = useCallback(
-    async (audioId: AudioId) => {
-      const url = getBundledAudioUrl(audioId);
+      async (audioId: AudioId) => {
+      if (!audioSynced) throw new Error("Audio belum selesai disinkronkan.");
+      const restaurantId = crewIdentityRef.current?.restaurantId;
+      const url = restaurantId ? await getCachedAudioUrl(restaurantId, audioId) : null;
       if (!url) throw new Error("Audio tidak tersedia.");
       stop();
       const { controller } = getAudioController();
       const token = playbackGenerationRef.current.next();
       activeAudioIdRef.current = audioId;
+      objectUrlRef.current = url;
       setLoading(audioId);
       try {
         await controller.play(url, token);
@@ -174,7 +181,7 @@ function SoundboardPage() {
         throw error;
       }
     },
-    [getAudioController, stop],
+    [audioSynced, getAudioController, stop],
   );
 
   const remoteCrew = useRemoteCrew({
@@ -191,7 +198,8 @@ function SoundboardPage() {
   }, [remoteCrew.duplicateName]);
 
   const play = useCallback(
-    async (id: number | AudioId, directUrl?: string | null) => {
+    async (id: number | AudioId) => {
+      if (!audioSynced) return;
       // Kunci sinkron mencegah dua klik cepat memulai audio secara bersamaan.
       if (activeAudioIdRef.current !== null) return;
 
@@ -240,11 +248,14 @@ function SoundboardPage() {
         return;
       }
 
-      const url = directUrl ?? (typeof id === "number" ? getTableAudioUrl(id) : null);
+      const audioId = typeof id === "number" ? tableAudioId(id) : id;
+      const restaurantId = crewIdentityRef.current?.restaurantId;
+      const url = restaurantId ? await getCachedAudioUrl(restaurantId, audioId) : null;
       if (!url) return;
 
       const token = playbackGenerationRef.current.next();
       activeAudioIdRef.current = id;
+      objectUrlRef.current = url;
       setPaused(null);
       setLoading(id);
       const { controller } = getAudioController();
@@ -284,11 +295,11 @@ function SoundboardPage() {
         });
       }
     },
-    [getAudioController, paused],
+    [audioSynced, getAudioController, paused],
   );
 
   const toggleAnnouncement = useCallback(
-    (id: AudioId, url?: string | null) => {
+    (id: AudioId) => {
       if (playing === id && audioRef.current) {
         audioRef.current.pause();
         activeAudioIdRef.current = null;
@@ -297,7 +308,7 @@ function SoundboardPage() {
         setLoading(null);
         return;
       }
-      void play(id, url);
+      void play(id);
     },
     [play, playing],
   );
@@ -328,7 +339,10 @@ function SoundboardPage() {
         <SyncDialog
           restaurantId={crewIdentity.restaurantId}
           tenantToken={crewIdentity.tenantToken}
-          onSynced={() => setAudioSynced(true)}
+          onSynced={(audioIds) => {
+            setAvailableAudioIds(new Set(audioIds as AudioId[]));
+            setAudioSynced(true);
+          }}
         />
       )}
       {(remoteCrew.needsAudioRecovery || !crewIdentity?.audioReady) && crewIdentity && (
@@ -353,7 +367,7 @@ function SoundboardPage() {
           Remote control tidak tersedia. Soundboard tetap bisa dipakai.
         </p>
       )}
-      <Header readyCount={readyTables.size} totalCount={TABLE_COUNT} />
+        <Header readyCount={availableAudioIds.size} totalCount={TABLE_COUNT} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
         <div className="mb-4 flex items-center justify-between gap-3">
@@ -368,14 +382,7 @@ function SoundboardPage() {
         </div>
 
         <SoundboardGrid
-          availableAudioIds={
-            new Set<AudioId>([
-              ...[...readyTables].map(tableAudioId),
-              ...ANNOUNCEMENT_CATALOG.filter(
-                (announcement) => announcementAudioUrls[announcement.id],
-              ).map((announcement) => announcementAudioId(announcement.id)),
-            ])
-          }
+          availableAudioIds={availableAudioIds}
           drawerDisabled={crewMessage.message !== null}
           announcementTriggerElevated={activeAudioId !== null}
           tableDisabled={() => crewMessage.message !== null || activeAudioId !== null}
@@ -387,7 +394,7 @@ function SoundboardPage() {
           tableStatus={(tableNumber) => {
             if (playing === tableNumber) return "playing";
             if (loading === tableNumber) return "loading";
-            return readyTables.has(tableNumber) ? "ready" : "empty";
+            return availableAudioIds.has(tableAudioId(tableNumber)) ? "ready" : "empty";
           }}
           announcementStatus={(announcementId) =>
             announcementPlaybackStatus(
@@ -405,18 +412,15 @@ function SoundboardPage() {
             const announcement = ANNOUNCEMENT_CATALOG.find(
               ({ id }) => announcementPlaybackId(id) === audioId,
             );
-            if (announcement) toggleAnnouncement(audioId, announcementAudioUrls[announcement.id]);
+            if (announcement) toggleAnnouncement(audioId);
           }}
         />
 
-        {readyTables.size === 0 && (
+        {audioSynced && availableAudioIds.size === 0 && (
           <div className="brutal-border brutal-shadow mt-6 bg-card p-6 text-center">
             <p className="font-display uppercase">Belum ada audio</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              File audio meja belum ada di dalam aplikasi. Tambahkan{" "}
-              <span className="font-mono font-bold text-foreground">1.mp3 – 70.mp3</span> di{" "}
-              <span className="font-mono font-bold text-foreground">src/assets/audio/tables/</span>{" "}
-              lalu deploy ulang.
+              Katalog audio restoran tidak tersedia. Hubungi admin restoran.
             </p>
           </div>
         )}

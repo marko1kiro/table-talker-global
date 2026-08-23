@@ -19,7 +19,8 @@ it("resets audioSynced when new identity is created", () => {
   expect(source).toContain("setAudioSynced(false)");
 });
 
-it("sets audioSynced to true on onSynced callback", () => {
+it("stores verified audio IDs then sets audioSynced on onSynced callback", () => {
   const source = route();
-  expect(source).toContain("onSynced={() => setAudioSynced(true)}");
+  expect(source).toContain("setAvailableAudioIds(new Set(audioIds as AudioId[]))");
+  expect(source).toContain("setAudioSynced(true)");
 });

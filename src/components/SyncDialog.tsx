@@ -5,6 +5,7 @@ import { getRestaurantManifest } from "@/lib/restaurants.server";
 import {
   type SyncProgress,
   type SyncResult,
+  createSyncRunGate,
   syncManifest,
 } from "@/lib/audio-sync";
 import { Button } from "./ui/button";
@@ -14,7 +15,7 @@ import { Loader2, Wifi, WifiOff } from "lucide-react";
 type SyncDialogProps = {
   restaurantId: string;
   tenantToken: string;
-  onSynced: () => void;
+  onSynced: (audioIds: string[]) => void;
 };
 
 type SyncState =
@@ -30,10 +31,10 @@ function isOfflineResult(data: unknown): data is { offline: true; message: strin
 
 export function SyncDialog({ restaurantId, tenantToken, onSynced }: SyncDialogProps) {
   const [state, setState] = useState<SyncState>({ phase: "idle" });
-  const abortRef = useRef(false);
+  const runGateRef = useRef(createSyncRunGate());
 
   const runSync = async () => {
-    abortRef.current = false;
+    const runId = runGateRef.current.start();
     setState({ phase: "fetching" });
 
     try {
@@ -50,36 +51,40 @@ export function SyncDialog({ restaurantId, tenantToken, onSynced }: SyncDialogPr
       }
 
       if (res.manifest.length === 0) {
-        setState({ phase: "done", result: { ok: true, cachedCount: 0, downloadedCount: 0, failedIds: [] } });
-        onSynced();
+        setState({
+          phase: "error",
+          message: "Manifest audio kosong. Hubungi admin restoran.",
+          failedIds: [],
+        });
         return;
       }
 
       setState({ phase: "syncing", progress: { current: 0, total: res.manifest.length, label: "Memulai..." } });
 
       const result = await syncManifest(
+        restaurantId,
         res.manifest,
         (progress: SyncProgress) => {
-          if (!abortRef.current) {
+          if (runGateRef.current.isCurrent(runId)) {
             setState({ phase: "syncing", progress });
           }
         },
       );
 
-      if (abortRef.current) return;
+      if (!runGateRef.current.isCurrent(runId)) return;
 
       if (result.ok) {
         setState({ phase: "done", result });
-        onSynced();
+        onSynced(res.manifest.map(({ audioId }) => audioId));
       } else {
         setState({
           phase: "error",
-          message: `${result.failedIds.length} audio gagal diunduh.`,
+          message: result.message ?? `${result.failedIds.length} audio gagal diunduh.`,
           failedIds: result.failedIds,
         });
       }
     } catch {
-      if (!abortRef.current) {
+      if (runGateRef.current.isCurrent(runId)) {
         setState({ phase: "error", message: "Terjadi kesalahan.", failedIds: [] });
       }
     }
@@ -88,7 +93,7 @@ export function SyncDialog({ restaurantId, tenantToken, onSynced }: SyncDialogPr
   useEffect(() => {
     runSync();
     return () => {
-      abortRef.current = true;
+      runGateRef.current.cancel();
     };
   }, [restaurantId, tenantToken]);
 

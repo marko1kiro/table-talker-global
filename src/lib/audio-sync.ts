@@ -15,6 +15,7 @@ export type SyncResult = {
   cachedCount: number;
   downloadedCount: number;
   failedIds: string[];
+  message?: string;
 };
 
 type CachedMeta = {
@@ -22,8 +23,17 @@ type CachedMeta = {
   byteSize: number;
 };
 
-function cacheKey(audioId: string) {
-  return `https://static.table-talker.local/audio/${encodeURIComponent(audioId)}`;
+export function createSyncRunGate() {
+  let current = 0;
+  return {
+    start: () => ++current,
+    isCurrent: (runId: number) => runId === current,
+    cancel: () => ++current,
+  };
+}
+
+function cacheKey(restaurantId: string, audioId: string) {
+  return `https://static.table-talker.local/${encodeURIComponent(restaurantId)}/audio/${encodeURIComponent(audioId)}`;
 }
 
 export async function computeHash(buffer: ArrayBuffer): Promise<string> {
@@ -33,7 +43,10 @@ export async function computeHash(buffer: ArrayBuffer): Promise<string> {
     .join("");
 }
 
-export async function getCachedMetadata(cacheName: string = CACHE_NAME): Promise<Map<string, CachedMeta>> {
+export async function getCachedMetadata(
+  restaurantId: string,
+  cacheName: string = CACHE_NAME,
+): Promise<Map<string, CachedMeta>> {
   const meta = new Map<string, CachedMeta>();
   if (typeof caches === "undefined") return meta;
 
@@ -42,8 +55,9 @@ export async function getCachedMetadata(cacheName: string = CACHE_NAME): Promise
     const keys = await cache.keys();
     for (const req of keys) {
       const url = new URL(req.url);
-      if (!url.pathname.startsWith("/audio/")) continue;
-      const audioId = decodeURIComponent(url.pathname.slice("/audio/".length));
+      const prefix = `/${encodeURIComponent(restaurantId)}/audio/`;
+      if (!url.pathname.startsWith(prefix)) continue;
+      const audioId = decodeURIComponent(url.pathname.slice(prefix.length));
       const res = await cache.match(req);
       if (!res) continue;
       meta.set(audioId, {
@@ -79,6 +93,7 @@ export async function downloadAndVerify(
 }
 
 export async function putToCache(
+  restaurantId: string,
   audioId: string,
   buffer: ArrayBuffer,
   hash: string,
@@ -94,7 +109,7 @@ export async function putToCache(
         "x-content-hash": hash,
       },
     });
-    await cache.put(new Request(cacheKey(audioId)), response);
+    await cache.put(new Request(cacheKey(restaurantId, audioId)), response);
     return true;
   } catch {
     return false;
@@ -102,13 +117,14 @@ export async function putToCache(
 }
 
 export async function getCachedAudio(
+  restaurantId: string,
   audioId: string,
   cacheName: string = CACHE_NAME,
 ): Promise<ArrayBuffer | null> {
   if (typeof caches === "undefined") return null;
   try {
     const cache = await caches.open(cacheName);
-    const res = await cache.match(new Request(cacheKey(audioId)));
+    const res = await cache.match(new Request(cacheKey(restaurantId, audioId)));
     if (!res) return null;
     return res.arrayBuffer();
   } catch {
@@ -117,6 +133,7 @@ export async function getCachedAudio(
 }
 
 export async function removeFromCache(
+  restaurantId: string,
   audioIds: string[],
   cacheName: string = CACHE_NAME,
 ): Promise<void> {
@@ -124,7 +141,7 @@ export async function removeFromCache(
   try {
     const cache = await caches.open(cacheName);
     for (const id of audioIds) {
-      await cache.delete(new Request(cacheKey(id)));
+      await cache.delete(new Request(cacheKey(restaurantId, id)));
     }
   } catch {
     // ignore
@@ -132,11 +149,22 @@ export async function removeFromCache(
 }
 
 export async function syncManifest(
+  restaurantId: string,
   manifest: ManifestItem[],
   onProgress?: (progress: SyncProgress) => void,
   cacheName: string = CACHE_NAME,
 ): Promise<SyncResult> {
-  const cached = await getCachedMetadata(cacheName);
+  if (typeof caches === "undefined") {
+    return { ok: false, cachedCount: 0, downloadedCount: 0, failedIds: [], message: "Cache Storage tidak tersedia. Gunakan browser modern untuk sinkronisasi audio." };
+  }
+  if (!globalThis.crypto?.subtle) {
+    return { ok: false, cachedCount: 0, downloadedCount: 0, failedIds: [], message: "Web Crypto tidak tersedia. Gunakan browser modern untuk verifikasi audio." };
+  }
+  if (manifest.length === 0) {
+    return { ok: false, cachedCount: 0, downloadedCount: 0, failedIds: [], message: "Manifest audio kosong. Hubungi admin restoran." };
+  }
+
+  const cached = await getCachedMetadata(restaurantId, cacheName);
 
   const needsDownload: ManifestItem[] = [];
   let cachedCount = 0;
@@ -152,7 +180,7 @@ export async function syncManifest(
 
   const total = manifest.length;
   let downloadedCount = 0;
-  const failedIds: string[] = [];
+  const failedIds = new Set<string>();
 
   for (let i = 0; i < needsDownload.length; i += CONCURRENT) {
     const batch = needsDownload.slice(i, i + CONCURRENT);
@@ -161,12 +189,12 @@ export async function syncManifest(
         onProgress?.({ current: cachedCount + downloadedCount, total, label: item.label });
         const buffer = await downloadAndVerify(item.r2Url, item.contentHash, item.byteSize);
         if (!buffer) {
-          failedIds.push(item.audioId);
+          failedIds.add(item.audioId);
           return;
         }
-        const ok = await putToCache(item.audioId, buffer, item.contentHash, cacheName);
+        const ok = await putToCache(restaurantId, item.audioId, buffer, item.contentHash, cacheName);
         if (!ok) {
-          failedIds.push(item.audioId);
+          failedIds.add(item.audioId);
           return;
         }
         downloadedCount++;
@@ -174,21 +202,36 @@ export async function syncManifest(
     );
 
     if (results.some((r) => r.status === "rejected")) {
-      failedIds.push(...batch.map((b) => b.audioId));
+      batch.forEach((item) => failedIds.add(item.audioId));
     }
   }
 
-  // Remove obsolete cache entries
-  const manifestIds = new Set(manifest.map((m) => m.audioId));
-  const staleIds = Array.from(cached.keys()).filter((id) => !manifestIds.has(id));
-  if (staleIds.length > 0) await removeFromCache(staleIds, cacheName);
+  if (failedIds.size === 0) {
+    const manifestIds = new Set(manifest.map((m) => m.audioId));
+    const staleIds = Array.from(cached.keys()).filter((id) => !manifestIds.has(id));
+    if (staleIds.length > 0) await removeFromCache(restaurantId, staleIds, cacheName);
+  }
 
   onProgress?.({ current: total, total, label: "Selesai" });
 
   return {
-    ok: failedIds.length === 0,
+    ok: failedIds.size === 0,
     cachedCount,
     downloadedCount,
-    failedIds,
+    failedIds: [...failedIds],
   };
+}
+
+type CachedAudioUrlDependencies = {
+  getCachedAudio?: typeof getCachedAudio;
+  createObjectURL?: (blob: Blob) => string;
+};
+
+export async function getCachedAudioUrl(
+  restaurantId: string,
+  audioId: string,
+  { getCachedAudio: readAudio = getCachedAudio, createObjectURL = URL.createObjectURL }: CachedAudioUrlDependencies = {},
+): Promise<string | null> {
+  const buffer = await readAudio(restaurantId, audioId);
+  return buffer ? createObjectURL(new Blob([buffer], { type: "audio/mpeg" })) : null;
 }
