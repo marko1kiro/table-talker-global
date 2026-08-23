@@ -30,6 +30,7 @@ export function CrewIdentityDialog({
     restaurantId: string;
     restaurantCode: string;
     restaurantDisplayName: string;
+    tenantToken: string;
   } | null>(null);
 
   const submitRestaurant = async (event: FormEvent<HTMLFormElement>) => {
@@ -52,6 +53,7 @@ export function CrewIdentityDialog({
         restaurantId: result.restaurantId,
         restaurantCode: result.restaurantCode,
         restaurantDisplayName: result.displayName,
+        tenantToken: result.tenantToken,
       });
       setStep("name");
     } catch {
@@ -76,6 +78,7 @@ export function CrewIdentityDialog({
       restaurantId: restaurantInfo!.restaurantId,
       restaurantCode: restaurantInfo!.restaurantCode,
       restaurantDisplayName: restaurantInfo!.restaurantDisplayName,
+      tenantToken: restaurantInfo!.tenantToken,
     });
     setSubmitting(false);
   };
@@ -94,7 +97,7 @@ export function CrewIdentityDialog({
               Masukkan Kode Resto & PIN
             </DialogTitle>
             <DialogDescription id="crew-identity-description">
-              Kode resto dipilih, PIN formal 123456.
+              Masukkan kode resto dan PIN yang diberikan administrator.
             </DialogDescription>
             <form className="space-y-4" onSubmit={submitRestaurant}>
               <label className="block text-sm font-bold" htmlFor="restaurant-code">
@@ -117,7 +120,7 @@ export function CrewIdentityDialog({
                 type="password"
                 value={pin}
                 onChange={(event) => setPin(event.target.value)}
-                placeholder="123456"
+                placeholder="PIN resto"
                 autoComplete="off"
                 required
               />

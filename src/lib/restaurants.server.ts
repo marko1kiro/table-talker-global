@@ -1,8 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
-import { normalizeRestaurantCode, validateTenantLogin } from "./restaurant-domain";
+import { normalizeRestaurantCode } from "./restaurant-domain";
 import { getServiceClient } from "./remote-audio.server";
+import {
+  clearTenantLoginFailures,
+  createTenantSession,
+  isTenantLoginRateLimited,
+  recordTenantLoginFailure,
+  verifyRestaurantPin,
+} from "./tenant-session.server";
 
 export type ManifestItem = {
   audioId: string;
@@ -24,20 +31,26 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
     if (!client) return offline();
 
     try {
-      const validated = validateTenantLogin({ code: data.code, pin: data.pin });
+      const validated = normalizeRestaurantCode(data.code);
       if ("error" in validated) return { error: validated.error };
+      if (isTenantLoginRateLimited(validated.code)) return { error: "Terlalu banyak percobaan. Coba lagi nanti." };
 
       const { data: restaurant, error: lookupError } = await client
         .from("restaurants")
-        .select("id, code, display_name, is_active, deactivated_reason")
+        .select("id, code, display_name, is_active, deactivated_reason, pin_hash")
         .ilike("code", validated.code)
         .single();
 
-      if (lookupError || !restaurant) return { error: "Resto tidak ditemukan." };
+      if (lookupError || !restaurant || !verifyRestaurantPin(data.pin, restaurant.pin_hash)) {
+        recordTenantLoginFailure(validated.code);
+        return { error: "Kode resto atau PIN salah." };
+      }
       if (!restaurant.is_active)
         return {
           error: `Resto tidak aktif.${restaurant.deactivated_reason ? ` ${restaurant.deactivated_reason}` : ""}`,
         };
+
+      clearTenantLoginFailures(validated.code);
 
       const { error: sessionError } = await client
         .from("restaurant_sessions")
@@ -53,6 +66,7 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
         restaurantId: restaurant.id,
         restaurantCode: restaurant.code,
         displayName: restaurant.display_name,
+        tenantToken: createTenantSession(restaurant.id),
       };
     } catch {
       return offline();

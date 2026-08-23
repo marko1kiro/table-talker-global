@@ -19,7 +19,7 @@ export interface TableTalkerSession {
  */
 let devSessionSecret: string | null = null;
 
-function getSessionSecret(): string {
+export function getAuthSecret(): string {
   const fromEnv = process.env.AUTH_SECRET;
   if (typeof fromEnv === "string" && fromEnv.length >= 32) return fromEnv;
 
@@ -48,7 +48,7 @@ export function isPasswordValid(password: string, expectedPassword: string | nul
 export function getAuthSessionConfig(): SessionConfig {
   return {
     name: "table-talker-session",
-    password: getSessionSecret(),
+    password: getAuthSecret(),
     maxAge: 60 * 60 * 12,
     cookie: {
       httpOnly: true,

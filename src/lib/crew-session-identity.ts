@@ -10,6 +10,7 @@ export type CrewSessionIdentity = {
   restaurantId: string;
   restaurantCode: string;
   restaurantDisplayName: string;
+  tenantToken: string;
 };
 
 export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessionIdentity | null {
@@ -23,6 +24,7 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
       restaurantId?: unknown;
       restaurantCode?: unknown;
       restaurantDisplayName?: unknown;
+      tenantToken?: unknown;
     };
     if (
       typeof value.displayName !== "string" ||
@@ -30,6 +32,7 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
       typeof value.restaurantId !== "string" ||
       typeof value.restaurantCode !== "string" ||
       typeof value.restaurantDisplayName !== "string"
+      || typeof value.tenantToken !== "string" || !value.tenantToken
     ) {
       storage.removeItem(CREW_SESSION_IDENTITY_KEY);
       return null;
@@ -44,6 +47,7 @@ export function readCrewSessionIdentity(storage: StorageLike | null): CrewSessio
       restaurantId: value.restaurantId,
       restaurantCode: value.restaurantCode,
       restaurantDisplayName: value.restaurantDisplayName,
+      tenantToken: value.tenantToken,
     };
   } catch {
     try {
@@ -67,6 +71,7 @@ export function writeCrewSessionIdentity(
       restaurantId: identity.restaurantId,
       restaurantCode: identity.restaurantCode,
       restaurantDisplayName: identity.restaurantDisplayName,
+      tenantToken: identity.tenantToken,
     };
     storage.setItem(CREW_SESSION_IDENTITY_KEY, JSON.stringify(data));
     return data;

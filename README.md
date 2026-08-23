@@ -162,3 +162,8 @@ mempengaruhi delivery real-time. Detail fungsi ada di
 - `npm run dev` — development server
 - `npm run build` — build untuk Vercel
 - `npm run lint` — pemeriksaan kode
+# Tenant PIN setup
+
+Before applying `20260823102000_restaurant_pin_hash.sql`, set PostgreSQL setting
+`app.pilot_restaurant_pin_hash` to lowercase SHA-256 hex of pilot PIN. Generate it
+server-side, for example: `node -e "console.log(require('node:crypto').createHash('sha256').update(process.env.PILOT_RESTAURANT_PIN).digest('hex'))"`.

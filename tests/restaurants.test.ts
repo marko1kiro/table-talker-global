@@ -30,8 +30,6 @@ it("backfills the pilot restaurant exactly once", () => {
 import { describe } from "vitest";
 import {
   normalizeRestaurantCode,
-  validateTenantLogin,
-  TENANT_PIN,
 } from "../src/lib/restaurant-domain";
 
 describe("normalizeRestaurantCode", () => {
@@ -50,17 +48,5 @@ describe("normalizeRestaurantCode", () => {
     expect(normalizeRestaurantCode("BAD CODE!")).toEqual({
       error: "Kode resto 3\u201332 karakter, huruf/angka/-/_ saja.",
     });
-  });
-});
-
-describe("validateTenantLogin", () => {
-  it("accepts formal PIN with valid code", () => {
-    expect(validateTenantLogin({ code: "kampung-bulu", pin: TENANT_PIN })).toEqual({
-      code: "KAMPUNG-BULU",
-    });
-  });
-
-  it("rejects wrong PIN before touching the code", () => {
-    expect(validateTenantLogin({ code: "", pin: "000000" })).toEqual({ error: "PIN salah." });
   });
 });

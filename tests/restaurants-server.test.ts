@@ -12,10 +12,13 @@ it("exports createRestaurant bound to service-role client behind super admin", (
   expect(source).toContain("restaurants_code_key");
 });
 
-it("exports loginToRestaurant with PIN validation and session creation", () => {
+it("exports loginToRestaurant with server-only PIN verification and scoped token", () => {
   const source = server();
   expect(source).toContain("loginToRestaurant");
-  expect(source).toContain("validateTenantLogin");
+  expect(source).toContain("verifyRestaurantPin");
+  expect(source).toContain("createTenantSession");
+  expect(source).toContain("isTenantLoginRateLimited");
+  expect(source).toContain("pin_hash");
   expect(source).toContain("Resto tidak aktif");
   expect(source).toContain("restaurant_sessions");
 });
