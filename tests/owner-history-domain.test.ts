@@ -42,6 +42,14 @@ describe("owner history domain", () => {
       ok: false,
       code: "INVALID_SEARCH",
     });
+    expect(normalizeHistorySearch("meja,or(status.eq.failed)")).toEqual({
+      ok: false,
+      code: "INVALID_SEARCH",
+    });
+    expect(normalizeHistorySearch("100% gagal")).toEqual({
+      ok: false,
+      code: "INVALID_SEARCH",
+    });
   });
 
   it("accepts omitted notes and trims bounded notes", () => {

@@ -28,7 +28,7 @@ export function normalizeHistoryRange(input: HistoryRangeInput, now = new Date()
 
 export function normalizeHistorySearch(value?: string) {
   const text = value?.trim() ?? "";
-  return text.length <= MAX_SEARCH_LENGTH
+  return text.length <= MAX_SEARCH_LENGTH && !/[,()%]/.test(text)
     ? { ok: true as const, text }
     : { ok: false as const, code: "INVALID_SEARCH" as const };
 }
