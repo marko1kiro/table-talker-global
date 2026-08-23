@@ -11,6 +11,14 @@ import {
   sendRemoteCommand,
   sendCrewMessage,
 } from "@/lib/remote-audio.server";
+import { listRestaurants } from "@/lib/restaurants.server";
+import {
+  listManifestItems,
+  toggleManifestItem,
+  upsertManifestItem,
+  bumpCatalogVersion,
+} from "@/lib/manifest.server";
+import { uploadAudioToR2 } from "@/lib/upload.server";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   canSelectRemoteAudio,
@@ -314,6 +322,222 @@ function SuperAdminPage() {
           )}
         </div>
       </section>
+      <AudioManagementSection />
     </main>
+  );
+}
+
+function AudioManagementSection() {
+  const queryClient = useQueryClient();
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState("");
+  const restaurantsQuery = useQuery({
+    queryKey: ["restaurants-list"],
+    queryFn: () => listRestaurants(),
+  });
+  const restaurants =
+    restaurantsQuery.data && "ok" in restaurantsQuery.data && restaurantsQuery.data.ok
+      ? restaurantsQuery.data.restaurants
+      : [];
+
+  return (
+    <section className="brutal-border mx-auto mt-6 max-w-4xl bg-card p-4 sm:p-6">
+      <h2 className="font-display text-lg uppercase">Audio Management</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Kelola audio manifest per resto. Upload file MP3 ke R2, atur label dan kategori.
+      </p>
+      <div className="mt-4">
+        <label className="text-sm font-bold">
+          Pilih Resto
+          <select
+            value={selectedRestaurantId}
+            onChange={(e) => setSelectedRestaurantId(e.target.value)}
+            className="brutal-border mt-1 w-full bg-background px-3 py-2 font-normal"
+          >
+            <option value="">Pilih resto</option>
+            {restaurants.map((r: { id: string; code: string; display_name: string; catalog_version: number | null }) => (
+              <option key={r.id} value={r.id}>
+                {r.code} — {r.display_name} (v{r.catalog_version ?? 0})
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {selectedRestaurantId && (
+        <ManifestItemsList
+          restaurantId={selectedRestaurantId}
+          onUploadComplete={() =>
+            queryClient.invalidateQueries({ queryKey: ["restaurants-list"] })
+          }
+        />
+      )}
+    </section>
+  );
+}
+
+function ManifestItemsList({
+  restaurantId,
+  onUploadComplete,
+}: {
+  restaurantId: string;
+  onUploadComplete: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [audioId, setAudioId] = useState("");
+  const [label, setLabel] = useState("");
+  const [category, setCategory] = useState("BASE");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  const itemsQuery = useQuery({
+    queryKey: ["manifest-items", restaurantId],
+    queryFn: () => listManifestItems({ data: { restaurantId } }),
+  });
+
+  const items =
+    itemsQuery.data && "ok" in itemsQuery.data && itemsQuery.data.ok ? itemsQuery.data.items : [];
+
+  const uploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!uploadFile || !audioId.trim() || !label.trim()) return;
+      setUploading(true);
+      setUploadError("");
+      try {
+        const buffer = await uploadFile.arrayBuffer();
+        const result = await uploadAudioToR2({
+          data: {
+            restaurantId,
+            audioId: audioId.trim(),
+            buffer: Array.from(new Uint8Array(buffer)),
+            fileName: uploadFile.name,
+          },
+        });
+        if (!result || !("ok" in result) || !result.ok) {
+          setUploadError("error" in result ? result.error : "Upload gagal.");
+          return;
+        }
+        const manifestResult = await upsertManifestItem({
+          data: {
+            restaurantId,
+            audioId: audioId.trim(),
+            label: label.trim(),
+            category,
+            r2Url: result.url,
+            contentHash: result.hash,
+            byteSize: result.byteSize,
+            ordering: items.length,
+          },
+        });
+        if (!manifestResult || !("ok" in manifestResult) || !manifestResult.ok) {
+          setUploadError("error" in manifestResult ? manifestResult.error : "Gagal simpan manifest.");
+          return;
+        }
+        await bumpCatalogVersion({ data: { restaurantId } });
+        setAudioId("");
+        setLabel("");
+        setUploadFile(null);
+        onUploadComplete();
+        queryClient.invalidateQueries({ queryKey: ["manifest-items", restaurantId] });
+      } catch {
+        setUploadError("Upload gagal.");
+      } finally {
+        setUploading(false);
+      }
+    },
+  });
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="brutal-border bg-background p-3">
+        <h3 className="text-sm font-bold">Upload Audio Baru</h3>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <input
+            type="text"
+            placeholder="Audio ID (misal: table:1)"
+            value={audioId}
+            onChange={(e) => setAudioId(e.target.value)}
+            className="brutal-border bg-card px-3 py-2 text-sm"
+          />
+          <input
+            type="text"
+            placeholder="Label (misal: Meja 1)"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            className="brutal-border bg-card px-3 py-2 text-sm"
+          />
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="brutal-border bg-card px-3 py-2 text-sm"
+          >
+            <option value="BASE">BASE</option>
+            <option value="INFO">INFO</option>
+            <option value="LARANGAN">LARANGAN</option>
+          </select>
+          <input
+            type="file"
+            accept=".mp3,audio/mpeg"
+            onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+            className="brutal-border bg-card px-3 py-2 text-sm"
+          />
+        </div>
+        {uploadError && (
+          <p className="mt-2 text-xs font-bold text-destructive">{uploadError}</p>
+        )}
+        <button
+          type="button"
+          className="brutal-border brutal-press mt-2 w-full bg-accent px-3 py-2 font-display uppercase text-sm"
+          disabled={!uploadFile || !audioId.trim() || !label.trim() || uploading}
+          onClick={() => uploadMutation.mutate()}
+        >
+          {uploading ? "Mengupload..." : "Upload & Tambah ke Manifest"}
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[500px] text-left text-xs sm:text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="p-2">Audio ID</th>
+              <th className="p-2">Label</th>
+              <th className="p-2">Kategori</th>
+              <th className="p-2">Status</th>
+              <th className="p-2">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item: { id: string; audio_id: string; label: string; category: string; active: boolean }) => (
+              <tr key={item.id} className="border-b align-top">
+                <td className="p-2 font-mono text-xs">{item.audio_id}</td>
+                <td className="p-2">{item.label}</td>
+                <td className="p-2">{item.category}</td>
+                <td className="p-2">
+                  <span className={item.active ? "text-green-600" : "text-muted-foreground"}>
+                    {item.active ? "Aktif" : "Nonaktif"}
+                  </span>
+                </td>
+                <td className="p-2">
+                  <button
+                    type="button"
+                    className="text-xs underline"
+                    onClick={async () => {
+                      await toggleManifestItem({ data: { manifestId: item.id, active: !item.active } });
+                      queryClient.invalidateQueries({ queryKey: ["manifest-items", restaurantId] });
+                    }}
+                  >
+                    {item.active ? "Nonaktifkan" : "Aktifkan"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {items.length === 0 && (
+          <p className="py-4 text-sm text-muted-foreground text-center">
+            Belum ada audio di manifest ini.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

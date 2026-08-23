@@ -116,3 +116,21 @@ export const getRestaurantManifest = createServerFn({ method: "GET" })
       return offline();
     }
   });
+
+export const listRestaurants = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const client = getServiceClient();
+    if (!client) return offline();
+
+    try {
+      const { data: restaurants, error } = await client
+        .from("restaurants")
+        .select("id, code, display_name, is_active, catalog_version")
+        .order("code");
+
+      if (error) return offline();
+      return { ok: true as const, restaurants: restaurants ?? [] };
+    } catch {
+      return offline();
+    }
+  });
