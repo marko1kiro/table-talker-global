@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
 function option(name) {
@@ -23,14 +24,21 @@ function deriveKey(key, purpose) {
 }
 
 function hashRestaurantCode(code, key) {
-  return `hmac-sha256:v1:${createHmac("sha256", deriveKey(key, "restaurant-code-lookup:v1"))
+  return `hmac-sha256:v1:${createHmac(
+    "sha256",
+    deriveKey(key, "table-talker/restaurant-code-lookup/v1"),
+  )
     .update(code)
     .digest("base64url")}`;
 }
 
 function encryptRestaurantCode(code, restaurantId, key) {
   const nonce = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", deriveKey(key, "restaurant-code-encryption:v1"), nonce);
+  const cipher = createCipheriv(
+    "aes-256-gcm",
+    deriveKey(key, "table-talker/restaurant-code-encryption/v1"),
+    nonce,
+  );
   cipher.setAAD(Buffer.from(`restaurant_id:${restaurantId};format:aes-256-gcm:v1`));
   const ciphertext = Buffer.concat([cipher.update(code, "utf8"), cipher.final()]);
   return `aes-256-gcm:v1:${nonce.toString("base64url")}:${ciphertext.toString("base64url")}:${cipher.getAuthTag().toString("base64url")}`;
@@ -40,37 +48,47 @@ function decryptRestaurantCode(value, restaurantId, key) {
   const [, , nonceValue, ciphertextValue, tagValue] = value.split(":");
   const decipher = createDecipheriv(
     "aes-256-gcm",
-    deriveKey(key, "restaurant-code-encryption:v1"),
+    deriveKey(key, "table-talker/restaurant-code-encryption/v1"),
     Buffer.from(nonceValue, "base64url"),
   );
   decipher.setAAD(Buffer.from(`restaurant_id:${restaurantId};format:aes-256-gcm:v1`));
   decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
-  return Buffer.concat([decipher.update(Buffer.from(ciphertextValue, "base64url")), decipher.final()]).toString("utf8");
+  return Buffer.concat([
+    decipher.update(Buffer.from(ciphertextValue, "base64url")),
+    decipher.final(),
+  ]).toString("utf8");
 }
 
 async function main() {
   const restaurantId = option("--restaurant-id");
-  const displayName = option("--display-name");
-  const code = option("--code") ?? process.env.RESTAURANT_CODE;
-  if ((!restaurantId && !displayName) || (restaurantId && displayName) || !code) throw new Error("INVALID_INPUT");
+  const codeFile = option("--code-file") ?? process.env.RESTAURANT_CODE_FILE;
+  if (!restaurantId || !/^[0-9a-f-]{36}$/i.test(restaurantId) || !codeFile)
+    throw new Error("INVALID_INPUT");
+  if (statSync(codeFile).mode & 0o077) throw new Error("INSECURE_CODE_FILE");
+  const code = readFileSync(codeFile, "utf8").trim();
   if (!/^[A-Z0-9]{6,32}$/.test(code)) throw new Error("INVALID_INPUT");
 
   const key = parseKey(process.env.RESTAURANT_CODE_ENCRYPTION_KEY ?? "");
   const url = process.env.SUPABASE_URL;
   const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRole) throw new Error("MISSING_SERVER_CONFIGURATION");
-  const client = createClient(url, serviceRole, { auth: { persistSession: false, autoRefreshToken: false } });
-  let query = client.from("restaurants").select("id, display_name");
-  query = restaurantId ? query.eq("id", restaurantId) : query.eq("display_name", displayName);
-  const { data: restaurant, error: lookupError } = await query.maybeSingle();
+  const client = createClient(url, serviceRole, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: restaurant, error: lookupError } = await client
+    .from("restaurants")
+    .select("id, display_name, code_version")
+    .eq("id", restaurantId)
+    .maybeSingle();
   if (lookupError || !restaurant) throw new Error("RESTAURANT_NOT_FOUND");
 
   const codeHash = hashRestaurantCode(code, key);
   const codeEncrypted = encryptRestaurantCode(code, restaurant.id, key);
-  const { error } = await client.rpc("provision_restaurant_credentials", {
+  const { error } = await client.rpc("rotate_restaurant_credentials", {
     p_restaurant_id: restaurant.id,
     p_code_hash: codeHash,
     p_code_encrypted: codeEncrypted,
+    p_next_code_version: restaurant.code_version + 1,
   });
   if (error) throw new Error("PROVISIONING_FAILED");
   const { data: readback, error: readbackError } = await client
@@ -85,7 +103,9 @@ async function main() {
     decryptRestaurantCode(readback.code_encrypted, restaurant.id, key) !== code
   )
     throw new Error("READBACK_FAILED");
-  process.stdout.write(`Provisioned credential for ${restaurant.display_name} (${restaurant.id}).\n`);
+  process.stdout.write(
+    `Provisioned credential for ${restaurant.display_name} (${restaurant.id}).\n`,
+  );
 }
 
 main().catch((error) => fail(error instanceof Error ? error.message : "PROVISIONING_FAILED"));

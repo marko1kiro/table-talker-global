@@ -22,15 +22,15 @@ Lima variabel fitur remote bersifat opsional: `SUPER_ADMIN_PASSWORD` serta empat
 variabel Supabase. Tanpanya, dashboard dan soundboard bundled tetap berjalan,
 tetapi remote audio dinonaktifkan secara fail-open.
 
-| Variable | Dipakai untuk |
-| --- | --- |
-| `DASHBOARD_PASSWORD` | Password halaman dashboard `/` |
-| `SUPER_ADMIN_PASSWORD` | Password khusus halaman remote audio `/super-admin` |
-| `AUTH_SECRET` | Menandatangani cookie sesi, minimal 32 karakter |
-| `VITE_SUPABASE_URL` | URL Supabase publik untuk browser crew |
-| `VITE_SUPABASE_ANON_KEY` | Anon key Supabase publik untuk browser crew |
-| `SUPABASE_URL` | URL Supabase untuk server Super Admin |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key Supabase untuk server Super Admin |
+| Variable                    | Dipakai untuk                                       |
+| --------------------------- | --------------------------------------------------- |
+| `DASHBOARD_PASSWORD`        | Password halaman dashboard `/`                      |
+| `SUPER_ADMIN_PASSWORD`      | Password khusus halaman remote audio `/super-admin` |
+| `AUTH_SECRET`               | Menandatangani cookie sesi, minimal 32 karakter     |
+| `VITE_SUPABASE_URL`         | URL Supabase publik untuk browser crew              |
+| `VITE_SUPABASE_ANON_KEY`    | Anon key Supabase publik untuk browser crew         |
+| `SUPABASE_URL`              | URL Supabase untuk server Super Admin               |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key Supabase untuk server Super Admin  |
 
 `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` memang publik karena dibundel ke
 browser. `SUPABASE_URL` dan terutama `SUPABASE_SERVICE_ROLE_KEY` hanya untuk
@@ -131,6 +131,7 @@ kondisi tersebut: buka crew di foreground, tekan `LANJUT!!`, lalu gunakan pemuli
 
    Periksa config yang dibuat sebelum commit; `init` tidak diperlukan untuk tugas
    dokumentasi ini dan tidak boleh mengganti migration yang sudah ada.
+
 4. Login, hubungkan proyek, lalu terapkan migrasi:
 
    ```bash
@@ -162,6 +163,7 @@ mempengaruhi delivery real-time. Detail fungsi ada di
 - `npm run dev` — development server
 - `npm run build` — build untuk Vercel
 - `npm run lint` — pemeriksaan kode
+
 ## Restaurant credential rollout
 
 `RESTAURANT_CODE_ENCRYPTION_KEY` is server-only 32-byte base64url key. Generate once
@@ -177,14 +179,16 @@ credential fields.
 3. `npx supabase link --project-ref YOUR_PROJECT_REF`
 4. Run `npx supabase db push --include-all`. Expected: additive and provisioning migrations apply, then cleanup stops with `UNPROVISIONED_RESTAURANT_CREDENTIALS`. Confirm migrations `20260823110000_restaurant_code_credentials_additive.sql` and `20260823111500_provision_restaurant_credentials.sql` exist remotely; do not bypass guard.
 5. Configure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `RESTAURANT_CODE_ENCRYPTION_KEY` only in protected runtime environment.
-6. Provision each row using exact UUID, or exact display name when UUID unavailable. Supply code through protected `RESTAURANT_CODE`; avoid `--code` because shell history can retain it:
+6. Reprovision each row using exact UUID only. Put one code in a protected file readable only by deployment user. Do not pass a code by argv or environment. The command rotates code version and immediately revokes existing restaurant and crew sessions:
 
    ```bash
-   node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID
-   node scripts/provision-restaurant-code.mjs --display-name "Exact restaurant display name"
+   chmod 600 /secure/path/restaurant-code
+   RESTAURANT_CODE_FILE=/secure/path/restaurant-code node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID
    ```
 
-7. Provision approved pilot using its approved runtime secret only. Do not add credential value to files, shell history, SQL, fixtures, logs, or CI. Pilot target is restaurant row identified by release operator's approved UUID; if unavailable, use exact approved display name and verify returned UUID against secure release record.
+   `RESTAURANT_CODE_FILE` is only a file path, never credential content. Script rejects group/world-readable files and never prints code, hash, or ciphertext.
+
+7. Reprovision approved pilot after deploying this compatibility release. Existing pilot lookup/encryption use legacy HKDF purposes, so login remains compatible until reprovision; new derived purposes become authoritative after rotation. Do not add credential value to files, shell history, SQL, fixtures, logs, or CI.
 8. Enable feature flag after monitoring provisioning audit records. Apply cleanup only then: `npx supabase db push --include-all`. Migration `20260823120000_remove_legacy_restaurant_code.sql` aborts if any restaurant lacks derived credentials.
 
-The provisioning script prints restaurant display name and UUID only. It computes hash and ciphertext in memory, then calls service-role-only `provision_restaurant_credentials` RPC. It never prints credential material.
+The reprovision script prints restaurant display name and UUID only. It computes hash and ciphertext in memory, then calls service-role-only `rotate_restaurant_credentials` RPC. It never prints credential material.

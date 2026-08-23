@@ -1,10 +1,15 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-const hookSource = readFileSync(new URL("../src/hooks/use-remote-crew.ts", import.meta.url), "utf8");
+const hookSource = readFileSync(
+  new URL("../src/hooks/use-remote-crew.ts", import.meta.url),
+  "utf8",
+);
 
 it("claims a pending command after realtime subscribes", () => {
-  expect(hookSource).toContain('client.rpc("claim_pending_remote_command")');
+  expect(hookSource).toMatch(
+    /client\.rpc\("claim_pending_remote_command",\s*\{\s*p_session_token: crewSessionToken,?\s*\}\)/,
+  );
   expect(hookSource).toMatch(
     /activatePresence:\s*\(\)\s*=>\s*\{[\s\S]*catchUp\(\)[\s\S]*activatePresence\(\)/,
   );
@@ -17,12 +22,10 @@ it("invalidates the channel synchronously and blocks late subscription after cle
     /const currentChannel = channel;\s*channel = null;\s*if \(currentChannel\) void client\.removeChannel\(currentChannel\)/,
   );
   expect(hookSource).toMatch(
-    /claim_pending_remote_command"\);\s*if \(!active\) return;[\s\S]*if \(data\) await processor\.process/,
+    /claim_pending_remote_command",\s*\{\s*p_session_token: crewSessionToken,?\s*\}\);\s*if \(!active\) return;[\s\S]*if \(data\) await processor\.process/,
   );
   expect(hookSource).toMatch(
     /\(\{ new: row \}\) => \{\s*if \(!active \|\| channel !== nextChannel\) return;/,
   );
-  expect(hookSource).toContain(
-    'isVisible: () => active && document.visibilityState === "visible"',
-  );
+  expect(hookSource).toContain('isVisible: () => active && document.visibilityState === "visible"');
 });

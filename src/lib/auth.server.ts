@@ -9,6 +9,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 export interface TableTalkerSession {
   dashboard?: boolean;
   superAdmin?: boolean;
+  superAdminReauthenticatedAt?: number;
 }
 
 /**
@@ -85,4 +86,17 @@ export async function requireSuperAdmin() {
     throw new Error("UNAUTHORIZED");
   }
   return session;
+}
+
+export async function requireRecentSuperAdmin(password: string) {
+  const session = await requireSuperAdmin();
+  const expectedPassword = process.env.SUPER_ADMIN_PASSWORD ?? null;
+  if (!isPasswordValid(password, expectedPassword)) throw new Error("UNAUTHORIZED");
+  const now = Date.now();
+  if (
+    session.data.superAdminReauthenticatedAt &&
+    now - session.data.superAdminReauthenticatedAt <= 5 * 60 * 1000
+  )
+    return;
+  await updateAuthSession({ superAdminReauthenticatedAt: now });
 }

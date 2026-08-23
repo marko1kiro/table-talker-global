@@ -49,6 +49,7 @@ describe("remote crew command processor", () => {
       audioReady: true,
       restaurantId: "test-restaurant-id",
       tenantToken: "signed-tenant-token",
+      crewSessionToken: "issued-crew-session-token",
     };
 
     expect(crewClaimArgs(registration, "Browser", "visible")).toMatchObject({

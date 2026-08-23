@@ -92,6 +92,53 @@ it("refreshes crew session token even when the session ID stays stable", () => {
   expect(index).not.toContain("identity.crewSessionId === crewSessionId) return");
 });
 
+it("requires active version-bound crew tokens for every remote command RPC", () => {
+  const migration = source(
+    "../supabase/migrations/20260823131000_credential_revocation_contracts.sql",
+  );
+  expect(migration).toContain("drop function public.heartbeat_crew_session(boolean, text, text)");
+  expect(migration).toContain("drop function public.claim_pending_remote_command()");
+  expect(migration).toContain("drop function public.ack_remote_command(uuid, text, text)");
+  for (const name of [
+    "heartbeat_crew_session",
+    "claim_pending_remote_command",
+    "ack_remote_command",
+  ])
+    expect(migration).toMatch(
+      new RegExp(`create function public\\.${name}\\([\\s\\S]*p_session_token text`, "i"),
+    );
+  expect(migration).toMatch(
+    /crew_session_tokens[\s\S]*token_hash = encode\(digest\(p_session_token, 'sha256'\), 'hex'\)[\s\S]*expires_at > now\(\)[\s\S]*code_version = r\.code_version[\s\S]*r\.is_active/is,
+  );
+  expect(migration).toMatch(
+    /grant execute on function public\.rotate_restaurant_credentials\(uuid, text, text, integer\), public\.deactivate_restaurant_credentials\(uuid, integer\) to service_role/i,
+  );
+
+  const hook = source("../src/hooks/use-remote-crew.ts");
+  expect(hook).toContain("let crewSessionToken = registration.crewSessionToken");
+  expect(hook).toContain("crewSessionToken = claimedSession.session_token");
+  expect(hook).toMatch(
+    /client\.rpc\("claim_pending_remote_command",\s*\{\s*p_session_token: crewSessionToken,?\s*\}\)/,
+  );
+});
+
+it("rate limits every restaurant-code failure by opaque lookup and client hashes", () => {
+  const migration = source(
+    "../supabase/migrations/20260823131000_credential_revocation_contracts.sql",
+  );
+  expect(migration).toMatch(/create table public\.tenant_login_rate_limits/i);
+  expect(migration).toMatch(/p_lookup_hash text, p_client_key_hash text/i);
+  expect(migration).toMatch(
+    /grant execute on function public\.check_tenant_login_rate_limit\(text, text\), public\.record_tenant_login_failure\(text, text\), public\.clear_tenant_login_failures\(text, text\) to service_role/i,
+  );
+  const restaurants = source("../src/lib/restaurants.server.ts");
+  expect(restaurants).toContain('rpc("record_tenant_login_failure"');
+  expect(restaurants).toContain("p_lookup_hash: codeHash");
+  expect(restaurants).toContain(
+    "if (!valid || !restaurant || lookupError || !restaurant.is_active)",
+  );
+});
+
 it("gets localStorage client key outside dialog render", () => {
   const dialog = source("../src/components/CrewIdentityDialog.tsx");
   expect(dialog).toContain("function getClientKey()");

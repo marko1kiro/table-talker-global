@@ -108,6 +108,7 @@ export type CrewRegistration = {
   audioReady: boolean;
   restaurantId: string;
   tenantToken: string;
+  crewSessionToken: string;
 };
 
 export function crewClaimArgs(
@@ -351,6 +352,7 @@ export function useRemoteCrew({
     let channel: ReturnType<SupabaseClient["channel"]> | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
     let userId: string | null = null;
+    let crewSessionToken = registration.crewSessionToken;
     let channelTerminal = false;
     let presenceActive = false;
     let authInFlight: Promise<string> | null = null;
@@ -381,6 +383,7 @@ export function useRemoteCrew({
         p_audio_ready: registration.audioReady,
         p_visibility_state: document.visibilityState,
         p_connection_state: connectionState,
+        p_session_token: crewSessionToken,
       });
     };
     const disconnect = () => void heartbeat("disconnected").catch(() => undefined);
@@ -451,8 +454,10 @@ export function useRemoteCrew({
           if (
             typeof claimedSession?.session?.id === "string" &&
             typeof claimedSession?.session_token === "string"
-          )
+          ) {
+            crewSessionToken = claimedSession.session_token;
             onCrewSessionId?.(claimedSession.session.id, claimedSession.session_token);
+          }
           update(setDuplicateName, false);
           update(setOffline, true);
           if (active) setConnectionState("connecting");
@@ -466,6 +471,7 @@ export function useRemoteCrew({
                   p_command_id: commandId,
                   p_status: status,
                   p_failure_reason: reason,
+                  p_session_token: crewSessionToken,
                 });
               } catch (error) {
                 if (isInvalidSessionError(error)) invalidateSession();
@@ -478,7 +484,9 @@ export function useRemoteCrew({
             onDeliveryUncertain: () => update(setDeliveryUncertain, true),
           });
           const catchUp = async () => {
-            const { data, error } = await client.rpc("claim_pending_remote_command");
+            const { data, error } = await client.rpc("claim_pending_remote_command", {
+              p_session_token: crewSessionToken,
+            });
             if (!active) return;
             if (error) {
               if (isInvalidSessionError(error)) {

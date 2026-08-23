@@ -19,7 +19,7 @@ it("exports loginToRestaurant with opaque token scoped to credential version", (
   expect(source).toContain("createOpaqueRestaurantToken");
   expect(source).toContain("code_version: restaurant.code_version");
   expect(source).toContain("check_tenant_login_rate_limit");
-  expect(source).toContain('eq("code_hash", codeHash)');
+  expect(source).toContain('.in("code_hash", [codeHash, legacyCodeHash])');
   expect(source).toContain("Kode Resto salah.");
   expect(source).toContain("restaurant_sessions");
 });

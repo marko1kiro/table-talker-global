@@ -26,6 +26,7 @@ export function RestaurantCredentialDialog({
   const [displayNameConfirmation, setDisplayNameConfirmation] = useState("");
   const [code, setCode] = useState("");
   const [codeConfirmation, setCodeConfirmation] = useState("");
+  const [superAdminPassword, setSuperAdminPassword] = useState("");
   const [viewedCode, setViewedCode] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [error, setError] = useState("");
@@ -36,6 +37,7 @@ export function RestaurantCredentialDialog({
     setDisplayNameConfirmation("");
     setCode("");
     setCodeConfirmation("");
+    setSuperAdminPassword("");
     setViewedCode("");
     setShowCode(false);
     setError("");
@@ -71,6 +73,7 @@ export function RestaurantCredentialDialog({
               displayNameConfirmation,
               restaurantCode: code,
               codeConfirmation,
+              superAdminPassword,
             },
           });
     if ("error" in result) {
@@ -147,6 +150,18 @@ export function RestaurantCredentialDialog({
                 required
               />
             </label>
+            {mode === "rotate" && (
+              <label className="block text-sm font-bold" htmlFor="super-admin-password">
+                Password Super Admin
+                <Input
+                  id="super-admin-password"
+                  type="password"
+                  value={superAdminPassword}
+                  onChange={(event) => setSuperAdminPassword(event.target.value)}
+                  required
+                />
+              </label>
+            )}
             {mode === "rotate" && (
               <label className="block text-sm font-bold" htmlFor="restaurant-code-confirmation">
                 Ketik ulang Kode Resto

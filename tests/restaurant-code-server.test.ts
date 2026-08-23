@@ -6,7 +6,7 @@ const source = readFileSync(new URL("../src/lib/restaurants.server.ts", import.m
 it("uses keyed exact-code lookup and one generic failure at crew boundary", () => {
   expect(source).toContain("validateRestaurantCode(data.code)");
   expect(source).toContain("hashRestaurantCode(validated.code");
-  expect(source).toContain('.eq("code_hash", codeHash)');
+  expect(source).toContain('.in("code_hash", [codeHash, legacyCodeHash])');
   expect(source).not.toContain('.ilike("code"');
   expect(source).not.toContain("verifyLegacyRestaurantPin");
   expect(source).not.toContain("pin_hash");
@@ -14,7 +14,14 @@ it("uses keyed exact-code lookup and one generic failure at crew boundary", () =
 });
 
 it("keeps owner credential handlers server-only, audited, and no-store", () => {
-  for (const name of ["createRestaurant", "listRestaurants", "getRestaurantDetail", "viewRestaurantCode", "changeRestaurantCode", "deactivateRestaurant"])
+  for (const name of [
+    "createRestaurant",
+    "listRestaurants",
+    "getRestaurantDetail",
+    "viewRestaurantCode",
+    "changeRestaurantCode",
+    "deactivateRestaurant",
+  ])
     expect(source).toContain(`export const ${name}`);
   expect(source).toContain("await requireSuperAdmin()");
   expect(source).toContain("encryptRestaurantCode");
@@ -22,6 +29,17 @@ it("keeps owner credential handlers server-only, audited, and no-store", () => {
   expect(source).toContain("writeRestaurantCredentialAudit");
   expect(source).toContain('setResponseHeader("Cache-Control", "no-store")');
   expect(source).not.toMatch(/console\.(log|error).*code/i);
+});
+
+it("requires server-verified Super Admin re-entry before credential destruction", () => {
+  expect(source).toContain("superAdminPassword: z.string().min(1)");
+  expect(source).toContain("requireRecentSuperAdmin(data.superAdminPassword)");
+  const dialog = readFileSync(
+    new URL("../src/components/RestaurantCredentialDialog.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(dialog).toContain("Password Super Admin");
+  expect(dialog).toContain("superAdminPassword");
 });
 
 it("never serializes credential material to audit or operational records", async () => {

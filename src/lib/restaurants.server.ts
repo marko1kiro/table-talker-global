@@ -31,7 +31,7 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
     if (!client) return { error: CODE_ERROR };
 
     try {
-      const { hashRestaurantCode, parseRestaurantCodeEncryptionKey } =
+      const { hashLegacyRestaurantCode, hashRestaurantCode, parseRestaurantCodeEncryptionKey } =
         await import("./restaurant-code.server");
       const { createOpaqueRestaurantToken, hashOpaqueRestaurantToken } =
         await import("./restaurant-session.server");
@@ -39,27 +39,31 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
         process.env.RESTAURANT_CODE_ENCRYPTION_KEY ?? "",
       );
       const validated = validateRestaurantCode(data.code);
-      const codeHash = hashRestaurantCode("code" in validated ? validated.code : "INVALID", key);
+      const valid = "code" in validated;
+      const codeHash = hashRestaurantCode(valid ? validated.code : "INVALID", key);
+      const legacyCodeHash = hashLegacyRestaurantCode(valid ? validated.code : "INVALID", key);
+      const clientKeyHash = hashOpaqueRestaurantToken(data.clientKey);
+      const { data: limited, error: rateLimitError } = await client.rpc(
+        "check_tenant_login_rate_limit",
+        { p_lookup_hash: codeHash, p_client_key_hash: clientKeyHash },
+      );
+      if (rateLimitError || limited) return { error: CODE_ERROR };
       const { data: restaurant, error: lookupError } = await client
         .from("restaurants")
         .select("id, code_version, display_name, is_active")
-        .eq("code_hash", codeHash)
+        .in("code_hash", [codeHash, legacyCodeHash])
         .single();
 
-      const clientKeyHash = hashOpaqueRestaurantToken(data.clientKey);
-      if (!("code" in validated) || !restaurant || lookupError || !restaurant.is_active)
-        return { error: CODE_ERROR };
-      const { data: limited, error: rateLimitError } = await client.rpc(
-        "check_tenant_login_rate_limit",
-        {
-          p_restaurant_id: restaurant.id,
+      if (!valid || !restaurant || lookupError || !restaurant.is_active) {
+        await client.rpc("record_tenant_login_failure", {
+          p_lookup_hash: codeHash,
           p_client_key_hash: clientKeyHash,
-        },
-      );
-      if (rateLimitError || limited) return { error: CODE_ERROR };
+        });
+        return { error: CODE_ERROR };
+      }
 
       await client.rpc("clear_tenant_login_failures", {
-        p_restaurant_id: restaurant.id,
+        p_lookup_hash: codeHash,
         p_client_key_hash: clientKeyHash,
       });
 
@@ -182,10 +186,12 @@ export const changeRestaurantCode = createServerFn({ method: "POST" })
       displayNameConfirmation: z.string(),
       restaurantCode: z.string(),
       codeConfirmation: z.string(),
+      superAdminPassword: z.string().min(1),
     }),
   )
   .handler(async ({ data }) => {
-    await requireSuperAdmin();
+    const { requireRecentSuperAdmin } = await import("./auth.server");
+    await requireRecentSuperAdmin(data.superAdminPassword);
     noStore();
     const client = getServiceClient();
     if (!client) return { error: "Kode Resto tidak dapat disimpan." };
@@ -232,9 +238,16 @@ export const changeRestaurantCode = createServerFn({ method: "POST" })
   });
 
 export const deactivateRestaurant = createServerFn({ method: "POST" })
-  .validator(z.object({ restaurantId: z.string().uuid(), displayNameConfirmation: z.string() }))
+  .validator(
+    z.object({
+      restaurantId: z.string().uuid(),
+      displayNameConfirmation: z.string(),
+      superAdminPassword: z.string().min(1),
+    }),
+  )
   .handler(async ({ data }) => {
-    await requireSuperAdmin();
+    const { requireRecentSuperAdmin } = await import("./auth.server");
+    await requireRecentSuperAdmin(data.superAdminPassword);
     noStore();
     const client = getServiceClient();
     if (!client) return { error: "Kode Resto tidak dapat disimpan." };

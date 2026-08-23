@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { validateRestaurantCode } from "../src/lib/restaurant-domain";
 import {
@@ -39,8 +40,21 @@ it("derives deterministic keyed lookup hashes with separate purposes", () => {
   expect(hashRestaurantCode(code(), parsed)).toBe(hashRestaurantCode(code(), parsed));
   expect(hashRestaurantCode(`${code()}A`, parsed)).not.toBe(hashRestaurantCode(code(), parsed));
   expect(
-    hashRestaurantCode(code(), parseRestaurantCodeEncryptionKey(Buffer.alloc(32, 8).toString("base64url"))),
+    hashRestaurantCode(
+      code(),
+      parseRestaurantCodeEncryptionKey(Buffer.alloc(32, 8).toString("base64url")),
+    ),
   ).not.toBe(hashRestaurantCode(code(), parsed));
+});
+
+it("uses versioned Table Talker HKDF purposes while reading pilot v1 ciphertext", () => {
+  const source = readFileSync(
+    new URL("../src/lib/restaurant-code.server.ts", import.meta.url),
+    "utf8",
+  );
+  expect(source).toContain("table-talker/restaurant-code-lookup/v1");
+  expect(source).toContain("table-talker/restaurant-code-encryption/v1");
+  expect(source).toContain("restaurant-code-encryption:v1");
 });
 
 it("encrypts with fresh nonce and authenticates restaurant identity", () => {
@@ -66,7 +80,12 @@ it("rejects malformed, unsupported, and tampered ciphertext without credential d
   }
   expect(
     JSON.stringify(
-      redactCredentialAudit({ code: code(), code_hash: "hash", code_encrypted: "cipher", reason: "failed" }),
+      redactCredentialAudit({
+        code: code(),
+        code_hash: "hash",
+        code_encrypted: "cipher",
+        reason: "failed",
+      }),
     ),
   ).toBe('{"reason":"failed"}');
 });
