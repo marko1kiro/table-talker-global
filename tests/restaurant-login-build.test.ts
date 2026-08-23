@@ -28,3 +28,12 @@ it("bundles restaurant credential modules into SSR output", () => {
   expect(serverSource).not.toContain("@vite-ignore");
   expect(clientSource).not.toContain("node:crypto");
 }, 20_000);
+
+it("bundles tenant session imports into every SSR server function", () => {
+  const serverSource = globSync("functions/**/_ssr/*.mjs", { cwd: output })
+    .map((file) => readFileSync(new URL(file, output), "utf8"))
+    .join("\n");
+
+  expect(serverSource).not.toContain('import("./tenant-session.server")');
+  expect(serverSource).not.toContain("@vite-ignore");
+});

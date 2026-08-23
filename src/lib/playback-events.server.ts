@@ -26,7 +26,7 @@ export async function ingestPlaybackEventBatch(data: z.infer<typeof playbackEven
 
   try {
     const { verifyActiveTenantSession, verifyCrewSessionToken } =
-      await import(/* @vite-ignore */ "./tenant-session.server");
+      await import("./tenant-session.server");
     const tenant = await verifyActiveTenantSession(client, data.tenantToken);
     if (!tenant) return { ok: false as const, ids: [] as string[] };
     const session = await verifyCrewSessionToken(

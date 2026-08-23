@@ -46,7 +46,7 @@ export const reportOperationalError = createServerFn({ method: "POST" })
     const client = getServiceClient();
     if (!client) return { ok: false as const };
     const { hashTenantSession, verifyActiveTenantSession, verifyCrewSessionToken } =
-      await import(/* @vite-ignore */ "./tenant-session.server");
+      await import("./tenant-session.server");
     const tenant = await verifyActiveTenantSession(client, data.tenantToken);
     if (
       !tenant ||
