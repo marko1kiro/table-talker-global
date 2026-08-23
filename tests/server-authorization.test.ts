@@ -19,7 +19,6 @@ it("requires owner auth for restaurant and manifest administration", () => {
   handlerRequiresSuperAdmin("../src/lib/manifest.server.ts", "upsertManifestItem");
   handlerRequiresSuperAdmin("../src/lib/manifest.server.ts", "toggleManifestItem");
   handlerRequiresSuperAdmin("../src/lib/manifest.server.ts", "deleteManifestItem");
-  handlerRequiresSuperAdmin("../src/lib/manifest.server.ts", "bumpCatalogVersion");
 });
 
 it("requires owner auth for operational error administration", () => {

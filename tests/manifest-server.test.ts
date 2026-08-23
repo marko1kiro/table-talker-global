@@ -4,11 +4,11 @@ import { expect, it } from "vitest";
 const manifest = () =>
   readFileSync(new URL("../src/lib/manifest.server.ts", import.meta.url), "utf8");
 
-it("exports upsertManifestItem with requireSuperAdmin", () => {
+it("exports atomic upsertManifestItem with requireSuperAdmin", () => {
   const source = manifest();
   expect(source).toContain("upsertManifestItem");
   expect(source).toContain("requireSuperAdmin");
-  expect(source).toContain('from("audio_manifests")');
+  expect(source).toContain('rpc("mutate_catalog"');
 });
 
 it("exports toggleManifestItem for active/inactive", () => {
@@ -17,10 +17,10 @@ it("exports toggleManifestItem for active/inactive", () => {
   expect(source).toContain("active: data.active");
 });
 
-it("exports deleteManifestItem with hard delete", () => {
+it("exports deleteManifestItem through catalog RPC", () => {
   const source = manifest();
   expect(source).toContain("deleteManifestItem");
-  expect(source).toContain('.delete()');
+  expect(source).toContain('p_action: "delete"');
 });
 
 it("exports listManifestItems for admin view", () => {
@@ -29,8 +29,7 @@ it("exports listManifestItems for admin view", () => {
   expect(source).toContain("catalog_version");
 });
 
-it("exports bumpCatalogVersion to increment version", () => {
+it("does not export separate catalog version bump", () => {
   const source = manifest();
-  expect(source).toContain("bumpCatalogVersion");
-  expect(source).toContain("catalog_version");
+  expect(source).not.toContain("bumpCatalogVersion");
 });

@@ -9,6 +9,7 @@ import {
   isTenantLoginRateLimited,
   recordTenantLoginFailure,
   verifyRestaurantPin,
+  verifyTenantSession,
 } from "./tenant-session.server";
 
 export type ManifestItem = {
@@ -100,16 +101,27 @@ export const createRestaurant = createServerFn({ method: "POST" })
   });
 
 export const getRestaurantManifest = createServerFn({ method: "GET" })
-  .validator(z.object({ restaurantId: z.string().uuid() }))
+  .validator(z.object({ restaurantId: z.string().uuid(), tenantToken: z.string() }))
   .handler(async ({ data }) => {
     const client = getServiceClient();
     if (!client) return offline();
 
     try {
+      const tenant = verifyTenantSession(data.tenantToken);
+      if (!tenant || tenant.restaurantId !== data.restaurantId) return { error: "Sesi resto tidak valid." };
+
+      const { data: restaurant, error: restaurantError } = await client
+        .from("restaurants")
+        .select("catalog_version")
+        .eq("id", data.restaurantId)
+        .single();
+      if (restaurantError || !restaurant) return offline();
+
       const { data: items, error } = await client
         .from("audio_manifests")
         .select("audio_id, label, category, r2_url, content_hash, byte_size")
         .eq("restaurant_id", data.restaurantId)
+        .eq("catalog_version", restaurant.catalog_version)
         .eq("active", true)
         .order("category")
         .order("ordering");
@@ -125,7 +137,7 @@ export const getRestaurantManifest = createServerFn({ method: "GET" })
         byteSize: row.byte_size,
       }));
 
-      return { ok: true as const, manifest };
+      return { ok: true as const, version: restaurant.catalog_version, manifest };
     } catch {
       return offline();
     }

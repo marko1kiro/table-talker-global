@@ -327,6 +327,7 @@ function SoundboardPage() {
       {crewIdentity?.restaurantId && !audioSynced && (
         <SyncDialog
           restaurantId={crewIdentity.restaurantId}
+          tenantToken={crewIdentity.tenantToken}
           onSynced={() => setAudioSynced(true)}
         />
       )}

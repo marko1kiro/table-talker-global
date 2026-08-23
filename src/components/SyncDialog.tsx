@@ -13,6 +13,7 @@ import { Loader2, Wifi, WifiOff } from "lucide-react";
 
 type SyncDialogProps = {
   restaurantId: string;
+  tenantToken: string;
   onSynced: () => void;
 };
 
@@ -27,7 +28,7 @@ function isOfflineResult(data: unknown): data is { offline: true; message: strin
   return typeof data === "object" && data !== null && "offline" in data;
 }
 
-export function SyncDialog({ restaurantId, onSynced }: SyncDialogProps) {
+export function SyncDialog({ restaurantId, tenantToken, onSynced }: SyncDialogProps) {
   const [state, setState] = useState<SyncState>({ phase: "idle" });
   const abortRef = useRef(false);
 
@@ -36,7 +37,7 @@ export function SyncDialog({ restaurantId, onSynced }: SyncDialogProps) {
     setState({ phase: "fetching" });
 
     try {
-      const res = await getRestaurantManifest({ data: { restaurantId } });
+      const res = await getRestaurantManifest({ data: { restaurantId, tenantToken } });
 
       if (isOfflineResult(res)) {
         setState({ phase: "error", message: "Tidak dapat terhubung ke server.", failedIds: [] });
@@ -89,7 +90,7 @@ export function SyncDialog({ restaurantId, onSynced }: SyncDialogProps) {
     return () => {
       abortRef.current = true;
     };
-  }, [restaurantId]);
+  }, [restaurantId, tenantToken]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">

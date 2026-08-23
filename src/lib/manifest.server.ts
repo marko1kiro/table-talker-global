@@ -26,70 +26,64 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
     if (!client) return offline();
 
     try {
-      // Get current catalog version
-      const { data: restaurant } = await client
-        .from("restaurants")
-        .select("id")
-        .eq("id", data.restaurantId)
-        .single();
-
-      if (!restaurant) return { error: "Resto tidak ditemukan." };
-
-      // Upsert: insert new version row
-      const { error } = await client.from("audio_manifests").upsert(
-        {
-          restaurant_id: data.restaurantId,
-          audio_id: data.audioId,
+      const { data: version, error } = await client.rpc("mutate_catalog", {
+        p_restaurant_id: data.restaurantId,
+        p_action: "upsert",
+        p_audio_id: data.audioId,
+        p_item: {
           label: data.label,
           category: data.category,
           r2_url: data.r2Url,
           content_hash: data.contentHash,
           byte_size: data.byteSize,
-          active: true,
           ordering: data.ordering,
         },
-        { onConflict: "restaurant_id,audio_id,catalog_version" },
-      );
-
+      });
       if (error) return { error: "Gagal menyimpan manifest." };
-      return { ok: true as const };
+      return { ok: true as const, version };
     } catch {
       return offline();
     }
   });
 
 export const toggleManifestItem = createServerFn({ method: "POST" })
-  .validator(z.object({ manifestId: z.string().uuid(), active: z.boolean() }))
+  .validator(z.object({ restaurantId: z.string().uuid(), audioId: z.string().max(120), active: z.boolean() }))
   .handler(async ({ data }) => {
     await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
 
     try {
-      const { error } = await client
-        .from("audio_manifests")
-        .update({ active: data.active, updated_at: new Date().toISOString() })
-        .eq("id", data.manifestId);
+      const { data: version, error } = await client.rpc("mutate_catalog", {
+        p_restaurant_id: data.restaurantId,
+        p_action: "toggle",
+        p_audio_id: data.audioId,
+        p_item: { active: data.active },
+      });
 
       if (error) return { error: "Gagal mengubah status." };
-      return { ok: true as const };
+      return { ok: true as const, version };
     } catch {
       return offline();
     }
   });
 
 export const deleteManifestItem = createServerFn({ method: "POST" })
-  .validator(z.object({ manifestId: z.string().uuid() }))
+  .validator(z.object({ restaurantId: z.string().uuid(), audioId: z.string().max(120) }))
   .handler(async ({ data }) => {
     await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
 
     try {
-      const { error } = await client.from("audio_manifests").delete().eq("id", data.manifestId);
+      const { data: version, error } = await client.rpc("mutate_catalog", {
+        p_restaurant_id: data.restaurantId,
+        p_action: "delete",
+        p_audio_id: data.audioId,
+      });
 
       if (error) return { error: "Gagal menghapus item." };
-      return { ok: true as const };
+      return { ok: true as const, version };
     } catch {
       return offline();
     }
@@ -103,46 +97,23 @@ export const listManifestItems = createServerFn({ method: "GET" })
     if (!client) return offline();
 
     try {
-      const { data: items, error } = await client
-        .from("audio_manifests")
-        .select("id, audio_id, label, category, r2_url, content_hash, byte_size, active, ordering, catalog_version, created_at, updated_at")
-        .eq("restaurant_id", data.restaurantId)
-        .order("category")
-        .order("ordering");
-
-      if (error) return offline();
-      return { ok: true as const, items: items ?? [] };
-    } catch {
-      return offline();
-    }
-  });
-
-export const bumpCatalogVersion = createServerFn({ method: "POST" })
-  .validator(z.object({ restaurantId: z.string().uuid() }))
-  .handler(async ({ data }) => {
-    await requireSuperAdmin();
-    const client = getServiceClient();
-    if (!client) return offline();
-
-    try {
-      // Get current version
-      const { data: restaurant } = await client
+      const { data: restaurant, error: restaurantError } = await client
         .from("restaurants")
         .select("catalog_version")
         .eq("id", data.restaurantId)
         .single();
+      if (restaurantError || !restaurant) return offline();
 
-      if (!restaurant) return { error: "Resto tidak ditemukan." };
+      const { data: items, error } = await client
+        .from("audio_manifests")
+        .select("id, audio_id, label, category, r2_url, content_hash, byte_size, active, ordering, catalog_version, created_at, updated_at")
+        .eq("restaurant_id", data.restaurantId)
+        .eq("catalog_version", restaurant.catalog_version)
+        .order("category")
+        .order("ordering");
 
-      const newVersion = (restaurant.catalog_version ?? 0) + 1;
-
-      const { error } = await client
-        .from("restaurants")
-        .update({ catalog_version: newVersion })
-        .eq("id", data.restaurantId);
-
-      if (error) return { error: "Gagal update versi katalog." };
-      return { ok: true as const, version: newVersion };
+      if (error) return offline();
+      return { ok: true as const, version: restaurant.catalog_version, items: items ?? [] };
     } catch {
       return offline();
     }

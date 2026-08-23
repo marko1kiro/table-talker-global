@@ -16,7 +16,6 @@ import {
   listManifestItems,
   toggleManifestItem,
   upsertManifestItem,
-  bumpCatalogVersion,
 } from "@/lib/manifest.server";
 import { uploadAudioToR2 } from "@/lib/upload.server";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -432,7 +431,6 @@ function ManifestItemsList({
           setUploadError("error" in manifestResult ? manifestResult.error : "Gagal simpan manifest.");
           return;
         }
-        await bumpCatalogVersion({ data: { restaurantId } });
         setAudioId("");
         setLabel("");
         setUploadFile(null);
@@ -521,7 +519,14 @@ function ManifestItemsList({
                     type="button"
                     className="text-xs underline"
                     onClick={async () => {
-                      await toggleManifestItem({ data: { manifestId: item.id, active: !item.active } });
+                      const result = await toggleManifestItem({
+                        data: { restaurantId, audioId: item.audio_id, active: !item.active },
+                      });
+                      if (!result || !("ok" in result) || !result.ok) {
+                        toast.error("error" in result ? result.error : "Gagal mengubah status.");
+                        return;
+                      }
+                      onUploadComplete();
                       queryClient.invalidateQueries({ queryKey: ["manifest-items", restaurantId] });
                     }}
                   >
