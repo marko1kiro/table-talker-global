@@ -6,6 +6,7 @@ import {
   createChannelStatusHandler,
   createVisibleClaimCoordinator,
   crewClaimArgs,
+  crewRegistrationKey,
   createRemoteCommandProcessor,
   getAnonymousUserId,
   getRemoteCommandState,
@@ -58,6 +59,24 @@ describe("remote crew command processor", () => {
     });
     expect(crewClaimArgs(registration, "Browser", "hidden")).toBeNull();
     expect(shouldActivatePresence("SUBSCRIBING")).toBe(false);
+  });
+
+  it("keeps remote registration stable when claim issues crew credentials", () => {
+    const registration = {
+      displayName: "Crew",
+      normalizedName: "crew",
+      audioReady: true,
+      restaurantId: "test-restaurant-id",
+      tenantToken: "signed-tenant-token",
+      crewSessionToken: "",
+    };
+
+    expect(crewRegistrationKey(registration)).toBe(
+      crewRegistrationKey({
+        ...registration,
+        crewSessionToken: "issued-crew-session-token",
+      }),
+    );
   });
 
   it("defers a hidden claim after anonymous auth resolves, then claims and subscribes once visible", async () => {

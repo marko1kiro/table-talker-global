@@ -111,6 +111,17 @@ export type CrewRegistration = {
   crewSessionToken: string;
 };
 
+export function crewRegistrationKey(registration: CrewRegistration | null) {
+  if (!registration) return "";
+  return JSON.stringify([
+    registration.displayName,
+    registration.normalizedName,
+    registration.audioReady,
+    registration.restaurantId,
+    registration.tenantToken,
+  ]);
+}
+
 export function crewClaimArgs(
   registration: CrewRegistration,
   deviceDescription: string,
@@ -334,6 +345,7 @@ export function useRemoteCrew({
   const [deliveryUncertain, setDeliveryUncertain] = useState(false);
   const playRef = useRef(playRemoteAudio);
   playRef.current = playRemoteAudio;
+  const registrationKey = crewRegistrationKey(registration);
 
   useEffect(() => {
     const client = getSupabaseBrowserClient();
@@ -572,7 +584,7 @@ export function useRemoteCrew({
       channel = null;
       if (currentChannel) void client.removeChannel(currentChannel);
     };
-  }, [registration, onCrewSessionId, onSessionInvalid]);
+  }, [registrationKey, onCrewSessionId, onSessionInvalid]);
 
   return {
     offline,
