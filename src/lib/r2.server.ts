@@ -1,6 +1,5 @@
 import {
   DeleteObjectCommand,
-  HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -17,6 +16,7 @@ const R2_PUBLIC_BASE = process.env.CF_R2_PUBLIC_URL ?? "https://static.xdirga.xy
 export const R2_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 const R2_UPLOAD_CONTENT_TYPE = "audio/mpeg";
 const R2_UPLOAD_CACHE_CONTROL = "public, max-age=31536000, immutable";
+const R2_HEALTHCHECK_KEY = "healthcheck";
 
 let client: S3Client | null = null;
 
@@ -47,9 +47,11 @@ export async function getR2Health(): Promise<{
   const s3 = getClient();
   if (!s3) return { status: "unavailable", message: "R2 belum dikonfigurasi." };
   try {
-    await s3.send(new HeadBucketCommand({ Bucket: R2_BUCKET }));
+    await s3.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: R2_HEALTHCHECK_KEY }));
     return { status: "healthy" };
-  } catch {
+  } catch (error) {
+    if (error instanceof S3ServiceException && error.name === "NotFound")
+      return { status: "healthy" };
     return { status: "unavailable", message: "R2 tidak merespons." };
   }
 }

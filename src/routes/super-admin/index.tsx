@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { getOwnerDashboardSnapshot } from "@/lib/owner-dashboard.server";
 
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/super-admin/")({ component: OwnerDashboar
 function OwnerDashboard() {
   const queryClient = useQueryClient();
   const [realtime, setRealtime] = useState("SUBSCRIBING");
+  const [realtimeAttempt, setRealtimeAttempt] = useState(0);
   const snapshot = useQuery({
     queryKey: key,
     queryFn: () => getOwnerDashboardSnapshot(),
@@ -31,7 +32,7 @@ function OwnerDashboard() {
       )
       .subscribe(setRealtime);
     return () => void client.removeChannel(channel);
-  }, [queryClient]);
+  }, [queryClient, realtimeAttempt]);
 
   if (snapshot.isLoading) return <Panel title="Dashboard">Memuat status operasi...</Panel>;
   if (snapshot.isError || !snapshot.data)
@@ -45,12 +46,39 @@ function OwnerDashboard() {
   const { health, aggregates } = snapshot.data;
   const metrics = aggregates
     ? [
-        ["Total Resto", aggregates.total_restaurants],
-        ["Resto Aktif", aggregates.active_restaurants],
-        ["Crew Aktif", aggregates.active_crew_devices],
-        ["Putar Hari Ini", aggregates.plays_today],
-        ["Gagal Sinkron", aggregates.sync_failures],
-        ["Error Belum Selesai", aggregates.unresolved_errors],
+        {
+          label: "Total Resto",
+          value: aggregates.total_restaurants,
+          to: "/super-admin/restaurants",
+        },
+        {
+          label: "Resto Aktif",
+          value: aggregates.active_restaurants,
+          to: "/super-admin/restaurants",
+        },
+        {
+          label: "Crew Aktif",
+          value: aggregates.active_crew_devices,
+          to: "/super-admin/restaurants",
+        },
+        {
+          label: "Putar Hari Ini",
+          value: aggregates.plays_today,
+          to: "/super-admin/history",
+          search: { filter: "plays" },
+        },
+        {
+          label: "Gagal Sinkron",
+          value: aggregates.sync_failures,
+          to: "/super-admin/history",
+          search: { filter: "sync" },
+        },
+        {
+          label: "Error Belum Selesai",
+          value: aggregates.unresolved_errors,
+          to: "/super-admin/error-log",
+          search: { filter: "unresolved" },
+        },
       ]
     : [];
   return (
@@ -74,16 +102,33 @@ function OwnerDashboard() {
             >
               {result.status === "healthy" ? "Sehat" : (result.message ?? "Tidak tersedia")}
             </p>
+            {name === "realtime" && result.status !== "healthy" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRealtime("RECOVERING");
+                  setRealtimeAttempt((attempt) => attempt + 1);
+                }}
+                className="brutal-border brutal-press mt-2 bg-accent px-2 py-1 text-xs font-bold uppercase"
+              >
+                Reconnect realtime
+              </button>
+            )}
           </div>
         ))}
       </div>
       {aggregates ? (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {metrics.map(([label, value]) => (
-            <div key={label} className="brutal-border bg-accent/20 p-4">
-              <p className="text-xs font-bold uppercase">{label}</p>
-              <p className="mt-2 font-display text-3xl">{value}</p>
-            </div>
+          {metrics.map((metric) => (
+            <Link
+              key={metric.label}
+              to={metric.to}
+              search={metric.search}
+              className="brutal-border brutal-press bg-accent/20 p-4"
+            >
+              <p className="text-xs font-bold uppercase">{metric.label}</p>
+              <p className="mt-2 font-display text-3xl">{metric.value}</p>
+            </Link>
           ))}
         </div>
       ) : (

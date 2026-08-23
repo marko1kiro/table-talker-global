@@ -18,27 +18,21 @@ const unavailable = (message: string): HealthStatus => ({ status: "unavailable",
 export const getOwnerDashboardSnapshot = createServerFn({ method: "GET" }).handler(async () => {
   await requireSuperAdmin();
   const client = getServiceClient();
-  if (!client) {
-    return {
-      health: mergeDashboardHealth({
-        database: unavailable("Supabase belum dikonfigurasi."),
-        r2: unavailable("R2 belum dikonfigurasi."),
-        api: { status: "healthy" as const },
-      }),
-      aggregates: null,
-    };
-  }
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const apiProbe = Promise.resolve({ status: "healthy" as const });
+  const databaseProbe = client
+    ? Promise.resolve(client.rpc("owner_dashboard_snapshot", { p_since: since })).then(
+        ({ data, error }) =>
+          error || !data
+            ? { health: unavailable("Database tidak merespons."), aggregates: null }
+            : { health: { status: "healthy" as const }, aggregates: data as Aggregates },
+      )
+    : Promise.resolve({ health: unavailable("Supabase belum dikonfigurasi."), aggregates: null });
 
-  const [databaseResult, r2Result] = await Promise.allSettled([
-    withTimeout(
-      Promise.resolve(client.rpc("owner_dashboard_snapshot")).then(({ data, error }) =>
-        error || !data
-          ? { health: unavailable("Database tidak merespons."), aggregates: null }
-          : { health: { status: "healthy" as const }, aggregates: data as Aggregates },
-      ),
-      4_000,
-    ),
+  const [databaseResult, r2Result, apiResult] = await Promise.allSettled([
+    withTimeout(databaseProbe, 4_000),
     withTimeout(getR2Health(), 4_000),
+    withTimeout(apiProbe, 4_000),
   ]);
 
   const database =
@@ -48,12 +42,16 @@ export const getOwnerDashboardSnapshot = createServerFn({ method: "GET" }).handl
         : { health: databaseResult.value, aggregates: null }
       : { health: unavailable("Database tidak merespons."), aggregates: null };
   const r2 = r2Result.status === "fulfilled" ? r2Result.value : unavailable("R2 tidak merespons.");
+  const api =
+    apiResult.status === "fulfilled" && apiResult.value.status === "healthy"
+      ? apiResult.value
+      : unavailable("API tidak merespons.");
 
   return {
     health: mergeDashboardHealth({
       database: database.health,
       r2,
-      api: { status: "healthy" as const },
+      api,
     }),
     aggregates: database.aggregates,
   };

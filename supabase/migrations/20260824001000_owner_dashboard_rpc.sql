@@ -1,8 +1,13 @@
-create or replace function public.owner_dashboard_snapshot()
+create index if not exists operational_errors_unresolved_stage_occurred_idx
+  on public.operational_errors (stage, occurred_at desc)
+  where resolved_at is null;
+
+create or replace function public.owner_dashboard_snapshot(p_since timestamptz)
 returns jsonb
 language sql
 security definer
 set search_path = public
+set statement_timeout = '3000ms'
 as $$
   select jsonb_build_object(
     'total_restaurants', (select count(*) from restaurants),
@@ -19,11 +24,11 @@ as $$
     ),
     'sync_failures', (
       select count(*) from operational_errors
-      where resolved_at is null and stage in ('sync_cache')
+      where resolved_at is null and occurred_at >= p_since and stage = 'sync_cache'
     ),
     'unresolved_errors', (select count(*) from operational_errors where resolved_at is null)
   );
 $$;
 
-revoke all on function public.owner_dashboard_snapshot() from public, anon, authenticated;
-grant execute on function public.owner_dashboard_snapshot() to service_role;
+revoke all on function public.owner_dashboard_snapshot(timestamptz) from public, anon, authenticated;
+grant execute on function public.owner_dashboard_snapshot(timestamptz) to service_role;
