@@ -33,6 +33,9 @@ import {
   removeCrewSessionIdentity,
   writeCrewSessionIdentity,
 } from "@/lib/crew-session-identity";
+import { useEventFlush } from "@/lib/event-flush";
+import { generateEventId, generateDeviceId, type PlaybackEvent } from "@/lib/event-queue";
+import { ingestPlaybackEvents } from "@/lib/playback-events.server";
 
 export const Route = createFileRoute("/")({
   loader: () => getAuthStatus(),
@@ -81,6 +84,15 @@ function SoundboardPage() {
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [duplicateName, setDuplicateName] = useState(false);
   const [audioSynced, setAudioSynced] = useState(false);
+
+  const deviceIdRef = useRef(generateDeviceId());
+
+  const flushToServer = useCallback(async (events: PlaybackEvent[]) => {
+    const result = await ingestPlaybackEvents({ data: { events } });
+    return { ok: result.ok, ids: result.ids };
+  }, []);
+
+  const { recordEvent } = useEventFlush(flushToServer);
 
   useEffect(() => {
     const identity = readCrewSessionIdentity(browserSessionStorage());
@@ -183,12 +195,35 @@ function SoundboardPage() {
             setPaused(null);
             setPlaying(id);
           });
+          void recordEvent({
+            id: generateEventId(),
+            restaurantId: crewIdentity?.restaurantId ?? null,
+            audioId: typeof id === "number" ? `table:${id}` : String(id),
+            label: typeof id === "number" ? `Meja ${id}` : String(id),
+            eventTimestamp: new Date().toISOString(),
+            crewName: crewIdentity?.displayName ?? "",
+            crewSessionId: crewIdentity?.restaurantId ?? "",
+            deviceId: deviceIdRef.current,
+            status: "played",
+          });
         } catch (error) {
           runIfPlaybackCurrent(playbackGenerationRef.current, token, () => {
             console.error(error);
             activeAudioIdRef.current = null;
             setLoading(null);
             setPaused(null);
+          });
+          void recordEvent({
+            id: generateEventId(),
+            restaurantId: crewIdentity?.restaurantId ?? null,
+            audioId: typeof id === "number" ? `table:${id}` : String(id),
+            label: typeof id === "number" ? `Meja ${id}` : String(id),
+            eventTimestamp: new Date().toISOString(),
+            crewName: crewIdentity?.displayName ?? "",
+            crewSessionId: crewIdentity?.restaurantId ?? "",
+            deviceId: deviceIdRef.current,
+            status: "failed",
+            errorDetail: (error as Error).message?.slice(0, 1000),
           });
         }
         return;
@@ -208,6 +243,17 @@ function SoundboardPage() {
         setLoading(null);
         setPaused(null);
         setPlaying(id);
+        void recordEvent({
+          id: generateEventId(),
+          restaurantId: crewIdentity?.restaurantId ?? null,
+          audioId: typeof id === "number" ? `table:${id}` : String(id),
+          label: typeof id === "number" ? `Meja ${id}` : String(id),
+          eventTimestamp: new Date().toISOString(),
+          crewName: crewIdentity?.displayName ?? "",
+          crewSessionId: crewIdentity?.restaurantId ?? "",
+          deviceId: deviceIdRef.current,
+          status: "played",
+        });
       } catch (error) {
         if (!playbackGenerationRef.current.isCurrent(token)) return;
         if ((error as Error).name !== "AbortError") console.error(error);
@@ -215,6 +261,18 @@ function SoundboardPage() {
         setLoading(null);
         setPlaying(null);
         setPaused(null);
+        void recordEvent({
+          id: generateEventId(),
+          restaurantId: crewIdentity?.restaurantId ?? null,
+          audioId: typeof id === "number" ? `table:${id}` : String(id),
+          label: typeof id === "number" ? `Meja ${id}` : String(id),
+          eventTimestamp: new Date().toISOString(),
+          crewName: crewIdentity?.displayName ?? "",
+          crewSessionId: crewIdentity?.restaurantId ?? "",
+          deviceId: deviceIdRef.current,
+          status: "failed",
+          errorDetail: (error as Error).message?.slice(0, 1000),
+        });
       }
     },
     [getAudioController, paused],
