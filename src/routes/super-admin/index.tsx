@@ -70,19 +70,16 @@ function OwnerDashboard() {
           label: "Putar Hari Ini",
           value: aggregates.plays_today,
           to: "/super-admin/history",
-          search: { filter: "plays" },
         },
         {
           label: "Gagal Sinkron",
           value: aggregates.sync_failures,
           to: "/super-admin/history",
-          search: { filter: "sync" },
         },
         {
           label: "Error Belum Selesai",
           value: aggregates.unresolved_errors,
           to: "/super-admin/error-log",
-          search: { filter: "unresolved" },
         },
       ]
     : [];
@@ -122,7 +119,6 @@ function OwnerDashboard() {
             <Link
               key={metric.label}
               to={metric.to}
-              search={metric.search}
               className="brutal-border brutal-press bg-accent/20 p-4"
             >
               <p className="text-xs font-bold uppercase">{metric.label}</p>

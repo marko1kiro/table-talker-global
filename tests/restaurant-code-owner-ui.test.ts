@@ -19,12 +19,13 @@ it("uses password controls, explicit reveal, confirmation, and clears credential
   expect(ui).not.toContain("sessionStorage");
 });
 
-it("keeps restaurant route free of credential values before restaurant phase", () => {
+it("keeps restaurant list credential-safe while delegating create to credential dialog", () => {
   const page = readFileSync(
     new URL("../src/routes/super-admin/restaurants/index.tsx", import.meta.url),
     "utf8",
   );
-  expect(page).toContain("Belum tersedia.");
-  expect(page).not.toContain("RestaurantCredentialDialog");
+  expect(page).toContain("RestaurantCredentialDialog");
+  expect(page).not.toContain("viewRestaurantCode");
+  expect(page).not.toContain("changeRestaurantCode");
   expect(page).not.toMatch(/toast\.(success|error)\([^)]*code/i);
 });

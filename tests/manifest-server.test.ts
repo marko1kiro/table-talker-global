@@ -23,6 +23,12 @@ it("exports deleteManifestItem through catalog RPC", () => {
   expect(source).toContain('p_action: "delete"');
 });
 
+it("exports reorderManifestItem through catalog RPC", () => {
+  const source = manifest();
+  expect(source).toContain("reorderManifestItem");
+  expect(source).toContain('p_action: "reorder"');
+});
+
 it("exports listManifestItems for admin view", () => {
   const source = manifest();
   expect(source).toContain("listManifestItems");

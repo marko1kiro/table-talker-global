@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { createPresignedR2Upload, R2_UPLOAD_MAX_BYTES } from "./r2.server";
 import { getServiceClient } from "./remote-audio.server";
+import { isOwnerCatalogAudioId } from "./owner-restaurants-domain";
 
 function offline() {
   return { offline: true as const, message: "Realtime offline" };
@@ -29,6 +30,8 @@ export const requestR2Upload = createServerFn({ method: "POST" })
       .eq("id", data.restaurantId)
       .single();
     if (error || !restaurant) return { error: "Resto tidak ditemukan." };
+
+    if (!isOwnerCatalogAudioId(data.audioId)) return { error: "Audio tidak valid." };
 
     return { ok: true as const, ...(await createPresignedR2Upload(data)) };
   });

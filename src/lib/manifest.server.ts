@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
 import { deleteFromR2, r2Key, r2PublicUrl, verifyR2Upload } from "./r2.server";
+import { validateCatalogItem } from "./owner-restaurants-domain";
 
 function offline() {
   return { offline: true as const, message: "Realtime offline" };
@@ -25,8 +26,10 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
     await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
+    const item = validateCatalogItem(data);
+    if ("code" in item) return { code: item.code };
 
-    const key = r2Key(data.restaurantId, data.audioId, data.contentHash);
+    const key = r2Key(data.restaurantId, item.audioId, data.contentHash);
     let verified = false;
     try {
       await verifyR2Upload(data);
@@ -35,10 +38,10 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
       const { data: version, error } = await client.rpc("mutate_catalog", {
         p_restaurant_id: data.restaurantId,
         p_action: "upsert",
-        p_audio_id: data.audioId,
+        p_audio_id: item.audioId,
         p_item: {
-          label: data.label,
-          category: data.category,
+          label: item.label,
+          category: item.category,
           r2_url: data.r2Url,
           content_hash: data.contentHash,
           byte_size: data.byteSize,
@@ -57,7 +60,13 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
   });
 
 export const toggleManifestItem = createServerFn({ method: "POST" })
-  .validator(z.object({ restaurantId: z.string().uuid(), audioId: z.string().max(120), active: z.boolean() }))
+  .validator(
+    z.object({
+      restaurantId: z.string().uuid(),
+      audioId: z.string().max(120),
+      active: z.boolean(),
+    }),
+  )
   .handler(async ({ data }) => {
     await requireSuperAdmin();
     const client = getServiceClient();
@@ -99,6 +108,31 @@ export const deleteManifestItem = createServerFn({ method: "POST" })
     }
   });
 
+export const reorderManifestItem = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      restaurantId: z.string().uuid(),
+      audioId: z.string().max(120),
+      ordering: z.number().int(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    await requireSuperAdmin();
+    const client = getServiceClient();
+    if (!client) return offline();
+    try {
+      const { data: version, error } = await client.rpc("mutate_catalog", {
+        p_restaurant_id: data.restaurantId,
+        p_action: "reorder",
+        p_audio_id: data.audioId,
+        p_item: { ordering: data.ordering },
+      });
+      return error ? { error: "Gagal mengubah urutan." } : { ok: true as const, version };
+    } catch {
+      return offline();
+    }
+  });
+
 export const listManifestItems = createServerFn({ method: "GET" })
   .validator(z.object({ restaurantId: z.string().uuid() }))
   .handler(async ({ data }) => {
@@ -116,7 +150,9 @@ export const listManifestItems = createServerFn({ method: "GET" })
 
       const { data: items, error } = await client
         .from("audio_manifests")
-        .select("id, audio_id, label, category, r2_url, content_hash, byte_size, active, ordering, catalog_version, created_at, updated_at")
+        .select(
+          "id, audio_id, label, category, r2_url, content_hash, byte_size, active, ordering, catalog_version, created_at, updated_at",
+        )
         .eq("restaurant_id", data.restaurantId)
         .eq("catalog_version", restaurant.catalog_version)
         .order("category")
