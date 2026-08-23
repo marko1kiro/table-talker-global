@@ -14,7 +14,7 @@ function handlerRequiresSuperAdmin(file: string, handler: string) {
 }
 
 it("requires owner auth for restaurant and manifest administration", () => {
-  handlerRequiresSuperAdmin("../src/lib/restaurants.server.ts", "listRestaurants");
+  handlerRequiresSuperAdmin("../src/lib/admin-restaurants.server.ts", "listRestaurants");
   handlerRequiresSuperAdmin("../src/lib/manifest.server.ts", "listManifestItems");
   handlerRequiresSuperAdmin("../src/lib/manifest.server.ts", "upsertManifestItem");
   handlerRequiresSuperAdmin("../src/lib/manifest.server.ts", "toggleManifestItem");

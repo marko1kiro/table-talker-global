@@ -37,14 +37,6 @@ export function hashRestaurantCode(code: string, baseKey: RestaurantCodeEncrypti
   return `hmac-sha256:v1:${digest}`;
 }
 
-export function hashLegacyRestaurantCode(
-  code: string,
-  baseKey: RestaurantCodeEncryptionKey,
-): string {
-  const lookupKey = deriveKey(baseKey, "restaurant-code-lookup:v1");
-  return `hmac-sha256:v1:${createHmac("sha256", lookupKey).update(code).digest("base64url")}`;
-}
-
 export function encryptRestaurantCode(
   code: string,
   restaurantId: string,
@@ -79,18 +71,14 @@ export function decryptRestaurantCode(
     const tag = decodeBase64url(tagValue);
     if (nonce.length !== 12 || tag.length !== 16) return invalidCiphertext();
 
-    for (const purpose of [
-      "table-talker/restaurant-code-encryption/v1",
-      "restaurant-code-encryption:v1",
-    ]) {
-      try {
-        const decipher = createDecipheriv("aes-256-gcm", deriveKey(baseKey, purpose), nonce);
-        decipher.setAAD(aad(restaurantId));
-        decipher.setAuthTag(tag);
-        return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-      } catch {}
-    }
-    return invalidCiphertext();
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      deriveKey(baseKey, "table-talker/restaurant-code-encryption/v1"),
+      nonce,
+    );
+    decipher.setAAD(aad(restaurantId));
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
   } catch {
     return invalidCiphertext();
   }

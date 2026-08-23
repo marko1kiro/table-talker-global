@@ -12,7 +12,7 @@ import {
   sendRemoteCommand,
   sendCrewMessage,
 } from "@/lib/remote-audio.server";
-import { listRestaurants } from "@/lib/restaurants.server";
+import { listRestaurants } from "@/lib/admin-restaurants.server";
 import { listManifestItems, toggleManifestItem, upsertManifestItem } from "@/lib/manifest.server";
 import { requestR2Upload } from "@/lib/upload.server";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";

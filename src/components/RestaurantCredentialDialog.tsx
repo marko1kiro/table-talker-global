@@ -5,7 +5,7 @@ import {
   changeRestaurantCode,
   createRestaurant,
   viewRestaurantCode,
-} from "@/lib/restaurants.server";
+} from "@/lib/admin-restaurants.server";
 
 type Mode = "create" | "view" | "rotate";
 

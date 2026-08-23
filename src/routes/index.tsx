@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { Square } from "lucide-react";
 
 import { Header } from "@/components/Header";
-import { AuthGate } from "@/components/AuthGate";
-import { getAuthStatus } from "@/lib/auth";
 import { Footer } from "@/components/Footer";
 import { SoundboardGrid } from "@/components/SoundboardGrid";
 import {
@@ -40,7 +38,6 @@ import {
 import { ingestPlaybackEvents } from "@/lib/playback-events.server";
 
 export const Route = createFileRoute("/")({
-  loader: () => getAuthStatus(),
   head: () => ({
     meta: [
       { title: "Table Talker — Panggilan Meja" },
@@ -58,11 +55,6 @@ export const Route = createFileRoute("/")({
 });
 
 function SoundboardRoute() {
-  const auth = Route.useLoaderData();
-  const router = useRouter();
-  if (!auth.dashboard) {
-    return <AuthGate onSuccess={() => router.invalidate()} />;
-  }
   return <SoundboardPage />;
 }
 

@@ -12,6 +12,14 @@ it("collects exact Kode Resto before crew name without client transformation or 
   expect(dialog).toContain('setStep("name")');
 });
 
+it("uses Kode Resto dialog as crew route entry gate without global dashboard auth", () => {
+  const page = source("src/routes/index.tsx");
+  expect(page).toContain("<CrewIdentityDialog");
+  expect(page).not.toContain("AuthGate");
+  expect(page).not.toContain("getAuthStatus");
+  expect(source("src/lib/auth.ts")).not.toContain("DASHBOARD_PASSWORD");
+});
+
 it("blocks soundboard until sync and clears tenant state when version-bound access fails", () => {
   const page = source("src/routes/index.tsx");
   expect(page).toContain("!audioSynced");
@@ -29,6 +37,8 @@ it("does not pull Node credential crypto into crew browser bundle", () => {
   const server = source("src/lib/restaurants.server.ts");
   expect(server).not.toContain('from "./restaurant-code.server"');
   expect(server).not.toContain('from "./restaurant-session.server"');
+  expect(server).not.toContain('from "node:crypto"');
+  expect(server).toContain("createServerOnlyFn");
   expect(source("src/lib/playback-events.server.ts")).not.toContain(
     'from "./tenant-session.server"',
   );

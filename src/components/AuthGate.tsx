@@ -1,6 +1,5 @@
 import { FormEvent, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { login } from "@/lib/auth";
 import { Footer } from "@/components/Footer";
 
 interface AuthGateProps {
@@ -8,7 +7,7 @@ interface AuthGateProps {
   title?: string;
   instruction?: string;
   submitLabel?: string;
-  loginAction?: typeof login;
+  loginAction: (input: { data: { password: string } }) => Promise<{ ok: boolean; message?: string }>;
 }
 
 export function AuthGate({
@@ -16,7 +15,7 @@ export function AuthGate({
   title = "SIMPLE, SMART, SMOOTH !",
   instruction = "Masukkan kode resto dulu ya!",
   submitLabel = "Gassss!",
-  loginAction = login,
+  loginAction,
 }: AuthGateProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");

@@ -1,11 +1,13 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-const server = () =>
+const crewServer = () =>
   readFileSync(new URL("../src/lib/restaurants.server.ts", import.meta.url), "utf8");
+const adminServer = () =>
+  readFileSync(new URL("../src/lib/admin-restaurants.server.ts", import.meta.url), "utf8");
 
 it("exports createRestaurant bound to service-role client behind super admin", () => {
-  const source = server();
+  const source = adminServer();
   expect(source).toContain('createServerFn({ method: "POST" })');
   expect(source).toContain("await requireSuperAdmin();");
   expect(source).toContain('client.from("restaurants").insert');
@@ -14,18 +16,18 @@ it("exports createRestaurant bound to service-role client behind super admin", (
 });
 
 it("exports loginToRestaurant with opaque token scoped to credential version", () => {
-  const source = server();
+  const source = crewServer();
   expect(source).toContain("loginToRestaurant");
   expect(source).toContain("createOpaqueRestaurantToken");
   expect(source).toContain("code_version: restaurant.code_version");
   expect(source).toContain("check_tenant_login_rate_limit");
-  expect(source).toContain('.in("code_hash", [codeHash, legacyCodeHash])');
+  expect(source).toContain('.eq("code_hash", codeHash)');
   expect(source).toContain("Kode Resto salah.");
   expect(source).toContain("restaurant_sessions");
 });
 
 it("exports getRestaurantManifest that queries active audio_manifests", () => {
-  const source = server();
+  const source = crewServer();
   expect(source).toContain("getRestaurantManifest");
   expect(source).toContain('from("audio_manifests")');
   expect(source).toContain("content_hash");

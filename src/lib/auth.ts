@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-export type AuthStatus = { dashboard: boolean; superAdmin: boolean };
+export type AuthStatus = { superAdmin: boolean };
 
 export const loginInputSchema = z.object({ password: z.string() });
 
@@ -26,27 +26,10 @@ export const getAuthStatus = createServerFn({ method: "GET" }).handler(
     const { getAuthSession } = await import("./auth.server");
     const session = await getAuthSession();
     return {
-      dashboard: session.data.dashboard === true,
       superAdmin: session.data.superAdmin === true,
     };
   },
 );
-
-export const login = createServerFn({ method: "POST" })
-  .validator(loginInputSchema)
-  .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
-    const { isPasswordValid, updateAuthSession } = await import("./auth.server");
-
-    const expectedPassword = readEnv("DASHBOARD_PASSWORD");
-    if (expectedPassword === null) {
-      return { ok: false, message: MISCONFIGURED_MESSAGE };
-    }
-    if (!isPasswordValid(data.password, expectedPassword)) {
-      return { ok: false, message: "Password salah." };
-    }
-    await updateAuthSession({ dashboard: true });
-    return { ok: true };
-  });
 
 export const loginSuperAdmin = createServerFn({ method: "POST" })
   .validator(loginInputSchema)

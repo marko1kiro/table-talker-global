@@ -47,14 +47,15 @@ it("derives deterministic keyed lookup hashes with separate purposes", () => {
   ).not.toBe(hashRestaurantCode(code(), parsed));
 });
 
-it("uses versioned Table Talker HKDF purposes while reading pilot v1 ciphertext", () => {
+it("uses only final versioned Table Talker HKDF purposes", () => {
   const source = readFileSync(
     new URL("../src/lib/restaurant-code.server.ts", import.meta.url),
     "utf8",
   );
   expect(source).toContain("table-talker/restaurant-code-lookup/v1");
   expect(source).toContain("table-talker/restaurant-code-encryption/v1");
-  expect(source).toContain("restaurant-code-encryption:v1");
+  expect(source).not.toContain("restaurant-code-encryption:v1");
+  expect(source).not.toContain("restaurant-code-lookup:v1");
 });
 
 it("encrypts with fresh nonce and authenticates restaurant identity", () => {
