@@ -162,8 +162,29 @@ mempengaruhi delivery real-time. Detail fungsi ada di
 - `npm run dev` — development server
 - `npm run build` — build untuk Vercel
 - `npm run lint` — pemeriksaan kode
-# Tenant PIN setup
+## Restaurant credential rollout
 
-Before applying `20260823102000_restaurant_pin_hash.sql`, set PostgreSQL setting
-`app.pilot_restaurant_pin_hash` to lowercase SHA-256 hex of pilot PIN. Generate it
-server-side, for example: `node -e "console.log(require('node:crypto').createHash('sha256').update(process.env.PILOT_RESTAURANT_PIN).digest('hex'))"`.
+`RESTAURANT_CODE_ENCRYPTION_KEY` is server-only 32-byte base64url key. Generate once
+in approved secret manager. Do not expose through `VITE_`, Git, SQL, CI output, logs,
+or browser. Key loss requires credential reset. Key compromise requires rotate each
+credential after replacing key.
+
+Run staged release. Do not apply cleanup before every active restaurant has derived
+credential fields.
+
+1. Deploy compatibility release with restaurant-code feature flag off.
+2. `npx supabase login`
+3. `npx supabase link --project-ref YOUR_PROJECT_REF`
+4. Run `npx supabase db push --include-all`. Expected: additive migration applies, then cleanup stops with `UNPROVISIONED_RESTAURANT_CREDENTIALS`. Confirm migration `20260823110000_restaurant_code_credentials_additive.sql` exists remotely; do not bypass guard.
+5. Configure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `RESTAURANT_CODE_ENCRYPTION_KEY` only in protected runtime environment.
+6. Provision each row using exact UUID, or exact display name when UUID unavailable. Supply code through protected `RESTAURANT_CODE`; avoid `--code` because shell history can retain it:
+
+   ```bash
+   node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID
+   node scripts/provision-restaurant-code.mjs --display-name "Exact restaurant display name"
+   ```
+
+7. Provision approved pilot using its approved runtime secret only. Do not add credential value to files, shell history, SQL, fixtures, logs, or CI. Pilot target is restaurant row identified by release operator's approved UUID; if unavailable, use exact approved display name and verify returned UUID against secure release record.
+8. Enable feature flag after monitoring provisioning audit records. Apply cleanup only then: `npx supabase db push --include-all`. Migration `20260823120000_remove_legacy_restaurant_code.sql` aborts if any restaurant lacks derived credentials.
+
+The provisioning script prints restaurant display name and UUID only. It computes hash and ciphertext in memory, then calls service-role-only `provision_restaurant_credentials` RPC. It never prints credential material.
