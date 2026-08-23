@@ -119,6 +119,13 @@ export const sendOwnerBroadcast = createServerFn({ method: "POST" })
         code: "UNAVAILABLE" as const,
         message: "Broadcast tidak tersedia.",
       };
+    const targets = await resolveBroadcastTargets(client, data.scope, data.restaurantId);
+    if (!targets.ok)
+      return {
+        ok: false as const,
+        code: targets.code,
+        message: "Target broadcast tidak tersedia.",
+      };
     const { data: allowed, error: rateError } = await client.rpc(
       "check_owner_broadcast_rate_limit",
       { p_actor: "super-admin", p_max_requests: 10, p_window_seconds: 3600 },
@@ -134,13 +141,6 @@ export const sendOwnerBroadcast = createServerFn({ method: "POST" })
         ok: false as const,
         code: "RATE_LIMITED" as const,
         message: "Terlalu banyak broadcast.",
-      };
-    const targets = await resolveBroadcastTargets(client, data.scope, data.restaurantId);
-    if (!targets.ok)
-      return {
-        ok: false as const,
-        code: targets.code,
-        message: "Target broadcast tidak tersedia.",
       };
 
     const { data: broadcast, error: createError } = await client

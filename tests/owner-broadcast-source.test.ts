@@ -8,6 +8,9 @@ it("protects preview and send while resolving targets server-side", () => {
   expect(source).toContain("await requireSuperAdmin()");
   expect(source).toContain("Promise.allSettled");
   expect(source).toContain("check_owner_broadcast_rate_limit");
+  expect(source.indexOf("resolveBroadcastTargets")).toBeLessThan(
+    source.indexOf('"check_owner_broadcast_rate_limit"'),
+  );
   expect(source).not.toContain("deviceIds");
 });
 

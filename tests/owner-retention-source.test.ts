@@ -15,6 +15,14 @@ it("provides automatic thirty-day owner retention", () => {
   expect(existsSync(new URL("supabase/functions/owner-retention/index.ts", root))).toBe(true);
 });
 
+it("repairs scheduler verification and event-time retention after rollout", () => {
+  const repair = file("supabase/migrations/20260824006000_owner_retention_verification.sql");
+  expect(repair).toContain("event_timestamp");
+  expect(repair).toContain("occurred_at");
+  expect(repair).toContain("owner_broadcasts");
+  expect(repair).toContain("raise exception 'OWNER_RETENTION_SCHEDULER_MISSING'");
+});
+
 it("keeps retention off browser routes", () => {
   for (const path of [
     "src/routes/super-admin/index.tsx",

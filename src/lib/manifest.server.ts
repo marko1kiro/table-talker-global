@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
-import { deleteFromR2, r2Key, r2PublicUrl, verifyR2Upload } from "./r2.server";
+import { r2Key, r2PublicUrl, verifyR2Upload } from "./r2.server";
 import { isOwnerCatalogAudioId, validateCatalogMutation } from "./owner-restaurants-domain";
 
 function offline() {
@@ -59,10 +59,8 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
     const item = validated.item;
 
     const key = r2Key(data.restaurantId, item.audioId, data.contentHash);
-    let verified = false;
     try {
       await verifyR2Upload(data);
-      verified = true;
       if (data.r2Url !== r2PublicUrl(key)) throw new Error("URL R2 tidak sesuai upload.");
       const { data: version, error } = await client.rpc("mutate_catalog", {
         p_restaurant_id: data.restaurantId,
@@ -78,7 +76,6 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
         },
       });
       if (error) {
-        await deleteFromR2(key);
         return {
           ok: false as const,
           code: "UNAVAILABLE" as const,
@@ -87,7 +84,6 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
       }
       return { ok: true as const, version };
     } catch {
-      if (verified) await deleteFromR2(key);
       return {
         ok: false as const,
         code: "VERIFY_FAILED" as const,

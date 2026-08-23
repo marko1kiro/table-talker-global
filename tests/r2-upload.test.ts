@@ -47,10 +47,10 @@ describe("R2 direct upload requests", () => {
     ).toThrow();
   });
 
-  it("verifies upload before catalog mutation and cleans failed objects", () => {
+  it("verifies upload before catalog mutation without deleting immutable objects", () => {
     const source = readFileSync(new URL("../src/lib/manifest.server.ts", import.meta.url), "utf8");
     expect(source).toContain("verifyR2Upload");
-    expect(source).toContain("deleteFromR2");
+    expect(source).not.toContain("deleteFromR2");
     expect(source.indexOf("verifyR2Upload")).toBeLessThan(source.indexOf("mutate_catalog"));
   });
 });
