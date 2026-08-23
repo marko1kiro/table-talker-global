@@ -16,6 +16,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
@@ -136,9 +137,21 @@ function Audio() {
       {restaurantId && (
         <>
           <div className="mt-4">
-            <input value={audioId} onChange={(event) => setAudioId(event.target.value)} />
-            <input value={label} onChange={(event) => setLabel(event.target.value)} />
-            <input value={category} onChange={(event) => setCategory(event.target.value)} />
+            <input
+              aria-label="Audio ID"
+              value={audioId}
+              onChange={(event) => setAudioId(event.target.value)}
+            />
+            <input
+              aria-label="Label audio"
+              value={label}
+              onChange={(event) => setLabel(event.target.value)}
+            />
+            <input
+              aria-label="Kategori audio"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            />
             <input
               aria-label="File MP3"
               type="file"
@@ -185,6 +198,10 @@ function Audio() {
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogTitle>Hapus audio?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Mapping audio akan dihapus. Objek R2 tetap dipertahankan untuk riwayat
+                          immutable.
+                        </AlertDialogDescription>
                         <AlertDialogAction
                           disabled={pendingItem === item.audio_id}
                           onClick={() =>

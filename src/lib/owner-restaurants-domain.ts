@@ -40,7 +40,8 @@ export function validateCatalogItem(
 ): CatalogItemInput | { code: OwnerResultCode } {
   if (!isOwnerCatalogAudioId(input.audioId)) return { code: "INVALID_AUDIO_ID" };
   const label = input.label.trim();
-  if (!label || label.length > 200 || !input.category.trim() || input.category.length > 60)
+  const category = input.category.trim();
+  if (!label || label.length > 200 || !category || category.length > 60)
     return { code: "INVALID_METADATA" };
-  return { ...input, label };
+  return { ...input, label, category };
 }

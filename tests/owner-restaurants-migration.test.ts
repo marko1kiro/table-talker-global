@@ -40,3 +40,8 @@ it("validates mutations before catalog version changes", () => {
 it("bounds restaurant list deterministically", () => {
   expect(sql).toContain("order by r.display_name, r.id limit 100");
 });
+
+it("keeps json arguments valid and correlates bounded detail sources with lateral joins", () => {
+  expect(sql).not.toContain("r.display_name as display_name, r.id as id");
+  expect((sql.match(/cross join lateral/g) ?? []).length).toBe(5);
+});

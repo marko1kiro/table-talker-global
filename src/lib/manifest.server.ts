@@ -25,7 +25,8 @@ async function manifestItem(
     .select("catalog_version")
     .eq("id", restaurantId)
     .single();
-  if (restaurantError || !restaurant) return null;
+  if (restaurantError) return undefined;
+  if (!restaurant) return null;
   const { data, error } = await client
     .from("audio_manifests")
     .select("audio_id, label, category, r2_url, content_hash, byte_size, active, ordering")

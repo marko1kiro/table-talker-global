@@ -39,6 +39,12 @@ it("updates metadata without re-upload and distinguishes verification failures",
   expect(source).toContain("manifestItem");
 });
 
+it("keeps query failures unavailable and missing catalog rows not found", () => {
+  const source = manifest();
+  expect(source).toContain("if (restaurantError) return undefined");
+  expect(source).toContain("if (!restaurant) return null");
+});
+
 it("exports listManifestItems for admin view", () => {
   const source = manifest();
   expect(source).toContain("listManifestItems");

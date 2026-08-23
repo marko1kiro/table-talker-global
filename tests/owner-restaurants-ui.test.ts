@@ -38,4 +38,8 @@ it("audio route hashes MP3 browser uploads and uses owner catalog actions", () =
     /AlertDialogTrigger asChild>[\s\S]*?disabled=\{pendingItem === item\.audio_id\}/,
   );
   expect(audio).toMatch(/AlertDialogAction[\s\S]*?disabled=\{pendingItem === item\.audio_id\}/);
+  expect(audio).toContain('aria-label="Audio ID"');
+  expect(audio).toContain('aria-label="Label audio"');
+  expect(audio).toContain('aria-label="Kategori audio"');
+  expect(audio).toContain("AlertDialogDescription");
 });

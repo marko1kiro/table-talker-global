@@ -109,3 +109,9 @@ it("rejects invalid mutation metadata, size, hashes, and ordering", () => {
     }),
   ).toMatchObject({ code: "INVALID_METADATA" });
 });
+
+it("trims category before storing catalog metadata", () => {
+  expect(validateCatalogItem({ ...table, category: "  BASE  " })).toMatchObject({
+    category: "BASE",
+  });
+});

@@ -21,14 +21,13 @@ create or replace function public.owner_restaurant_list()
 returns jsonb language sql security definer set search_path = public set statement_timeout = '3000ms' as $$
   select coalesce(jsonb_agg(row_data order by display_name, id), '[]'::jsonb)
   from (
-    select jsonb_build_object(
+    select r.display_name, r.id, jsonb_build_object(
       'id', r.id, 'display_name', r.display_name, 'is_active', r.is_active,
       'online_devices', (select count(*) from crew_sessions s where s.restaurant_id = r.id and s.connection_state = 'connected' and s.visibility_state = 'visible' and s.last_seen > now() - interval '30 seconds'),
       'catalog_version', r.catalog_version,
       'latest_sync_failure', (select jsonb_build_object('occurred_at', e.occurred_at, 'report_code', e.report_code) from operational_errors e where e.restaurant_id = r.id and e.stage = 'sync_cache' and e.resolved_at is null order by e.occurred_at desc limit 1),
-      'plays_today', (select count(*) from playback_events p where p.restaurant_id = r.id and p.status = 'played' and p.event_timestamp >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'),
-      r.display_name as display_name, r.id as id
-    ) row_data, r.display_name, r.id from restaurants r order by r.display_name, r.id limit 100
+      'plays_today', (select count(*) from playback_events p where p.restaurant_id = r.id and p.status = 'played' and p.event_timestamp >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta')
+    ) row_data from restaurants r order by r.display_name, r.id limit 100
   ) rows;
 $$;
 
@@ -36,12 +35,18 @@ create or replace function public.owner_restaurant_detail(p_restaurant_id uuid)
 returns jsonb language sql security definer set search_path = public set statement_timeout = '3000ms' as $$
   select jsonb_build_object(
     'restaurant', jsonb_build_object('id', r.id, 'display_name', r.display_name, 'is_active', r.is_active, 'catalog_version', r.catalog_version, 'credential_rotated_at', r.credential_rotated_at),
-    'devices', coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'display_name', s.display_name, 'device_description', s.device_description, 'audio_ready', s.audio_ready, 'connection_state', s.connection_state, 'visibility_state', s.visibility_state, 'last_seen', s.last_seen) order by s.last_seen desc) from (select id, display_name, device_description, audio_ready, connection_state, visibility_state, last_seen from crew_sessions where restaurant_id = r.id order by last_seen desc limit 20) s), '[]'::jsonb),
-    'catalog', jsonb_build_object('total', (select count(*) from audio_manifests m where m.restaurant_id = r.id and m.catalog_version = r.catalog_version), 'items', coalesce((select jsonb_agg(jsonb_build_object('audio_id', m.audio_id, 'label', m.label, 'category', m.category, 'active', m.active, 'ordering', m.ordering) order by m.category, m.ordering) from (select audio_id, label, category, active, ordering from audio_manifests where restaurant_id = r.id and catalog_version = r.catalog_version order by category, ordering limit 200) m), '[]'::jsonb)),
-    'recent_playback', coalesce((select jsonb_agg(jsonb_build_object('audio_id', p.audio_id, 'label', p.label, 'event_timestamp', p.event_timestamp, 'crew_name', p.crew_name, 'status', p.status, 'error_detail', p.error_detail) order by p.event_timestamp desc) from (select audio_id, label, event_timestamp, crew_name, status, error_detail from playback_events where restaurant_id = r.id order by event_timestamp desc limit 20) p), '[]'::jsonb),
-    'recent_errors', coalesce((select jsonb_agg(jsonb_build_object('stage', e.stage, 'report_code', e.report_code, 'detail', e.detail, 'occurred_at', e.occurred_at, 'resolved_at', e.resolved_at) order by e.occurred_at desc) from (select stage, report_code, detail, occurred_at, resolved_at from operational_errors where restaurant_id = r.id order by occurred_at desc limit 20) e), '[]'::jsonb),
-    'sync_history', coalesce((select jsonb_agg(jsonb_build_object('report_code', e.report_code, 'detail', e.detail, 'occurred_at', e.occurred_at, 'resolved_at', e.resolved_at) order by e.occurred_at desc) from (select report_code, detail, occurred_at, resolved_at from operational_errors where restaurant_id = r.id and stage = 'sync_cache' order by occurred_at desc limit 20) e), '[]'::jsonb)
-  ) from restaurants r where r.id = p_restaurant_id;
+    'devices', devices.items,
+    'catalog', jsonb_build_object('total', (select count(*) from audio_manifests m where m.restaurant_id = r.id and m.catalog_version = r.catalog_version), 'items', catalog.items),
+    'recent_playback', playback.items,
+    'recent_errors', errors.items,
+    'sync_history', sync.items
+  ) from restaurants r
+  cross join lateral (select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'display_name', s.display_name, 'device_description', s.device_description, 'audio_ready', s.audio_ready, 'connection_state', s.connection_state, 'visibility_state', s.visibility_state, 'last_seen', s.last_seen) order by s.last_seen desc), '[]'::jsonb) items from (select id, display_name, device_description, audio_ready, connection_state, visibility_state, last_seen from crew_sessions where restaurant_id = r.id order by last_seen desc limit 20) s) devices
+  cross join lateral (select coalesce(jsonb_agg(jsonb_build_object('audio_id', m.audio_id, 'label', m.label, 'category', m.category, 'active', m.active, 'ordering', m.ordering) order by m.category, m.ordering), '[]'::jsonb) items from (select audio_id, label, category, active, ordering from audio_manifests where restaurant_id = r.id and catalog_version = r.catalog_version order by category, ordering limit 200) m) catalog
+  cross join lateral (select coalesce(jsonb_agg(jsonb_build_object('audio_id', p.audio_id, 'label', p.label, 'event_timestamp', p.event_timestamp, 'crew_name', p.crew_name, 'status', p.status, 'error_detail', p.error_detail) order by p.event_timestamp desc), '[]'::jsonb) items from (select audio_id, label, event_timestamp, crew_name, status, error_detail from playback_events where restaurant_id = r.id order by event_timestamp desc limit 20) p) playback
+  cross join lateral (select coalesce(jsonb_agg(jsonb_build_object('stage', e.stage, 'report_code', e.report_code, 'detail', e.detail, 'occurred_at', e.occurred_at, 'resolved_at', e.resolved_at) order by e.occurred_at desc), '[]'::jsonb) items from (select stage, report_code, detail, occurred_at, resolved_at from operational_errors where restaurant_id = r.id order by occurred_at desc limit 20) e) errors
+  cross join lateral (select coalesce(jsonb_agg(jsonb_build_object('report_code', e.report_code, 'detail', e.detail, 'occurred_at', e.occurred_at, 'resolved_at', e.resolved_at) order by e.occurred_at desc), '[]'::jsonb) items from (select report_code, detail, occurred_at, resolved_at from operational_errors where restaurant_id = r.id and stage = 'sync_cache' order by occurred_at desc limit 20) e) sync
+  where r.id = p_restaurant_id;
 $$;
 
 revoke all on function public.owner_restaurant_list() from public, anon, authenticated;
