@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { ingestPlaybackEventBatch, playbackEventBatchSchema } from "./lib/playback-events.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -47,6 +48,16 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      if (new URL(request.url).pathname === "/api/telemetry" && request.method === "POST") {
+        try {
+          const result = await ingestPlaybackEventBatch(
+            playbackEventBatchSchema.parse(JSON.parse(await request.text())),
+          );
+          return Response.json(result, { status: result.ok ? 200 : 400 });
+        } catch {
+          return Response.json({ ok: false, ids: [] }, { status: 400 });
+        }
+      }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

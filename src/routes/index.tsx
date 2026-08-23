@@ -84,11 +84,23 @@ function SoundboardPage() {
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [duplicateName, setDuplicateName] = useState(false);
   const [audioSynced, setAudioSynced] = useState(false);
+  const crewIdentityRef = useRef<CrewIdentity | null>(null);
+  crewIdentityRef.current = crewIdentity;
+
+  const onCrewSessionId = useCallback((crewSessionId: string) => {
+    const identity = crewIdentityRef.current;
+    if (!identity || identity.crewSessionId === crewSessionId) return;
+    const nextIdentity = { ...identity, crewSessionId };
+    writeCrewSessionIdentity(browserSessionStorage(), nextIdentity);
+    setCrewIdentity(nextIdentity);
+  }, []);
 
   const deviceIdRef = useRef(generateDeviceId());
 
   const flushToServer = useCallback(async (events: PlaybackEvent[]) => {
-    const result = await ingestPlaybackEvents({ data: { events } });
+    const result = await ingestPlaybackEvents({
+      data: { tenantToken: events[0]?.tenantToken ?? "", events },
+    });
     return { ok: result.ok, ids: result.ids };
   }, []);
 
@@ -168,6 +180,7 @@ function SoundboardPage() {
   const remoteCrew = useRemoteCrew({
     registration: identityHydrated ? crewIdentity : null,
     playRemoteAudio,
+    onCrewSessionId,
   });
 
   useEffect(() => {
@@ -197,12 +210,11 @@ function SoundboardPage() {
           });
           void recordEvent({
             id: generateEventId(),
-            restaurantId: crewIdentity?.restaurantId ?? null,
+            tenantToken: crewIdentityRef.current?.tenantToken ?? "",
             audioId: typeof id === "number" ? `table:${id}` : String(id),
             label: typeof id === "number" ? `Meja ${id}` : String(id),
             eventTimestamp: new Date().toISOString(),
-            crewName: crewIdentity?.displayName ?? "",
-            crewSessionId: crewIdentity?.restaurantId ?? "",
+            crewSessionId: crewIdentityRef.current?.crewSessionId ?? "",
             deviceId: deviceIdRef.current,
             status: "played",
           });
@@ -215,12 +227,11 @@ function SoundboardPage() {
           });
           void recordEvent({
             id: generateEventId(),
-            restaurantId: crewIdentity?.restaurantId ?? null,
+            tenantToken: crewIdentityRef.current?.tenantToken ?? "",
             audioId: typeof id === "number" ? `table:${id}` : String(id),
             label: typeof id === "number" ? `Meja ${id}` : String(id),
             eventTimestamp: new Date().toISOString(),
-            crewName: crewIdentity?.displayName ?? "",
-            crewSessionId: crewIdentity?.restaurantId ?? "",
+            crewSessionId: crewIdentityRef.current?.crewSessionId ?? "",
             deviceId: deviceIdRef.current,
             status: "failed",
             errorDetail: (error as Error).message?.slice(0, 1000),
@@ -245,12 +256,11 @@ function SoundboardPage() {
         setPlaying(id);
         void recordEvent({
           id: generateEventId(),
-          restaurantId: crewIdentity?.restaurantId ?? null,
+          tenantToken: crewIdentityRef.current?.tenantToken ?? "",
           audioId: typeof id === "number" ? `table:${id}` : String(id),
           label: typeof id === "number" ? `Meja ${id}` : String(id),
           eventTimestamp: new Date().toISOString(),
-          crewName: crewIdentity?.displayName ?? "",
-          crewSessionId: crewIdentity?.restaurantId ?? "",
+          crewSessionId: crewIdentityRef.current?.crewSessionId ?? "",
           deviceId: deviceIdRef.current,
           status: "played",
         });
@@ -263,12 +273,11 @@ function SoundboardPage() {
         setPaused(null);
         void recordEvent({
           id: generateEventId(),
-          restaurantId: crewIdentity?.restaurantId ?? null,
+          tenantToken: crewIdentityRef.current?.tenantToken ?? "",
           audioId: typeof id === "number" ? `table:${id}` : String(id),
           label: typeof id === "number" ? `Meja ${id}` : String(id),
           eventTimestamp: new Date().toISOString(),
-          crewName: crewIdentity?.displayName ?? "",
-          crewSessionId: crewIdentity?.restaurantId ?? "",
+          crewSessionId: crewIdentityRef.current?.crewSessionId ?? "",
           deviceId: deviceIdRef.current,
           status: "failed",
           errorDetail: (error as Error).message?.slice(0, 1000),
@@ -316,7 +325,10 @@ function SoundboardPage() {
         />
       )}
       {crewIdentity?.restaurantId && !audioSynced && (
-        <SyncDialog restaurantId={crewIdentity.restaurantId} onSynced={() => setAudioSynced(true)} />
+        <SyncDialog
+          restaurantId={crewIdentity.restaurantId}
+          onSynced={() => setAudioSynced(true)}
+        />
       )}
       {(remoteCrew.needsAudioRecovery || !crewIdentity?.audioReady) && crewIdentity && (
         <div className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 brutal-border bg-card p-3 text-center">

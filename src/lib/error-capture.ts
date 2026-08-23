@@ -13,7 +13,7 @@ type ReportOptions = {
   stage: ErrorStage;
   reportCode: string;
   detail?: string;
-  restaurantId?: string | null;
+  tenantToken?: string;
   deviceId?: string;
   crewSessionId?: string;
 };
@@ -34,8 +34,8 @@ export async function captureError(options: ReportOptions): Promise<void> {
   try {
     await reportOperationalError({
       data: {
+        tenantToken: options.tenantToken,
         error: {
-          restaurantId: options.restaurantId ?? null,
           stage: options.stage,
           reportCode: options.reportCode,
           detail: options.detail?.slice(0, 1000) ?? null,

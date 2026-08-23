@@ -26,6 +26,17 @@ it("flushes on pagehide event", () => {
   expect(source).toContain("pagehide");
 });
 
+it("drains queued events in bounded batches", () => {
+  const source = eventFlush();
+  expect(source).toContain("MAX_BATCHES_PER_FLUSH");
+  expect(source).toContain("for (let batchIndex");
+});
+
+it("uses beacon or keepalive transport during pagehide", () => {
+  const source = eventFlush();
+  expect(source).toMatch(/sendBeacon|keepalive/);
+});
+
 it("exports useEventFlush hook", () => {
   const source = eventFlush();
   expect(source).toContain("export function useEventFlush");

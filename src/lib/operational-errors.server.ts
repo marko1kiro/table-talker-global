@@ -2,9 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
+import { verifyTenantSession } from "./tenant-session.server";
 
 const errorReportSchema = z.object({
-  restaurantId: z.string().uuid().nullable(),
   stage: z.string().max(60),
   reportCode: z.string().max(60),
   detail: z.string().max(1000).nullable().optional(),
@@ -13,14 +13,16 @@ const errorReportSchema = z.object({
 });
 
 export const reportOperationalError = createServerFn({ method: "POST" })
-  .validator(z.object({ error: errorReportSchema }))
+  .validator(z.object({ tenantToken: z.string().optional(), error: errorReportSchema }))
   .handler(async ({ data }) => {
     const client = getServiceClient();
     if (!client) return { ok: false as const };
+    const tenant = data.tenantToken ? verifyTenantSession(data.tenantToken) : null;
+    if (data.tenantToken && !tenant) return { ok: false as const };
 
     try {
       const { error } = await client.from("operational_errors").insert({
-        restaurant_id: data.error.restaurantId,
+        restaurant_id: tenant?.restaurantId ?? null,
         stage: data.error.stage,
         report_code: data.error.reportCode,
         detail: data.error.detail ?? null,

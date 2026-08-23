@@ -1,10 +1,9 @@
 export type PlaybackEvent = {
   id: string;
-  restaurantId: string | null;
+  tenantToken: string;
   audioId: string;
   label: string;
   eventTimestamp: string;
-  crewName: string;
   crewSessionId: string;
   deviceId: string;
   status: "played" | "failed";
@@ -64,7 +63,12 @@ export async function getQueuedEvents(): Promise<PlaybackEvent[]> {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readonly");
       const req = tx.objectStore(STORE_NAME).getAll();
-      req.onsuccess = () => resolve(req.result as PlaybackEvent[]);
+      req.onsuccess = () =>
+        resolve(
+          (req.result as PlaybackEvent[]).sort((left, right) =>
+            left.eventTimestamp.localeCompare(right.eventTimestamp),
+          ),
+        );
       req.onerror = () => reject(req.error);
     });
   } catch {

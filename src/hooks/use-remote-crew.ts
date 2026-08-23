@@ -308,9 +308,11 @@ function deviceDescription() {
 export function useRemoteCrew({
   registration,
   playRemoteAudio,
+  onCrewSessionId,
 }: {
   registration: CrewRegistration | null;
   playRemoteAudio: (audioId: AudioId) => Promise<void>;
+  onCrewSessionId?: (crewSessionId: string) => void;
 }) {
   const [offline, setOffline] = useState(false);
   const [connectionState, setConnectionState] = useState<"offline" | "connecting" | "online">(
@@ -405,7 +407,7 @@ export function useRemoteCrew({
         return;
       claimInFlight = (async () => {
         try {
-          const { error: claimError } = await client.rpc(
+          const { data: claimedSession, error: claimError } = await client.rpc(
             "claim_crew_session",
             crewClaimArgs(registration, deviceDescription(), "visible"),
           );
@@ -418,6 +420,7 @@ export function useRemoteCrew({
             update(setOffline, !/duplicate|unique/i.test(claimError.message));
             return;
           }
+          if (typeof claimedSession?.id === "string") onCrewSessionId?.(claimedSession.id);
           update(setDuplicateName, false);
           update(setOffline, true);
           if (active) setConnectionState("connecting");
@@ -523,7 +526,7 @@ export function useRemoteCrew({
       channel = null;
       if (currentChannel) void client.removeChannel(currentChannel);
     };
-  }, [registration]);
+  }, [registration, onCrewSessionId]);
 
   return {
     offline,

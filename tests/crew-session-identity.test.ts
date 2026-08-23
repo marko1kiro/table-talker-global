@@ -21,6 +21,7 @@ describe("crew session identity", () => {
     restaurantCode: "KAMPUNG-BULU",
     restaurantDisplayName: "Mie Gacoan Kampung Bulu",
     tenantToken: "signed-tenant-session",
+    crewSessionId: "",
   };
 
   it("round-trips only normalized validated identity", () => {

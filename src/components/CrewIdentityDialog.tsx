@@ -31,6 +31,7 @@ export function CrewIdentityDialog({
     restaurantCode: string;
     restaurantDisplayName: string;
     tenantToken: string;
+    crewSessionId: string;
   } | null>(null);
 
   const submitRestaurant = async (event: FormEvent<HTMLFormElement>) => {
@@ -54,6 +55,7 @@ export function CrewIdentityDialog({
         restaurantCode: result.restaurantCode,
         restaurantDisplayName: result.displayName,
         tenantToken: result.tenantToken,
+        crewSessionId: "",
       });
       setStep("name");
     } catch {
@@ -79,6 +81,7 @@ export function CrewIdentityDialog({
       restaurantCode: restaurantInfo!.restaurantCode,
       restaurantDisplayName: restaurantInfo!.restaurantDisplayName,
       tenantToken: restaurantInfo!.tenantToken,
+      crewSessionId: restaurantInfo!.crewSessionId,
     });
     setSubmitting(false);
   };
@@ -93,9 +96,7 @@ export function CrewIdentityDialog({
       >
         {step === "restaurant" ? (
           <>
-            <DialogTitle className="font-display text-xl">
-              Masukkan Kode Resto & PIN
-            </DialogTitle>
+            <DialogTitle className="font-display text-xl">Masukkan Kode Resto & PIN</DialogTitle>
             <DialogDescription id="crew-identity-description">
               Masukkan kode resto dan PIN yang diberikan administrator.
             </DialogDescription>

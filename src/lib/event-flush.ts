@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
-import {
-  enqueueEvent,
-  getQueuedEvents,
-  removeEvents,
-  type PlaybackEvent,
-} from "./event-queue";
+import { enqueueEvent, getQueuedEvents, removeEvents, type PlaybackEvent } from "./event-queue";
 
 const BATCH_SIZE = 10;
+const MAX_BATCHES_PER_FLUSH = 5;
 const FLUSH_INTERVAL_MS = 30_000;
 
 type FlushFn = (events: PlaybackEvent[]) => Promise<{ ok: boolean; ids: string[] }>;
@@ -19,14 +15,16 @@ export function useEventFlush(flushToServer: FlushFn) {
     flushingRef.current = true;
 
     try {
-      const events = await getQueuedEvents();
-      if (events.length === 0) return;
-
-      const batch = events.slice(0, BATCH_SIZE);
-      const result = await flushToServer(batch);
-
-      if (result.ok) {
+      for (let batchIndex = 0; batchIndex < MAX_BATCHES_PER_FLUSH; batchIndex++) {
+        const events = await getQueuedEvents();
+        if (events.length === 0) return;
+        const batch = events
+          .filter((event) => event.tenantToken === events[0].tenantToken)
+          .slice(0, BATCH_SIZE);
+        const result = await flushToServer(batch);
+        if (!result.ok) return;
         await removeEvents(result.ids);
+        if (batch.length < BATCH_SIZE) return;
       }
     } catch {
       // Will retry on next flush
@@ -55,12 +53,22 @@ export function useEventFlush(flushToServer: FlushFn) {
   // Flush on pagehide
   useEffect(() => {
     const handlePageHide = () => {
-      void flush();
+      void getQueuedEvents().then((events) => {
+        const batch = events
+          .filter((event) => event.tenantToken === events[0]?.tenantToken)
+          .slice(0, BATCH_SIZE);
+        if (!batch.length) return;
+        const body = JSON.stringify({ tenantToken: batch[0].tenantToken, events: batch });
+        if (navigator.sendBeacon?.("/api/telemetry", new Blob([body], { type: "text/plain" })))
+          return;
+        void fetch("/api/telemetry", {
+          method: "POST",
+          body,
+          headers: { "content-type": "application/json" },
+          keepalive: true,
+        });
+      });
     };
-
-    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
-      // Use sendBeacon via pagehide
-    }
 
     window.addEventListener("pagehide", handlePageHide);
     return () => window.removeEventListener("pagehide", handlePageHide);
