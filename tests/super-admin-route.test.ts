@@ -118,6 +118,12 @@ it("renders disabled online-unready and recent options", () => {
   expect(source).toContain("disabled={!session.eligible}");
 });
 
+it("keeps remote audio controls disabled without tenant manifest catalog", () => {
+  const source = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
+  expect(source).toContain("const controlsDisabled = true");
+  expect(source).toContain("Kontrol audio remote menunggu katalog manifest per resto.");
+});
+
 it("shows sent commands as expired at their effective expiry time", () => {
   expect(
     commandStatus(

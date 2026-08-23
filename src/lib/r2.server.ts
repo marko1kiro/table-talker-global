@@ -113,6 +113,30 @@ export async function createPresignedR2Upload(input: R2UploadRequest) {
   };
 }
 
+export async function verifyR2Upload(input: Omit<R2UploadRequest, "contentType">): Promise<string> {
+  const s3 = getClient();
+  if (!s3) throw new Error("R2 belum dikonfigurasi.");
+
+  const { restaurantId, audioId, contentHash, byteSize } = validateR2UploadRequest({
+    ...input,
+    contentType: R2_UPLOAD_CONTENT_TYPE,
+  });
+  const key = r2Key(restaurantId, audioId, contentHash);
+  const object = await s3.send(
+    new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key, ChecksumMode: "ENABLED" }),
+  );
+  if (
+    object.ContentLength !== byteSize ||
+    object.ChecksumSHA256 !== hexToBase64(contentHash) ||
+    object.ContentType !== R2_UPLOAD_CONTENT_TYPE ||
+    object.CacheControl !== R2_UPLOAD_CACHE_CONTROL
+  ) {
+    await deleteFromR2(key);
+    throw new Error("Objek R2 tidak sesuai metadata upload.");
+  }
+  return key;
+}
+
 export async function deleteFromR2(key: string): Promise<boolean> {
   const s3 = getClient();
   if (!s3) return false;

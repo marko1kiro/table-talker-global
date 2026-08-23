@@ -7,6 +7,10 @@ import { hashTenantSession, verifyActiveTenantSession, verifyCrewSessionToken } 
 const OPERATIONS_ERROR_CODES = new Set([
   "tenant_login", "sync_cache", "playback", "realtime", "r2_upload", "rpc", "server",
 ]);
+const OPERATIONS_REPORT_CODES = new Set([
+  "tenant_login", "sync_cache", "playback", "realtime", "r2_upload", "rpc", "server",
+  "SYNC_MANIFEST", "SYNC_OFFLINE", "SYNC_CACHE", "SYNC_DOWNLOAD",
+]);
 
 const errorReportSchema = z.object({
   stage: z.string().max(60),
@@ -22,7 +26,7 @@ export const reportOperationalError = createServerFn({ method: "POST" })
     const client = getServiceClient();
     if (!client) return { ok: false as const };
     const tenant = await verifyActiveTenantSession(client, data.tenantToken);
-    if (!tenant || !OPERATIONS_ERROR_CODES.has(data.error.stage) || !OPERATIONS_ERROR_CODES.has(data.error.reportCode)) return { ok: false as const };
+    if (!tenant || !OPERATIONS_ERROR_CODES.has(data.error.stage) || !OPERATIONS_REPORT_CODES.has(data.error.reportCode)) return { ok: false as const };
     if (data.error.crewSessionId) {
       if (!data.crewSessionToken) return { ok: false as const };
       const session = await verifyCrewSessionToken(client, data.crewSessionToken, tenant.restaurantId);

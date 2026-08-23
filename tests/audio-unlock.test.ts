@@ -91,6 +91,14 @@ describe("bundled audio playback", () => {
   });
 });
 
+it("keeps MP3 assets out of client source and unlocks with generated silent audio", () => {
+  const source = readFileSync(new URL("../src/lib/audio.ts", import.meta.url), "utf8");
+  expect(source).not.toContain("import.meta.glob");
+  expect(source).not.toContain("assets/audio");
+  expect(source).toContain("data:audio/wav;base64,");
+  expect(source).toContain("getUnlockAudioUrl");
+});
+
 it("hydrates a same-tab crew after mount without persisting audio readiness", () => {
   const route = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8").replace(
     /\r\n/g,

@@ -20,7 +20,6 @@ import {
 import { requestR2Upload } from "@/lib/upload.server";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
-  canSelectRemoteAudio,
   commandStatus,
   getSelectedRemoteTarget,
   remoteCommandRequest,
@@ -146,15 +145,8 @@ function SuperAdminPage() {
       audioReady: session.audio_ready,
     })),
   );
-  const controlsDisabled = !canSelectRemoteAudio({
-    offline,
-    target: selectedTarget,
-    pending: mutation.isPending,
-  });
-  const availableAudioIds = useMemo(
-    () => new Set(catalog.map((audio) => audio.id as AudioId)),
-    [catalog],
-  );
+  const controlsDisabled = true;
+  const availableAudioIds = new Set<AudioId>();
 
   return (
     <main className="min-h-[100svh] bg-background px-4 py-6 sm:px-6">
@@ -169,7 +161,7 @@ function SuperAdminPage() {
           </p>
         ) : (
           <p className="mt-2 text-sm text-muted-foreground">
-            Pilih crew siap audio lalu kirim suara bundled.
+            Kontrol remote dinonaktifkan sampai katalog manifest per resto tersedia.
           </p>
         )}
         <div className="mt-5">
@@ -247,9 +239,9 @@ function SuperAdminPage() {
             {sendError || (mutation.data && "error" in mutation.data ? mutation.data.error : "")}
           </p>
         )}
-        {!selectedTarget && !offline && (
-          <p className="mt-3 text-sm font-bold">Pilih crew siap audio terlebih dahulu.</p>
-        )}
+        <p className="mt-3 text-sm font-bold">
+          Kontrol audio remote menunggu katalog manifest per resto.
+        </p>
         <div className="mt-5">
           <SoundboardGrid
             availableAudioIds={availableAudioIds}

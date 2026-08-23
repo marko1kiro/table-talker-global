@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
+import { deleteFromR2, r2Key, r2PublicUrl, verifyR2Upload } from "./r2.server";
 
 function offline() {
   return { offline: true as const, message: "Realtime offline" };
@@ -25,7 +26,12 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
     const client = getServiceClient();
     if (!client) return offline();
 
+    const key = r2Key(data.restaurantId, data.audioId, data.contentHash);
+    let verified = false;
     try {
+      await verifyR2Upload(data);
+      verified = true;
+      if (data.r2Url !== r2PublicUrl(key)) throw new Error("URL R2 tidak sesuai upload.");
       const { data: version, error } = await client.rpc("mutate_catalog", {
         p_restaurant_id: data.restaurantId,
         p_action: "upsert",
@@ -39,9 +45,13 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
           ordering: data.ordering,
         },
       });
-      if (error) return { error: "Gagal menyimpan manifest." };
+      if (error) {
+        await deleteFromR2(key);
+        return { error: "Gagal menyimpan manifest." };
+      }
       return { ok: true as const, version };
     } catch {
+      if (verified) await deleteFromR2(key);
       return offline();
     }
   });

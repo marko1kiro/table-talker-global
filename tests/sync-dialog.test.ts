@@ -36,3 +36,21 @@ it("blocks UI with fixed overlay (no cancel button)", () => {
   expect(source).toContain("fixed inset-0");
   expect(source).not.toContain("Batal");
 });
+
+it("reports manifest, offline, cache, and download failures with stable sync codes", () => {
+  const source = component();
+  expect(source).toContain('import { captureError }');
+  expect(source).toContain('stage: "sync_cache"');
+  expect(source).toContain("tenantToken");
+  expect(source).toContain("SYNC_MANIFEST");
+  expect(source).toContain("SYNC_OFFLINE");
+  expect(source).toContain("SYNC_CACHE");
+  expect(source).toContain("SYNC_DOWNLOAD");
+});
+
+it("retries only failed manifest items and shows a stable report code", () => {
+  const source = component();
+  expect(source).toContain("failedManifestRef");
+  expect(source).toContain("res.manifest.filter");
+  expect(source).toContain("Laporan:");
+});

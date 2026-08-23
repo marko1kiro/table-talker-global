@@ -54,4 +54,11 @@ describe("R2 direct upload requests", () => {
     expect(source).toContain("fetch(result.putUrl");
     expect(source).not.toContain("buffer: Array.from");
   });
+
+  it("verifies upload before catalog mutation and cleans failed objects", () => {
+    const source = readFileSync(new URL("../src/lib/manifest.server.ts", import.meta.url), "utf8");
+    expect(source).toContain("verifyR2Upload");
+    expect(source).toContain("deleteFromR2");
+    expect(source.indexOf("verifyR2Upload")).toBeLessThan(source.indexOf("mutate_catalog"));
+  });
 });

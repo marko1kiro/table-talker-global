@@ -41,3 +41,23 @@ it("exports useEventFlush hook", () => {
   const source = eventFlush();
   expect(source).toContain("export function useEventFlush");
 });
+
+it("uses bounded memory mirror synchronously during pagehide without deleting events", () => {
+  const source = eventFlush();
+  expect(source).toContain("PAGEHIDE_MIRROR_LIMIT");
+  expect(source).toContain("pagehideEventsRef");
+  const pagehide = source.match(/const handlePageHide = \(\) => \{[\s\S]*?\n    \};/);
+  expect(pagehide).not.toBeNull();
+  expect(pagehide?.[0]).not.toContain("getQueuedEvents");
+  expect(pagehide?.[0]).not.toContain("removeEvents");
+  expect(pagehide?.[0]).toContain("sendBeacon");
+  expect(source).toContain("new Map(pagehideEventsRef.current.map");
+});
+
+it("prestages event in memory before awaiting IndexedDB", () => {
+  const source = eventFlush();
+  const recordEvent = source.match(/async \(event: PlaybackEvent\) => \{[\s\S]*?\n    \},/);
+  expect(recordEvent).not.toBeNull();
+  const body = recordEvent?.[0] ?? "";
+  expect(body.indexOf("mirrorEvents")).toBeLessThan(body.indexOf("await enqueueEvent"));
+});

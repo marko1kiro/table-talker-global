@@ -58,14 +58,10 @@ it("makes the crew route use the shared component and pass logical audio IDs", (
   expect(crew).toContain("<Square");
 });
 
-it("makes Super Admin use immediate shared-grid selection without audio dropdown or Play button", () => {
+it("disables stale Super Admin remote controls until tenant manifest catalog exists", () => {
   const admin = readFileSync(new URL("../src/routes/super-admin.tsx", import.meta.url), "utf8");
   expect(admin).toContain('import { SoundboardGrid } from "@/components/SoundboardGrid"');
   expect(admin).toContain("<SoundboardGrid");
-  expect(admin).toContain("remoteCommandRequest(selectedTarget, audioId)");
-  expect(admin).toContain("mutation.mutate(request)");
-  expect(admin).toContain("onSelect={(audioId) =>");
-  expect(admin).toContain("Pilih crew siap audio terlebih dahulu.");
-  expect(admin).not.toContain("Pilih audio");
-  expect(admin).not.toContain("Play audio");
+  expect(admin).toContain("const controlsDisabled = true");
+  expect(admin).toContain("katalog manifest per resto");
 });

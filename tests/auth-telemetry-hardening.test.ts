@@ -60,6 +60,15 @@ it("only writes bounded allowlisted operational errors with valid tenant session
   expect(errors).toContain('rpc("check_operational_error_rate_limit"');
 });
 
+it("accepts stable sync report codes without accepting arbitrary report codes", () => {
+  const errors = source("../src/lib/operational-errors.server.ts");
+  expect(errors).toContain("SYNC_MANIFEST");
+  expect(errors).toContain("SYNC_OFFLINE");
+  expect(errors).toContain("SYNC_CACHE");
+  expect(errors).toContain("SYNC_DOWNLOAD");
+  expect(errors).toContain("OPERATIONS_REPORT_CODES.has(data.error.reportCode)");
+});
+
 it("limits session-storage tenant token lifetime and documents XSS exposure", () => {
   const tenant = source("../src/lib/tenant-session.server.ts");
   expect(tenant).toContain("const TOKEN_MAX_AGE_SECONDS = 60 * 60");

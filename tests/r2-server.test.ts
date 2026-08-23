@@ -41,3 +41,13 @@ it("r2Key generates path with restaurant ID and hash", () => {
   expect(source).toContain("restaurants/${restaurantId}");
   expect(source).toContain("${hash}.mp3");
 });
+
+it("verifies uploaded object size, checksum, and immutable metadata before catalog mutation", () => {
+  const source = r2Server();
+  expect(source).toContain("export async function verifyR2Upload");
+  expect(source).toContain("ContentLength");
+  expect(source).toContain("ChecksumSHA256");
+  expect(source).toContain("ContentType");
+  expect(source).toContain("CacheControl");
+  expect(source).toContain('ChecksumMode: "ENABLED"');
+});
