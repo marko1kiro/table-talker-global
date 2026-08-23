@@ -48,10 +48,12 @@ describe("remote crew command processor", () => {
       normalizedName: "crew",
       audioReady: true,
       restaurantId: "test-restaurant-id",
+      tenantToken: "signed-tenant-token",
     };
 
     expect(crewClaimArgs(registration, "Browser", "visible")).toMatchObject({
       p_visibility_state: "visible",
+      p_tenant_token: "signed-tenant-token",
     });
     expect(crewClaimArgs(registration, "Browser", "hidden")).toBeNull();
     expect(shouldActivatePresence("SUBSCRIBING")).toBe(false);

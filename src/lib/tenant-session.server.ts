@@ -19,8 +19,16 @@ function sign(payload: string) {
 export function verifyRestaurantPin(pin: string, pinHash: string | null): boolean {
   if (!pinHash || !/^[a-f0-9]{64}$/i.test(pinHash)) return false;
   const expected = Buffer.from(pinHash, "hex");
-  const candidate = createHash("sha256").update(pin).digest();
+  const candidate = Buffer.from(hashRestaurantPin(pin), "hex");
   return timingSafeEqual(candidate, expected);
+}
+
+export function hashRestaurantPin(pin: string): string {
+  return createHash("sha256").update(pin).digest("hex");
+}
+
+export function hashTenantSession(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 export function isTenantLoginRateLimited(key: string, now = Date.now()): boolean {

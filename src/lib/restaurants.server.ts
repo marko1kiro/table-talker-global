@@ -6,8 +6,10 @@ import { getServiceClient } from "./remote-audio.server";
 import {
   clearTenantLoginFailures,
   createTenantSession,
+  hashTenantSession,
   isTenantLoginRateLimited,
   recordTenantLoginFailure,
+  hashRestaurantPin,
   verifyRestaurantPin,
   verifyTenantSession,
 } from "./tenant-session.server";
@@ -62,12 +64,22 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
 
       if (sessionError) return offline();
 
+      const tenantToken = createTenantSession(restaurant.id);
+      const tenant = verifyTenantSession(tenantToken);
+      if (!tenant) return offline();
+      const { error: accessError } = await client.from("restaurant_access_tokens").insert({
+        token_hash: hashTenantSession(tenantToken),
+        restaurant_id: restaurant.id,
+        expires_at: new Date(tenant.expiresAt).toISOString(),
+      });
+      if (accessError) return offline();
+
       return {
         ok: true as const,
         restaurantId: restaurant.id,
         restaurantCode: restaurant.code,
         displayName: restaurant.display_name,
-        tenantToken: createTenantSession(restaurant.id),
+        tenantToken,
       };
     } catch {
       return offline();
@@ -94,6 +106,24 @@ export const createRestaurant = createServerFn({ method: "POST" })
       });
       if (error?.message.includes("restaurants_code_key"))
         return { error: "Kode resto sudah dipakai." };
+      return error ? offline() : { ok: true as const };
+    } catch {
+      return offline();
+    }
+   });
+
+export const setRestaurantPin = createServerFn({ method: "POST" })
+  .validator(z.object({ restaurantId: z.string().uuid(), pin: z.string().min(4).max(128) }))
+  .handler(async ({ data }) => {
+    await requireSuperAdmin();
+    const client = getServiceClient();
+    if (!client) return offline();
+
+    try {
+      const { error } = await client
+        .from("restaurants")
+        .update({ pin_hash: hashRestaurantPin(data.pin) })
+        .eq("id", data.restaurantId);
       return error ? offline() : { ok: true as const };
     } catch {
       return offline();

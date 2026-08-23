@@ -38,3 +38,14 @@ it("drops and revokes obsolete overloaded RPCs, including service role", () => {
   expect(source).toMatch(/revoke all on function public\.create_crew_message\(uuid, text, bigint\) from public, anon, authenticated, service_role/i);
   expect(source).toMatch(/revoke all on function public\.create_remote_command\(uuid, text, text\) from public, anon, authenticated, service_role/i);
 });
+
+it("requires an unexpired hashed tenant token before a crew can claim a restaurant", () => {
+  const source = migration();
+  expect(source).toMatch(/create table public\.restaurant_access_tokens/i);
+  expect(source).toMatch(/alter table public\.restaurant_access_tokens enable row level security/i);
+  expect(source).toMatch(/revoke all on public\.restaurant_access_tokens from public, anon, authenticated/i);
+  expect(source).toMatch(/create function public\.claim_crew_session\(\s*p_restaurant_id uuid,[\s\S]*?p_tenant_token text,/i);
+  expect(source).toMatch(/from public\.restaurant_access_tokens[\s\S]*?restaurant_id = p_restaurant_id[\s\S]*?expires_at > now\(\)/i);
+  expect(source).toMatch(/digest\(p_tenant_token, 'sha256'\)/i);
+  expect(source).toMatch(/revoke all on function public\.claim_crew_session\(uuid, text, text, text, boolean, text\)/i);
+});

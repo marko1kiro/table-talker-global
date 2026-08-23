@@ -9,12 +9,25 @@ drop function if exists public.create_crew_message(uuid, text, bigint);
 drop function if exists public.create_remote_command(uuid, text, text);
 drop function if exists public.claim_crew_session(uuid, text, text, text, boolean, text);
 
+create table public.restaurant_access_tokens (
+  token_hash text primary key check (token_hash ~ '^[a-f0-9]{64}$'),
+  restaurant_id uuid not null references public.restaurants (id) on delete cascade,
+  expires_at timestamptz not null
+);
+
+create index restaurant_access_tokens_expires_at_idx
+  on public.restaurant_access_tokens (expires_at);
+
+alter table public.restaurant_access_tokens enable row level security;
+revoke all on public.restaurant_access_tokens from public, anon, authenticated;
+
 create unique index crew_sessions_online_name_key
   on public.crew_sessions (restaurant_id, normalized_name)
   where connection_state in ('connecting', 'connected');
 
 create function public.claim_crew_session(
   p_restaurant_id uuid,
+  p_tenant_token text,
   p_display_name text,
   p_normalized_name text,
   p_device_description text,
@@ -30,6 +43,12 @@ declare
   result public.crew_sessions;
 begin
   if auth.uid() is null then raise exception 'UNAUTHORIZED'; end if;
+  if not exists (
+    select 1 from public.restaurant_access_tokens
+    where restaurant_id = p_restaurant_id
+      and token_hash = encode(digest(p_tenant_token, 'sha256'), 'hex')
+      and expires_at > now()
+  ) then raise exception 'INVALID_TENANT_SESSION'; end if;
   if p_display_name !~ '^[[:print:]]+$' or char_length(p_display_name) not between 1 and 40 then raise exception 'INVALID_NAME'; end if;
   if p_normalized_name <> lower(trim(regexp_replace(p_display_name, '\s+', ' ', 'g'))) then raise exception 'INVALID_NAME'; end if;
   if p_device_description = '' or char_length(p_device_description) > 200 then raise exception 'INVALID_DEVICE'; end if;
@@ -119,6 +138,7 @@ begin
 end;
 $$;
 
-grant execute on function public.claim_crew_session(uuid, text, text, text, boolean, text) to authenticated;
+revoke all on function public.claim_crew_session(uuid, text, text, text, boolean, text) from public, anon, authenticated, service_role;
+grant execute on function public.claim_crew_session(uuid, text, text, text, text, boolean, text) to authenticated;
 grant execute on function public.create_remote_command(uuid, text, text) to service_role;
 grant execute on function public.create_crew_message(uuid, text, bigint) to service_role;
