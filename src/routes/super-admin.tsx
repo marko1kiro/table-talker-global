@@ -4,6 +4,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { AuthGate } from "@/components/AuthGate";
 import { SoundboardGrid } from "@/components/SoundboardGrid";
+import { RestaurantCredentialDialog } from "@/components/RestaurantCredentialDialog";
 import type { TableStatus } from "@/components/TableButton";
 import { getAuthStatus, loginSuperAdmin } from "@/lib/auth";
 import {
@@ -321,6 +322,10 @@ function SuperAdminPage() {
 function AudioManagementSection() {
   const queryClient = useQueryClient();
   const [selectedRestaurantId, setSelectedRestaurantId] = useState("");
+  const [credentialDialog, setCredentialDialog] = useState<{
+    mode: "create" | "view" | "rotate";
+    restaurant?: { id: string; displayName: string };
+  } | null>(null);
   const restaurantsQuery = useQuery({
     queryKey: ["restaurants-list"],
     queryFn: () => listRestaurants(),
@@ -337,6 +342,7 @@ function AudioManagementSection() {
         Kelola audio manifest per resto. Upload file MP3 ke R2, atur label dan kategori.
       </p>
       <div className="mt-4">
+        <button type="button" className="brutal-border brutal-press mb-4 bg-accent px-3 py-2 font-display" onClick={() => setCredentialDialog({ mode: "create" })}>Buat Resto</button>
         <label className="text-sm font-bold">
           Pilih Resto
           <select
@@ -353,6 +359,17 @@ function AudioManagementSection() {
           </select>
         </label>
       </div>
+      <div className="mt-4 space-y-2" aria-label="Daftar resto">
+        {restaurants.map((restaurant: { id: string; display_name: string }) => (
+          <div key={restaurant.id} className="brutal-border flex flex-wrap items-center justify-between gap-2 p-2">
+            <span>{restaurant.display_name} <span className="font-mono text-xs">{restaurant.id}</span></span>
+            <span className="flex gap-2">
+              <button type="button" className="underline" onClick={() => setCredentialDialog({ mode: "view", restaurant: { id: restaurant.id, displayName: restaurant.display_name } })}>Lihat Kode</button>
+              <button type="button" className="underline" onClick={() => setCredentialDialog({ mode: "rotate", restaurant: { id: restaurant.id, displayName: restaurant.display_name } })}>Ganti Kode</button>
+            </span>
+          </div>
+        ))}
+      </div>
       {selectedRestaurantId && (
         <ManifestItemsList
           restaurantId={selectedRestaurantId}
@@ -361,6 +378,7 @@ function AudioManagementSection() {
           }
         />
       )}
+      {credentialDialog && <RestaurantCredentialDialog open mode={credentialDialog.mode} restaurant={credentialDialog.restaurant} onOpenChange={(open) => !open && setCredentialDialog(null)} onComplete={() => queryClient.invalidateQueries({ queryKey: ["restaurants-list"] })} />}
     </section>
   );
 }
