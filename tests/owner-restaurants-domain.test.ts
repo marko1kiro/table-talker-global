@@ -114,4 +114,15 @@ it("trims category before storing catalog metadata", () => {
   expect(validateCatalogItem({ ...table, category: "  BASE  " })).toMatchObject({
     category: "BASE",
   });
+  expect(
+    validateCatalogMutation({
+      ...table,
+      label: "  Meja 100  ",
+      category: "  BASE  ",
+      r2Url: "https://static.example/audio.mp3",
+      contentHash: "a".repeat(64),
+      byteSize: 1024 * 1024,
+      ordering: 0,
+    }),
+  ).toMatchObject({ ok: true, item: { label: "Meja 100", category: "BASE" } });
 });

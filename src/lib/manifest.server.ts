@@ -218,8 +218,8 @@ export const updateManifestMetadata = createServerFn({ method: "POST" })
         p_action: "upsert",
         p_audio_id: data.audioId,
         p_item: {
-          label: data.label,
-          category: data.category,
+          label: validated.item.label,
+          category: validated.item.category,
           r2_url: item.r2_url,
           content_hash: item.content_hash,
           byte_size: item.byte_size,

@@ -45,6 +45,12 @@ it("keeps query failures unavailable and missing catalog rows not found", () => 
   expect(source).toContain("if (!restaurant) return null");
 });
 
+it("uses normalized metadata for update RPC payload", () => {
+  const source = manifest();
+  expect(source).toContain("label: validated.item.label");
+  expect(source).toContain("category: validated.item.category");
+});
+
 it("exports listManifestItems for admin view", () => {
   const source = manifest();
   expect(source).toContain("listManifestItems");

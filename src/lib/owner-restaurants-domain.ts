@@ -32,7 +32,7 @@ export function validateCatalogMutation(
     input.ordering < 0
   )
     return { ok: false, code: "INVALID_METADATA" };
-  return { ok: true, item: { ...input, label: item.label } };
+  return { ok: true, item: { ...input, label: item.label, category: item.category } };
 }
 
 export function validateCatalogItem(
