@@ -179,14 +179,29 @@ credential fields.
 3. `npx supabase link --project-ref YOUR_PROJECT_REF`
 4. Run `npx supabase db push --include-all`. Expected: additive and provisioning migrations apply, then cleanup stops with `UNPROVISIONED_RESTAURANT_CREDENTIALS`. Confirm migrations `20260823110000_restaurant_code_credentials_additive.sql` and `20260823111500_provision_restaurant_credentials.sql` exist remotely; do not bypass guard.
 5. Configure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `RESTAURANT_CODE_ENCRYPTION_KEY` only in protected runtime environment.
-6. Reprovision each row using exact UUID only. Put one code in a protected file readable only by deployment user. Do not pass a code by argv or environment. The command rotates code version and immediately revokes existing restaurant and crew sessions:
+6. Reprovision each row using exact UUID only. Do not pass a code by argv or environment. Preferred Windows flow keeps code out of argv, environment, and files. The command rotates code version and immediately revokes existing restaurant and crew sessions:
 
-   ```bash
-   chmod 600 /secure/path/restaurant-code
-   RESTAURANT_CODE_FILE=/secure/path/restaurant-code node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID
-   ```
+    ```powershell
+    $code = Read-Host -AsSecureString
+    [System.Net.NetworkCredential]::new('', $code).Password | node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID --code-stdin
+    ```
 
-   `RESTAURANT_CODE_FILE` is only a file path, never credential content. Script rejects group/world-readable files and never prints code, hash, or ciphertext.
+    `--code-stdin` only accepts a pipeline; interactive TTY stdin is rejected. It removes one pipeline terminal newline and never prints credential material.
+
+    Unix file input remains available for protected automation:
+
+    ```bash
+    chmod 600 /secure/path/restaurant-code
+    RESTAURANT_CODE_FILE=/secure/path/restaurant-code node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID
+    ```
+
+    On Windows, `RESTAURANT_CODE_FILE` or `--code-file` must resolve below current user temp/home directories. Script runs `icacls /getowner` and requires current `USERNAME` ownership; it rejects broad `Everyone`, `BUILTIN\Users`, `Authenticated Users`, and `Users` read/write access, and fails closed when ACL inspection fails. Verify a temporary code file before provisioning with:
+
+    ```powershell
+    icacls "$env:TEMP\restaurant-code"
+    ```
+
+    `RESTAURANT_CODE_FILE` is only a file path, never credential content. Script rejects insecure files and never prints code, hash, or ciphertext.
 
 7. Reprovision approved pilot after deploying this compatibility release. Existing pilot lookup/encryption use legacy HKDF purposes, so login remains compatible until reprovision; new derived purposes become authoritative after rotation. Do not add credential value to files, shell history, SQL, fixtures, logs, or CI.
 8. Enable feature flag after monitoring provisioning audit records. Apply cleanup only then: `npx supabase db push --include-all`. Migration `20260823120000_remove_legacy_restaurant_code.sql` aborts if any restaurant lacks derived credentials.

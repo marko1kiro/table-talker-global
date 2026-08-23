@@ -1,5 +1,8 @@
 import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { isAbsolute, relative } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
 function option(name) {
@@ -59,13 +62,64 @@ function decryptRestaurantCode(value, restaurantId, key) {
   ]).toString("utf8");
 }
 
+function isInside(path, directory) {
+  const pathRelative = relative(directory, path);
+  return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
+}
+
+function readCodeFile(codeFile) {
+  const file = realpathSync(codeFile);
+  if (process.platform === "win32") {
+    const approvedDirectories = [realpathSync(tmpdir()), realpathSync(homedir())];
+    if (!approvedDirectories.some((directory) => isInside(file, directory)))
+      throw new Error("INSECURE_CODE_FILE");
+    let owner;
+    let acl;
+    try {
+      owner = execFileSync("icacls", [file, "/getowner"], {
+        encoding: "utf8",
+        windowsHide: true,
+      });
+      acl = execFileSync("icacls", [file], { encoding: "utf8", windowsHide: true });
+    } catch {
+      throw new Error("INSECURE_CODE_FILE");
+    }
+    const username = process.env.USERNAME;
+    if (
+      !username ||
+      !owner
+        .toLowerCase()
+        .split(/\r?\n/)
+        .some((line) => line.trim().startsWith("owner ") && line.trim().endsWith(`\\${username.toLowerCase()}`))
+    )
+      throw new Error("INSECURE_CODE_FILE");
+    if (/^(?:.*\s)?(?:Everyone|BUILTIN\\Users|Authenticated Users|Users):(?:\([^)]*\))*\((?:F|M|RX|R|W)\)/im.test(acl))
+      throw new Error("INSECURE_CODE_FILE");
+  } else if (statSync(file).mode & 0o077) {
+    throw new Error("INSECURE_CODE_FILE");
+  }
+  return readFileSync(file, "utf8").replace(/\r?\n$/, "");
+}
+
+async function readCodeStdin() {
+  if (process.stdin.isTTY) throw new Error("INVALID_INPUT");
+  let input = "";
+  process.stdin.setEncoding("utf8");
+  for await (const chunk of process.stdin) input += chunk;
+  return input.replace(/\r?\n$/, "");
+}
+
 async function main() {
   const restaurantId = option("--restaurant-id");
   const codeFile = option("--code-file") ?? process.env.RESTAURANT_CODE_FILE;
-  if (!restaurantId || !/^[0-9a-f-]{36}$/i.test(restaurantId) || !codeFile)
+  const codeStdin = process.argv.includes("--code-stdin");
+  if (
+    !restaurantId ||
+    !/^[0-9a-f-]{36}$/i.test(restaurantId) ||
+    codeStdin === Boolean(codeFile)
+  )
     throw new Error("INVALID_INPUT");
-  if (statSync(codeFile).mode & 0o077) throw new Error("INSECURE_CODE_FILE");
-  const code = readFileSync(codeFile, "utf8").trim();
+  const code = codeStdin ? await readCodeStdin() : readCodeFile(codeFile);
   if (!/^[A-Z0-9]{6,32}$/.test(code)) throw new Error("INVALID_INPUT");
 
   const key = parseKey(process.env.RESTAURANT_CODE_ENCRYPTION_KEY ?? "");
