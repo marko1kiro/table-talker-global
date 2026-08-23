@@ -168,6 +168,41 @@ it("rate limits restaurant-code failures by server-derived IP even when client k
   expect(restaurants).not.toMatch(/validator\(z\.object\([^)]*ip:/s);
 });
 
+it("checks global IP and client login buckets before restaurant lookup", () => {
+  const migration = source("../supabase/migrations/20260823133000_global_login_rate_limit.sql");
+  expect(migration).toMatch(/create table public\.tenant_global_login_rate_limits/i);
+  expect(migration).toMatch(/primary key \(bucket_hash\)/i);
+  expect(migration).toMatch(
+    /create function public\.check_global_tenant_login_rate_limit\(p_bucket_hash text\)/i,
+  );
+  expect(migration).toMatch(/record_global_tenant_login_failure\(text\)/i);
+  expect(migration).toMatch(/clear_global_tenant_login_failures\(text\)/i);
+
+  const restaurants = source("../src/lib/restaurants.server.ts");
+  const check = restaurants.indexOf('rpc("check_global_tenant_login_rate_limit"');
+  const record = restaurants.indexOf('rpc("record_global_tenant_login_failure"');
+  const lookup = restaurants.indexOf('.eq("code_hash", codeHash)');
+  expect(check).toBeGreaterThan(-1);
+  expect(check).toBeLessThan(lookup);
+  expect(record).toBeGreaterThan(-1);
+  expect(record).toBeLessThan(lookup);
+  expect(restaurants).toContain('rpc("clear_global_tenant_login_failures"');
+});
+
+it("validates tenant-bound crew access server-side before local playback", () => {
+  const access = source("../src/lib/playback-access.server.ts");
+  expect(access).toContain("validateCrewAccess");
+  expect(access).toContain("verifyActiveTenantSession");
+  expect(access).toContain("verifyCrewSessionToken");
+  expect(access).toContain("crewSessionId !== data.crewSessionId");
+
+  const page = source("../src/routes/index.tsx");
+  expect(page).toContain("validateCrewAccess");
+  expect(page).toContain("await validateCrewAccess({");
+  expect(page).toContain("invalidateCrewSession();");
+  expect(page).toContain("Audio diblokir karena sesi resto tidak valid.");
+});
+
 it("gets localStorage client key outside dialog render", () => {
   const dialog = source("../src/components/CrewIdentityDialog.tsx");
   expect(dialog).toContain("function getClientKey()");

@@ -50,6 +50,17 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
         data.clientKey,
         hashOpaqueRestaurantToken,
       );
+      const [globalClientLimit, globalIpLimit] = await Promise.all([
+        client.rpc("check_global_tenant_login_rate_limit", { p_bucket_hash: clientKeyHash }),
+        client.rpc("check_global_tenant_login_rate_limit", { p_bucket_hash: ipKeyHash }),
+      ]);
+      if (
+        globalClientLimit.error ||
+        globalIpLimit.error ||
+        globalClientLimit.data ||
+        globalIpLimit.data
+      )
+        return { error: CODE_ERROR };
       const [clientLimit, ipLimit] = await Promise.all([
         client.rpc("check_tenant_login_rate_limit", {
           p_lookup_hash: codeHash,
@@ -62,6 +73,10 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
       ]);
       if (clientLimit.error || ipLimit.error || clientLimit.data || ipLimit.data)
         return { error: CODE_ERROR };
+      await Promise.all([
+        client.rpc("record_global_tenant_login_failure", { p_bucket_hash: clientKeyHash }),
+        client.rpc("record_global_tenant_login_failure", { p_bucket_hash: ipKeyHash }),
+      ]);
       const { data: restaurant, error: lookupError } = await client
         .from("restaurants")
         .select("id, code_version, display_name, is_active")
@@ -81,6 +96,8 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
         return { error: CODE_ERROR };
       }
       await Promise.all([
+        client.rpc("clear_global_tenant_login_failures", { p_bucket_hash: clientKeyHash }),
+        client.rpc("clear_global_tenant_login_failures", { p_bucket_hash: ipKeyHash }),
         client.rpc("clear_tenant_login_failures", {
           p_lookup_hash: codeHash,
           p_bucket_hash: clientKeyHash,

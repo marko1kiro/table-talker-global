@@ -36,6 +36,7 @@ import {
   type PlaybackEvent,
 } from "@/lib/event-queue";
 import { ingestPlaybackEvents } from "@/lib/playback-events.server";
+import { validateCrewAccess } from "@/lib/playback-access.server";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -79,6 +80,7 @@ function SoundboardPage() {
   const [duplicateName, setDuplicateName] = useState(false);
   const [audioSynced, setAudioSynced] = useState(false);
   const [availableAudioIds, setAvailableAudioIds] = useState<ReadonlySet<AudioId>>(new Set());
+  const [accessError, setAccessError] = useState("");
   const objectUrlRef = useRef<string | null>(null);
   const crewIdentityRef = useRef<CrewIdentity | null>(null);
   crewIdentityRef.current = crewIdentity;
@@ -158,8 +160,45 @@ function SoundboardPage() {
     return unlockBundledAudio(audio, getUnlockAudioUrl());
   }, [getAudioController]);
 
+  const invalidateCrewSession = useCallback(() => {
+    playbackGenerationRef.current.next();
+    audioControllerRef.current?.stop();
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = null;
+    activeAudioIdRef.current = null;
+    removeCrewSessionIdentity(browserSessionStorage());
+    void clearQueuedEvents();
+    setCrewIdentity(null);
+    setAudioSynced(false);
+    setAvailableAudioIds(new Set());
+    setPlaying(null);
+    setPaused(null);
+    setLoading(null);
+    setAccessError("Audio diblokir karena sesi resto tidak valid.");
+  }, []);
+
+  const assertCrewAccess = useCallback(async () => {
+    const identity = crewIdentityRef.current;
+    if (!identity) {
+      invalidateCrewSession();
+      throw new Error("Audio diblokir karena sesi resto tidak valid.");
+    }
+    const result = await validateCrewAccess({
+      data: {
+        tenantToken: identity.tenantToken,
+        crewSessionToken: identity.crewSessionToken,
+        crewSessionId: identity.crewSessionId,
+      },
+    });
+    if (!result.ok) {
+      invalidateCrewSession();
+      throw new Error("Audio diblokir karena sesi resto tidak valid.");
+    }
+  }, [invalidateCrewSession]);
+
   const playRemoteAudio = useCallback(
     async (audioId: AudioId) => {
+      await assertCrewAccess();
       if (!audioSynced) throw new Error("Audio belum selesai disinkronkan.");
       const restaurantId = crewIdentityRef.current?.restaurantId;
       const url = restaurantId ? await getCachedAudioUrl(restaurantId, audioId) : null;
@@ -185,20 +224,8 @@ function SoundboardPage() {
         throw error;
       }
     },
-    [audioSynced, getAudioController, stop],
+    [assertCrewAccess, audioSynced, getAudioController, stop],
   );
-
-  const invalidateCrewSession = useCallback(() => {
-    audioControllerRef.current?.stop();
-    removeCrewSessionIdentity(browserSessionStorage());
-    void clearQueuedEvents();
-    setCrewIdentity(null);
-    setAudioSynced(false);
-    setAvailableAudioIds(new Set());
-    setPlaying(null);
-    setPaused(null);
-    setLoading(null);
-  }, []);
 
   const remoteCrew = useRemoteCrew({
     registration: identityHydrated ? crewIdentity : null,
@@ -217,6 +244,11 @@ function SoundboardPage() {
   const play = useCallback(
     async (id: number | AudioId) => {
       if (!audioSynced) return;
+      try {
+        await assertCrewAccess();
+      } catch {
+        return;
+      }
       // Kunci sinkron mencegah dua klik cepat memulai audio secara bersamaan.
       if (activeAudioIdRef.current !== null) return;
 
@@ -312,7 +344,7 @@ function SoundboardPage() {
         });
       }
     },
-    [audioSynced, getAudioController, paused],
+    [assertCrewAccess, audioSynced, getAudioController, paused],
   );
 
   const toggleAnnouncement = useCallback(
@@ -351,6 +383,14 @@ function SoundboardPage() {
             setCrewIdentity({ ...(saved ?? identity), audioReady: identity.audioReady });
           }}
         />
+      )}
+      {accessError && (
+        <p
+          role="alert"
+          className="mx-auto max-w-6xl px-3 pt-3 text-center text-sm text-destructive"
+        >
+          {accessError}
+        </p>
       )}
       {crewIdentity?.restaurantId && !audioSynced && (
         <SyncDialog

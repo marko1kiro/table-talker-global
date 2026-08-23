@@ -25,8 +25,10 @@ it("blocks soundboard until sync and clears tenant state when version-bound acce
   expect(page).toContain("!audioSynced");
   expect(page).toContain("removeCrewSessionIdentity(browserSessionStorage())");
   expect(page).toContain("audioControllerRef.current?.stop()");
+  expect(page).toContain("URL.revokeObjectURL(objectUrlRef.current)");
   expect(page).toContain("setAudioSynced(false)");
   expect(page).toContain("setAvailableAudioIds(new Set())");
+  expect(page).toContain("clearQueuedEvents()");
   const hook = source("src/hooks/use-remote-crew.ts");
   expect(hook).toContain("onSessionInvalid");
   expect(hook).toContain("client.removeChannel");
