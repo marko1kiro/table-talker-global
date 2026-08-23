@@ -14,6 +14,7 @@ const R2_SECRET_ACCESS_KEY = process.env.CF_R2_SECRET_ACCESS_KEY ?? "";
 const R2_BUCKET = process.env.CF_R2_BUCKET ?? "table-talker-static";
 const R2_PUBLIC_BASE = process.env.CF_R2_PUBLIC_URL ?? "https://static.xdirga.xyz";
 export const R2_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+export const R2_UPLOAD_MIN_BYTES = 1024 * 1024;
 const R2_UPLOAD_CONTENT_TYPE = "audio/mpeg";
 const R2_UPLOAD_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const R2_HEALTHCHECK_KEY = "healthcheck";
@@ -76,7 +77,7 @@ export function validateR2UploadRequest(input: R2UploadRequest): R2UploadRequest
   if (input.contentType !== R2_UPLOAD_CONTENT_TYPE) throw new Error("File harus MP3.");
   if (
     !Number.isInteger(input.byteSize) ||
-    input.byteSize < 1 ||
+    input.byteSize < R2_UPLOAD_MIN_BYTES ||
     input.byteSize > R2_UPLOAD_MAX_BYTES
   )
     throw new Error("Ukuran file harus 1-10 MB.");

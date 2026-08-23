@@ -21,3 +21,18 @@ it("guards catalog IDs after pilot validation", () => {
   expect(sql).toContain("custom:[a-z0-9][a-z0-9_-]{0,99}");
   expect(sql).toContain("add constraint audio_manifests_audio_id_check");
 });
+
+it("bounds detail sources and uses explicit safe fields", () => {
+  expect(sql).toContain("limit 200");
+  expect(sql).toContain("'sync_history'");
+  expect(sql).not.toContain("select * from crew_sessions");
+  expect(sql).not.toContain("to_jsonb(p)");
+  expect(sql).not.toContain("to_jsonb(e)");
+});
+
+it("validates mutations before catalog version changes", () => {
+  expect(sql).toContain("invalid catalog metadata");
+  expect(sql).toContain("invalid catalog ordering");
+  expect(sql).toContain("invalid catalog item");
+  expect(sql.indexOf("invalid catalog metadata")).toBeLessThan(sql.indexOf("v_next_version :="));
+});

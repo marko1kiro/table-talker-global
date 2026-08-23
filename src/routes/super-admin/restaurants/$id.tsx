@@ -4,6 +4,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { RestaurantCredentialDialog } from "@/components/RestaurantCredentialDialog";
 import { getOwnerRestaurantDetail } from "@/lib/owner-restaurants.server";
 import { deactivateRestaurant } from "@/lib/admin-restaurants.server";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/super-admin/restaurants/$id")({
   component: RestaurantDetail,
@@ -38,9 +47,19 @@ function RestaurantDetail() {
       connection_state: string;
       last_seen: string;
     }>;
-    catalog: { total: number };
+    catalog: {
+      total: number;
+      items: Array<{
+        audio_id: string;
+        label: string;
+        category: string;
+        active: boolean;
+        ordering: number;
+      }>;
+    };
     recent_playback: Array<{ audio_id: string; status: string; event_timestamp: string }>;
     recent_errors: Array<{ report_code: string; occurred_at: string }>;
+    sync_history: Array<{ report_code: string; occurred_at: string }>;
   };
   const restaurant = { id: data.restaurant.id, displayName: data.restaurant.display_name };
   const deactivate = async () => {
@@ -71,26 +90,37 @@ function RestaurantDetail() {
         </Link>
       </div>
       {data.restaurant.is_active && (
-        <section className="brutal-border mt-4 p-3">
-          <h2 className="font-display uppercase">Nonaktifkan Resto</h2>
-          <input
-            aria-label="Ketik ulang Nama Resto"
-            value={displayNameConfirmation}
-            onChange={(event) => setDisplayNameConfirmation(event.target.value)}
-            placeholder="Ketik ulang Nama Resto"
-          />
-          <input
-            aria-label="Password Super Admin"
-            type="password"
-            value={superAdminPassword}
-            onChange={(event) => setSuperAdminPassword(event.target.value)}
-            placeholder="Password Super Admin"
-          />
-          <button type="button" onClick={() => void deactivate()}>
-            Nonaktifkan
-          </button>
-          {deactivateError && <p role="alert">{deactivateError}</p>}
-        </section>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button type="button">Nonaktifkan Resto</button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogTitle>Nonaktifkan Resto</AlertDialogTitle>
+            <AlertDialogDescription>Tindakan ini mencabut akses resto.</AlertDialogDescription>
+            <h2 className="font-display uppercase">Nonaktifkan Resto</h2>
+            <input
+              aria-label="Ketik ulang Nama Resto"
+              value={displayNameConfirmation}
+              onChange={(event) => setDisplayNameConfirmation(event.target.value)}
+              placeholder="Ketik ulang Nama Resto"
+            />
+            <input
+              aria-label="Password Super Admin"
+              type="password"
+              value={superAdminPassword}
+              onChange={(event) => setSuperAdminPassword(event.target.value)}
+              placeholder="Password Super Admin"
+            />
+            <AlertDialogAction
+              disabled={displayNameConfirmation !== restaurant.displayName}
+              onClick={() => void deactivate()}
+            >
+              Nonaktifkan
+            </AlertDialogAction>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            {deactivateError && <p role="alert">{deactivateError}</p>}
+          </AlertDialogContent>
+        </AlertDialog>
       )}
       <Section title="Perangkat">
         <List
@@ -102,6 +132,19 @@ function RestaurantDetail() {
       </Section>
       <Section title="Katalog">
         <p>{data.catalog.total} item</p>
+        <List
+          values={data.catalog.items.map(
+            (item) =>
+              `${item.audio_id} · ${item.label} · ${item.category} · ${item.active ? "aktif" : "nonaktif"} · ${item.ordering}`,
+          )}
+          empty="Belum ada mapping."
+        />
+      </Section>
+      <Section title="Riwayat Sinkron">
+        <List
+          values={data.sync_history.map((item) => `${item.report_code} · ${item.occurred_at}`)}
+          empty="Belum ada riwayat sinkron."
+        />
       </Section>
       <Section title="Pemutaran terbaru">
         <List

@@ -10,6 +10,9 @@ it("links restaurant list to dedicated details and reuses credential dialog", ()
   expect(detail).toContain("RestaurantCredentialDialog");
   expect(detail).toContain("deactivateRestaurant");
   expect(detail).toContain("displayNameConfirmation");
+  expect(detail).toContain("AlertDialog");
+  expect(detail).toContain("disabled={displayNameConfirmation !== restaurant.displayName}");
+  expect(detail).toContain("sync_history");
 });
 
 it("audio route hashes MP3 browser uploads and uses owner catalog actions", () => {
@@ -22,4 +25,6 @@ it("audio route hashes MP3 browser uploads and uses owner catalog actions", () =
   expect(audio).toContain("deleteManifestItem");
   expect(audio).toContain("reorderManifestItem");
   expect(audio).not.toContain('type="url"');
+  expect(audio).toContain("AlertDialog");
+  expect(audio).toContain('queryKey: ["owner-dashboard"]');
 });

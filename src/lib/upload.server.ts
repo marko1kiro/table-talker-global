@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
-import { createPresignedR2Upload, R2_UPLOAD_MAX_BYTES } from "./r2.server";
+import { createPresignedR2Upload, R2_UPLOAD_MAX_BYTES, R2_UPLOAD_MIN_BYTES } from "./r2.server";
 import { getServiceClient } from "./remote-audio.server";
 import { isOwnerCatalogAudioId } from "./owner-restaurants-domain";
 
@@ -15,7 +15,7 @@ export const requestR2Upload = createServerFn({ method: "POST" })
       restaurantId: z.string().uuid(),
       audioId: z.string().max(120),
       contentType: z.literal("audio/mpeg"),
-      byteSize: z.number().int().min(1).max(R2_UPLOAD_MAX_BYTES),
+      byteSize: z.number().int().min(R2_UPLOAD_MIN_BYTES).max(R2_UPLOAD_MAX_BYTES),
       contentHash: z.string().regex(/^[0-9a-f]{64}$/),
     }),
   )

@@ -17,5 +17,7 @@ it("uses UUID validation and stable owner result codes", () => {
   const file = source();
   expect(file).toContain("z.string().uuid()");
   expect(file).toContain('code: "UNAVAILABLE"');
+  expect(file).toContain('code: "NOT_FOUND"');
+  expect(file).toContain("if (error) return unavailable()");
   expect(file).not.toContain("error.message.includes");
 });

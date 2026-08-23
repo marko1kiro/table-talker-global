@@ -10,6 +10,14 @@ import {
   upsertManifestItem,
 } from "@/lib/manifest.server";
 import { requestR2Upload } from "@/lib/upload.server";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/super-admin/audio")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -33,7 +41,12 @@ function Audio() {
     queryFn: () => listManifestItems({ data: { restaurantId } }),
     enabled: !!restaurantId,
   });
-  const refresh = () => void qc.invalidateQueries({ queryKey: ["manifest", restaurantId] });
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ["manifest", restaurantId] });
+    void qc.invalidateQueries({ queryKey: ["owner-restaurants"] });
+    void qc.invalidateQueries({ queryKey: ["owner-restaurant", restaurantId] });
+    void qc.invalidateQueries({ queryKey: ["owner-dashboard"] });
+  };
   const upload = async () => {
     if (
       !file ||
@@ -75,6 +88,7 @@ function Audio() {
           r2Url: signed.url,
           contentHash: hash,
           byteSize: file.size,
+          ordering: 0,
         },
       });
       if (!("ok" in saved) || !saved.ok) throw new Error("Katalog tidak tersimpan.");
@@ -138,16 +152,24 @@ function Audio() {
                     >
                       {item.active ? "Nonaktifkan" : "Aktifkan"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void deleteManifestItem({
-                          data: { restaurantId, audioId: item.audio_id },
-                        }).then(refresh)
-                      }
-                    >
-                      Hapus
-                    </button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button type="button">Hapus</button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogTitle>Hapus audio?</AlertDialogTitle>
+                        <AlertDialogAction
+                          onClick={() =>
+                            void deleteManifestItem({
+                              data: { restaurantId, audioId: item.audio_id },
+                            }).then(refresh)
+                          }
+                        >
+                          Hapus
+                        </AlertDialogAction>
+                        <AlertDialogCancel>Batal</AlertDialogCancel>
+                      </AlertDialogContent>
+                    </AlertDialog>
                     <button
                       type="button"
                       onClick={() =>
@@ -161,6 +183,20 @@ function Audio() {
                       }
                     >
                       Naik
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void reorderManifestItem({
+                          data: {
+                            restaurantId,
+                            audioId: item.audio_id,
+                            ordering: item.ordering + 1,
+                          },
+                        }).then(refresh)
+                      }
+                    >
+                      Turun
                     </button>
                   </li>
                 ),

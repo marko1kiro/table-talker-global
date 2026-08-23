@@ -32,7 +32,8 @@ export const getOwnerRestaurantDetail = createServerFn({ method: "GET" })
       const { data: detail, error } = await client.rpc("owner_restaurant_detail", {
         p_restaurant_id: data.restaurantId,
       });
-      return error || !detail
+      if (error) return unavailable();
+      return !detail
         ? { ok: false as const, code: "NOT_FOUND" as const }
         : { ok: true as const, detail };
     } catch {

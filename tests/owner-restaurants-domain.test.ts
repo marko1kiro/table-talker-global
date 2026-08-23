@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { validateCatalogItem } from "../src/lib/owner-restaurants-domain";
+import { validateCatalogItem, validateCatalogMutation } from "../src/lib/owner-restaurants-domain";
 
 const table = { audioId: "table:100", label: "Meja 100", category: "BASE" };
 
@@ -35,6 +35,20 @@ it("accepts only current announcement IDs", () => {
   });
 });
 
+it("accepts every current announcement ID", () => {
+  for (const id of [
+    "seating",
+    "himbauan-barang-bawaan-pelanggan",
+    "jam-buka-resto",
+    "outside-food",
+    "no-smoking",
+    "larangan-gabung-meja",
+  ])
+    expect(
+      validateCatalogItem({ ...table, audioId: `announcement:${id}`, category: "INFO" }),
+    ).toMatchObject({ audioId: `announcement:${id}` });
+});
+
 it("accepts lower-case custom IDs with underscores and hyphens", () => {
   expect(
     validateCatalogItem({ ...table, audioId: "custom:promo_malam-1", category: "CUSTOM" }),
@@ -46,4 +60,52 @@ it("accepts lower-case custom IDs with underscores and hyphens", () => {
   expect(validateCatalogItem({ ...table, audioId: "custom:Promo", category: "CUSTOM" })).toEqual({
     code: "INVALID_AUDIO_ID",
   });
+});
+
+it("rejects invalid mutation metadata, size, hashes, and ordering", () => {
+  expect(
+    validateCatalogMutation({
+      ...table,
+      r2Url: "https://static.example/audio.mp3",
+      contentHash: "a".repeat(64),
+      byteSize: 1024 * 1024,
+      ordering: 0,
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    validateCatalogMutation({
+      ...table,
+      r2Url: "bad",
+      contentHash: "a".repeat(64),
+      byteSize: 1024 * 1024,
+      ordering: 0,
+    }),
+  ).toMatchObject({ code: "INVALID_METADATA" });
+  expect(
+    validateCatalogMutation({
+      ...table,
+      r2Url: "https://static.example/audio.mp3",
+      contentHash: "a".repeat(63),
+      byteSize: 1024 * 1024,
+      ordering: 0,
+    }),
+  ).toMatchObject({ code: "INVALID_METADATA" });
+  expect(
+    validateCatalogMutation({
+      ...table,
+      r2Url: "https://static.example/audio.mp3",
+      contentHash: "a".repeat(64),
+      byteSize: 1024 * 1024 - 1,
+      ordering: 0,
+    }),
+  ).toMatchObject({ code: "INVALID_METADATA" });
+  expect(
+    validateCatalogMutation({
+      ...table,
+      r2Url: "https://static.example/audio.mp3",
+      contentHash: "a".repeat(64),
+      byteSize: 1024 * 1024,
+      ordering: -1,
+    }),
+  ).toMatchObject({ code: "INVALID_METADATA" });
 });

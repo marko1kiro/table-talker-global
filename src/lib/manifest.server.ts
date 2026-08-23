@@ -3,10 +3,16 @@ import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
 import { deleteFromR2, r2Key, r2PublicUrl, verifyR2Upload } from "./r2.server";
-import { validateCatalogItem } from "./owner-restaurants-domain";
+import { isOwnerCatalogAudioId, validateCatalogMutation } from "./owner-restaurants-domain";
 
 function offline() {
-  return { offline: true as const, message: "Realtime offline" };
+  return { ok: false as const, code: "UNAVAILABLE" as const, message: "Realtime offline" };
+}
+function invalid(
+  code: "INVALID_AUDIO_ID" | "INVALID_METADATA" | "UNAVAILABLE" | "NOT_FOUND",
+  message: string,
+) {
+  return { ok: false as const, code, message };
 }
 
 export const upsertManifestItem = createServerFn({ method: "POST" })
@@ -26,8 +32,9 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
     await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
-    const item = validateCatalogItem(data);
-    if ("code" in item) return { code: item.code };
+    const validated = validateCatalogMutation(data);
+    if (!validated.ok) return invalid(validated.code, "Metadata audio tidak valid.");
+    const item = validated.item;
 
     const key = r2Key(data.restaurantId, item.audioId, data.contentHash);
     let verified = false;
@@ -50,7 +57,11 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
       });
       if (error) {
         await deleteFromR2(key);
-        return { error: "Gagal menyimpan manifest." };
+        return {
+          ok: false as const,
+          code: "UNAVAILABLE" as const,
+          message: "Gagal menyimpan manifest.",
+        };
       }
       return { ok: true as const, version };
     } catch {
@@ -71,6 +82,8 @@ export const toggleManifestItem = createServerFn({ method: "POST" })
     await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
+    if (!isOwnerCatalogAudioId(data.audioId))
+      return invalid("INVALID_AUDIO_ID", "Audio tidak valid.");
 
     try {
       const { data: version, error } = await client.rpc("mutate_catalog", {
@@ -80,7 +93,12 @@ export const toggleManifestItem = createServerFn({ method: "POST" })
         p_item: { active: data.active },
       });
 
-      if (error) return { error: "Gagal mengubah status." };
+      if (error)
+        return {
+          ok: false as const,
+          code: "NOT_FOUND" as const,
+          message: "Audio tidak ditemukan.",
+        };
       return { ok: true as const, version };
     } catch {
       return offline();
@@ -93,6 +111,8 @@ export const deleteManifestItem = createServerFn({ method: "POST" })
     await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
+    if (!isOwnerCatalogAudioId(data.audioId))
+      return invalid("INVALID_AUDIO_ID", "Audio tidak valid.");
 
     try {
       const { data: version, error } = await client.rpc("mutate_catalog", {
@@ -101,7 +121,12 @@ export const deleteManifestItem = createServerFn({ method: "POST" })
         p_audio_id: data.audioId,
       });
 
-      if (error) return { error: "Gagal menghapus item." };
+      if (error)
+        return {
+          ok: false as const,
+          code: "NOT_FOUND" as const,
+          message: "Audio tidak ditemukan.",
+        };
       return { ok: true as const, version };
     } catch {
       return offline();
@@ -113,13 +138,15 @@ export const reorderManifestItem = createServerFn({ method: "POST" })
     z.object({
       restaurantId: z.string().uuid(),
       audioId: z.string().max(120),
-      ordering: z.number().int(),
+      ordering: z.number().int().min(0).max(10_000),
     }),
   )
   .handler(async ({ data }) => {
     await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return offline();
+    if (!isOwnerCatalogAudioId(data.audioId))
+      return invalid("INVALID_AUDIO_ID", "Audio tidak valid.");
     try {
       const { data: version, error } = await client.rpc("mutate_catalog", {
         p_restaurant_id: data.restaurantId,
@@ -127,7 +154,9 @@ export const reorderManifestItem = createServerFn({ method: "POST" })
         p_audio_id: data.audioId,
         p_item: { ordering: data.ordering },
       });
-      return error ? { error: "Gagal mengubah urutan." } : { ok: true as const, version };
+      return error
+        ? { ok: false as const, code: "NOT_FOUND" as const, message: "Audio tidak ditemukan." }
+        : { ok: true as const, version };
     } catch {
       return offline();
     }

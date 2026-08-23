@@ -26,6 +26,7 @@ function Restaurants() {
     online_devices: number;
     catalog_version: number;
     plays_today: number;
+    latest_sync_failure: { report_code: string; occurred_at: string } | null;
   }>;
   return (
     <section className="brutal-border bg-card p-6">
@@ -44,6 +45,12 @@ function Restaurants() {
                 {row.is_active ? "Aktif" : "Nonaktif"} · {row.online_devices} online · katalog v
                 {row.catalog_version} · {row.plays_today} putar hari ini
               </p>
+              {row.latest_sync_failure && (
+                <p role="alert">
+                  Sinkron gagal: {row.latest_sync_failure.report_code} ·{" "}
+                  {row.latest_sync_failure.occurred_at}
+                </p>
+              )}
             </li>
           ))}
         </ul>
