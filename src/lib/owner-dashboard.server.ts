@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { requireSuperAdmin } from "./auth.server";
 import { mergeDashboardHealth, withTimeout, type HealthStatus } from "./owner-dashboard-domain";
 import { getR2Health } from "./r2.server";
@@ -19,7 +20,10 @@ export const getOwnerDashboardSnapshot = createServerFn({ method: "GET" }).handl
   await requireSuperAdmin();
   const client = getServiceClient();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const apiProbe = Promise.resolve({ status: "healthy" as const });
+  const apiHealthUrl = new URL("/api/health", getRequest().url);
+  const apiProbe = fetch(apiHealthUrl).then((response) =>
+    response.ok ? { status: "healthy" as const } : unavailable("API tidak merespons."),
+  );
   const databaseProbe = client
     ? Promise.resolve(client.rpc("owner_dashboard_snapshot", { p_since: since })).then(
         ({ data, error }) =>
@@ -54,5 +58,8 @@ export const getOwnerDashboardSnapshot = createServerFn({ method: "GET" }).handl
       api,
     }),
     aggregates: database.aggregates,
+    deployment: process.env.VERCEL_ENV
+      ? { provider: "vercel", environment: process.env.VERCEL_ENV }
+      : null,
   };
 });

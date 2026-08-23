@@ -30,8 +30,22 @@ it("keeps dashboard server-only, protected, bounded, and independently degraded"
   expect(server).toContain("getServiceClient");
   expect(server).toContain("getR2Health");
   expect(server).toContain("apiProbe");
+  expect(server).toContain('new URL("/api/health", getRequest().url)');
+  expect(server).toContain("fetch(apiHealthUrl)");
+  expect(server).toContain("response.ok");
   expect(server).not.toContain("getChannels");
   expect(server).toContain('rpc("owner_dashboard_snapshot", { p_since: since })');
+});
+
+it("serves a safe no-store API health response before SSR", () => {
+  const server = source("../src/server.ts");
+  expect(server).toContain('pathname === "/api/health" && request.method === "GET"');
+  expect(server).toContain("Response.json(");
+  expect(server).toContain("{ ok: true }");
+  expect(server).toContain('"cache-control": "no-store"');
+  expect(server.indexOf('pathname === "/api/health"')).toBeLessThan(
+    server.indexOf("handler.fetch"),
+  );
 });
 
 it("uses service-only dashboard RPC with browser roles revoked", () => {

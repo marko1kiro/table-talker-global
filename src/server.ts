@@ -48,6 +48,12 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      if (new URL(request.url).pathname === "/api/health" && request.method === "GET") {
+        return Response.json(
+          { ok: true },
+          { headers: { "cache-control": "no-store", "content-type": "application/json" } },
+        );
+      }
       if (new URL(request.url).pathname === "/api/telemetry" && request.method === "POST") {
         try {
           const result = await ingestPlaybackEventBatch(
