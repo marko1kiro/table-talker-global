@@ -10,6 +10,10 @@ const provisioningSql = readFileSync(
   new URL("../supabase/migrations/20260823111500_provision_restaurant_credentials.sql", import.meta.url),
   "utf8",
 );
+const crewTokenRepairSql = readFileSync(
+  new URL("../supabase/migrations/20260824000000_fix_crew_token_generation.sql", import.meta.url),
+  "utf8",
+);
 
 it("adds derived credential fields without SQL plaintext backfill", () => {
   expect(sql).toMatch(/add column code_hash text/i);
@@ -45,4 +49,9 @@ it("binds opaque token rows and RPC authorization to current credential version"
   expect(sql).toMatch(/delete from public\.crew_session_tokens/i);
   expect(sql).toMatch(/connection_state = 'disconnected'/i);
   expect(sql).toMatch(/rat\.code_version = r\.code_version/i);
+});
+
+it("qualifies crew token generation for Supabase extension schema", () => {
+  expect(crewTokenRepairSql).toMatch(/extensions\.gen_random_bytes\(32\)/i);
+  expect(crewTokenRepairSql).toMatch(/create or replace function public\.claim_crew_session/i);
 });
