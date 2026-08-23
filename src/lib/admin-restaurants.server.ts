@@ -51,6 +51,8 @@ export const createRestaurant = createServerFn({ method: "POST" })
         id,
         code_hash: hashRestaurantCode(validated.code, key),
         code_encrypted: encryptRestaurantCode(validated.code, id, key),
+        code_version: 1,
+        credential_rotated_at: new Date().toISOString(),
         display_name: displayName,
       });
       await writeRestaurantCredentialAudit(client, {

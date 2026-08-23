@@ -15,6 +15,12 @@ it("exports createRestaurant bound to service-role client behind super admin", (
   expect(source).toContain("code_encrypted");
 });
 
+it("initializes every required restaurant credential field before auditing creation", () => {
+  const source = adminServer();
+  expect(source).toMatch(/code_hash: hashRestaurantCode[\s\S]*code_encrypted: encryptRestaurantCode[\s\S]*code_version: 1,[\s\S]*credential_rotated_at: new Date\(\)\.toISOString\(\)/);
+  expect(source).toMatch(/await writeRestaurantCredentialAudit\(client, \{[\s\S]*operation: "created",[\s\S]*success: !error/);
+});
+
 it("exports loginToRestaurant with opaque token scoped to credential version", () => {
   const source = crewServer();
   expect(source).toContain("loginToRestaurant");
