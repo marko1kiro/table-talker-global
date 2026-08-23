@@ -91,6 +91,20 @@ export async function removeEvents(ids: string[]): Promise<void> {
   }
 }
 
+export async function clearQueuedEvents(): Promise<void> {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      tx.objectStore(STORE_NAME).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // IndexedDB unavailable
+  }
+}
+
 export async function getEventCount(): Promise<number> {
   try {
     const db = await openDB();

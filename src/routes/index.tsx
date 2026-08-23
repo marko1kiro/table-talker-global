@@ -31,7 +31,7 @@ import {
   writeCrewSessionIdentity,
 } from "@/lib/crew-session-identity";
 import { useEventFlush } from "@/lib/event-flush";
-import { generateEventId, generateDeviceId, type PlaybackEvent } from "@/lib/event-queue";
+import { clearQueuedEvents, generateEventId, generateDeviceId, type PlaybackEvent } from "@/lib/event-queue";
 import { ingestPlaybackEvents } from "@/lib/playback-events.server";
 
 export const Route = createFileRoute("/")({
@@ -184,10 +184,23 @@ function SoundboardPage() {
     [audioSynced, getAudioController, stop],
   );
 
+  const invalidateCrewSession = useCallback(() => {
+    audioControllerRef.current?.stop();
+    removeCrewSessionIdentity(browserSessionStorage());
+    void clearQueuedEvents();
+    setCrewIdentity(null);
+    setAudioSynced(false);
+    setAvailableAudioIds(new Set());
+    setPlaying(null);
+    setPaused(null);
+    setLoading(null);
+  }, []);
+
   const remoteCrew = useRemoteCrew({
     registration: identityHydrated ? crewIdentity : null,
     playRemoteAudio,
     onCrewSessionId,
+    onSessionInvalid: invalidateCrewSession,
   });
 
   useEffect(() => {
@@ -343,6 +356,7 @@ function SoundboardPage() {
             setAvailableAudioIds(new Set(audioIds as AudioId[]));
             setAudioSynced(true);
           }}
+          onSessionInvalid={invalidateCrewSession}
         />
       )}
       {(remoteCrew.needsAudioRecovery || !crewIdentity?.audioReady) && crewIdentity && (

@@ -17,6 +17,7 @@ type SyncDialogProps = {
   restaurantId: string;
   tenantToken: string;
   onSynced: (audioIds: string[]) => void;
+  onSessionInvalid: () => void;
 };
 
 type SyncState =
@@ -30,7 +31,7 @@ function isOfflineResult(data: unknown): data is { offline: true; message: strin
   return typeof data === "object" && data !== null && "offline" in data;
 }
 
-export function SyncDialog({ restaurantId, tenantToken, onSynced }: SyncDialogProps) {
+export function SyncDialog({ restaurantId, tenantToken, onSynced, onSessionInvalid }: SyncDialogProps) {
   const [state, setState] = useState<SyncState>({ phase: "idle" });
   const runGateRef = useRef(createSyncRunGate());
   const failedManifestRef = useRef<Set<string> | null>(null);
@@ -53,6 +54,7 @@ export function SyncDialog({ restaurantId, tenantToken, onSynced }: SyncDialogPr
       }
 
       if (!res.ok || !res.manifest) {
+        if ("error" in res && res.error === "Sesi resto tidak valid.") onSessionInvalid();
         reportSyncError("SYNC_MANIFEST", "Manifest request failed.");
         setState({ phase: "error", message: "Gagal memuat manifest audio.", failedIds: [], reportCode: "SYNC_MANIFEST" });
         return;

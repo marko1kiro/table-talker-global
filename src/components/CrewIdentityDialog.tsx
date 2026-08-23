@@ -60,9 +60,10 @@ export function CrewIdentityDialog({
         crewSessionId: "",
         crewSessionToken: "",
       });
+      setCode("");
       setStep("name");
     } catch {
-      setError("Gagal terhubung ke server.");
+      setError("Kode Resto salah.");
     }
     setSubmitting(false);
   };

@@ -29,6 +29,10 @@ export function shouldActivatePresence(status: string) {
   return status === "SUBSCRIBED";
 }
 
+function isInvalidSessionError(error: unknown) {
+  return /INVALID_|Sesi resto tidak valid/i.test(error instanceof Error ? error.message : String(error));
+}
+
 export function createChannelStatusHandler<T extends object>({
   channel,
   currentChannel,
@@ -311,10 +315,12 @@ export function useRemoteCrew({
   registration,
   playRemoteAudio,
   onCrewSessionId,
+  onSessionInvalid,
 }: {
   registration: CrewRegistration | null;
   playRemoteAudio: (audioId: AudioId) => Promise<void>;
   onCrewSessionId?: (crewSessionId: string, crewSessionToken: string) => void;
+  onSessionInvalid?: () => void;
 }) {
   const [offline, setOffline] = useState(false);
   const [connectionState, setConnectionState] = useState<"offline" | "connecting" | "online">(
@@ -355,6 +361,14 @@ export function useRemoteCrew({
       if (timer) clearInterval(timer);
       timer = null;
     };
+    const invalidateSession = () => {
+      stopHeartbeat();
+      if (channel) void client.removeChannel(channel);
+      channel = null;
+      channelTerminal = true;
+      presenceActive = false;
+      onSessionInvalid?.();
+    };
     const rpc = async (fn: string, args: Record<string, unknown>) => {
       const { error } = await client.rpc(fn, args);
       if (error) throw error;
@@ -372,14 +386,20 @@ export function useRemoteCrew({
       if (channelTerminal) return;
       presenceActive = true;
       if (canSendConnectedHeartbeat(channelTerminal, document.visibilityState))
-        void heartbeat("connected").catch(() => update(setOffline, true));
+        void heartbeat("connected").catch((error) => {
+          if (isInvalidSessionError(error)) invalidateSession();
+          else update(setOffline, true);
+        });
       timer = replaceHeartbeatTimer(timer, clearInterval, () =>
         setInterval(() => {
           if (
             presenceActive &&
             canSendConnectedHeartbeat(channelTerminal, document.visibilityState)
           )
-            void heartbeat("connected").catch(() => update(setOffline, true));
+            void heartbeat("connected").catch((error) => {
+              if (isInvalidSessionError(error)) invalidateSession();
+              else update(setOffline, true);
+            });
         }, HEARTBEAT_MS),
       );
     };
@@ -418,6 +438,10 @@ export function useRemoteCrew({
             return;
           }
           if (claimError) {
+            if (isInvalidSessionError(claimError)) {
+              invalidateSession();
+              return;
+            }
             update(setDuplicateName, /duplicate|unique/i.test(claimError.message));
             update(setOffline, !/duplicate|unique/i.test(claimError.message));
             return;
@@ -441,7 +465,8 @@ export function useRemoteCrew({
                   p_status: status,
                   p_failure_reason: reason,
                 });
-              } catch {
+              } catch (error) {
+                if (isInvalidSessionError(error)) invalidateSession();
                 throw new Error("ACK_FAILED");
               }
             },
@@ -454,6 +479,10 @@ export function useRemoteCrew({
             const { data, error } = await client.rpc("claim_pending_remote_command");
             if (!active) return;
             if (error) {
+              if (isInvalidSessionError(error)) {
+                invalidateSession();
+                return;
+              }
               update(setDeliveryUncertain, true);
               return;
             }
@@ -499,7 +528,8 @@ export function useRemoteCrew({
               },
             }),
           );
-        } catch {
+        } catch (error) {
+          if (isInvalidSessionError(error)) invalidateSession();
           update(setOffline, true);
           if (active) setConnectionState("offline");
         } finally {
@@ -532,7 +562,7 @@ export function useRemoteCrew({
       channel = null;
       if (currentChannel) void client.removeChannel(currentChannel);
     };
-  }, [registration, onCrewSessionId]);
+  }, [registration, onCrewSessionId, onSessionInvalid]);
 
   return {
     offline,
