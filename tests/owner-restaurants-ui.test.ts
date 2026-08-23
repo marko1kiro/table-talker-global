@@ -27,4 +27,8 @@ it("audio route hashes MP3 browser uploads and uses owner catalog actions", () =
   expect(audio).not.toContain('type="url"');
   expect(audio).toContain("AlertDialog");
   expect(audio).toContain('queryKey: ["owner-dashboard"]');
+  expect(audio).toContain("updateManifestMetadata");
+  expect(audio).toContain("pendingItem");
+  expect(audio).toContain("mutationError");
+  expect(audio).not.toContain(".then(refresh)");
 });

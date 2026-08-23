@@ -7,6 +7,7 @@ import {
   listManifestItems,
   reorderManifestItem,
   toggleManifestItem,
+  updateManifestMetadata,
   upsertManifestItem,
 } from "@/lib/manifest.server";
 import { requestR2Upload } from "@/lib/upload.server";
@@ -35,6 +36,8 @@ function Audio() {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [pendingItem, setPendingItem] = useState("");
+  const [mutationError, setMutationError] = useState("");
   const restaurants = useQuery({ queryKey: ["owner-restaurants"], queryFn: listOwnerRestaurants });
   const manifest = useQuery({
     queryKey: ["manifest", restaurantId],
@@ -46,6 +49,14 @@ function Audio() {
     void qc.invalidateQueries({ queryKey: ["owner-restaurants"] });
     void qc.invalidateQueries({ queryKey: ["owner-restaurant", restaurantId] });
     void qc.invalidateQueries({ queryKey: ["owner-dashboard"] });
+  };
+  const mutate = async (key: string, action: () => Promise<{ ok: boolean; message?: string }>) => {
+    setPendingItem(key);
+    setMutationError("");
+    const result = await action();
+    if (result.ok) refresh();
+    else setMutationError(result.message ?? "Mutasi katalog gagal.");
+    setPendingItem("");
   };
   const upload = async () => {
     if (
@@ -139,15 +150,24 @@ function Audio() {
           ) : manifest.data && "items" in manifest.data ? (
             <ul>
               {manifest.data.items.map(
-                (item: { audio_id: string; label: string; active: boolean; ordering: number }) => (
+                (item: {
+                  audio_id: string;
+                  label: string;
+                  category: string;
+                  active: boolean;
+                  ordering: number;
+                }) => (
                   <li key={item.audio_id}>
                     {item.label}{" "}
                     <button
                       type="button"
+                      disabled={pendingItem === item.audio_id}
                       onClick={() =>
-                        void toggleManifestItem({
-                          data: { restaurantId, audioId: item.audio_id, active: !item.active },
-                        }).then(refresh)
+                        void mutate(item.audio_id, () =>
+                          toggleManifestItem({
+                            data: { restaurantId, audioId: item.audio_id, active: !item.active },
+                          }),
+                        )
                       }
                     >
                       {item.active ? "Nonaktifkan" : "Aktifkan"}
@@ -160,9 +180,11 @@ function Audio() {
                         <AlertDialogTitle>Hapus audio?</AlertDialogTitle>
                         <AlertDialogAction
                           onClick={() =>
-                            void deleteManifestItem({
-                              data: { restaurantId, audioId: item.audio_id },
-                            }).then(refresh)
+                            void mutate(item.audio_id, () =>
+                              deleteManifestItem({
+                                data: { restaurantId, audioId: item.audio_id },
+                              }),
+                            )
                           }
                         >
                           Hapus
@@ -172,32 +194,77 @@ function Audio() {
                     </AlertDialog>
                     <button
                       type="button"
+                      disabled={pendingItem === item.audio_id || item.ordering === 0}
                       onClick={() =>
-                        void reorderManifestItem({
-                          data: {
-                            restaurantId,
-                            audioId: item.audio_id,
-                            ordering: item.ordering - 1,
-                          },
-                        }).then(refresh)
+                        void mutate(item.audio_id, () =>
+                          reorderManifestItem({
+                            data: {
+                              restaurantId,
+                              audioId: item.audio_id,
+                              ordering: item.ordering - 1,
+                            },
+                          }),
+                        )
                       }
                     >
                       Naik
                     </button>
                     <button
                       type="button"
+                      disabled={pendingItem === item.audio_id}
                       onClick={() =>
-                        void reorderManifestItem({
-                          data: {
-                            restaurantId,
-                            audioId: item.audio_id,
-                            ordering: item.ordering + 1,
-                          },
-                        }).then(refresh)
+                        void mutate(item.audio_id, () =>
+                          reorderManifestItem({
+                            data: {
+                              restaurantId,
+                              audioId: item.audio_id,
+                              ordering: item.ordering + 1,
+                            },
+                          }),
+                        )
                       }
                     >
                       Turun
                     </button>
+                    <details>
+                      <summary>Edit metadata</summary>
+                      <input
+                        aria-label={`Label ${item.audio_id}`}
+                        defaultValue={item.label}
+                        onBlur={(event) =>
+                          void mutate(item.audio_id, () =>
+                            updateManifestMetadata({
+                              data: {
+                                restaurantId,
+                                audioId: item.audio_id,
+                                label: event.target.value,
+                                category: item.category,
+                                active: item.active,
+                                ordering: item.ordering,
+                              },
+                            }),
+                          )
+                        }
+                      />
+                      <input
+                        aria-label={`Kategori ${item.audio_id}`}
+                        defaultValue={item.category}
+                        onBlur={(event) =>
+                          void mutate(item.audio_id, () =>
+                            updateManifestMetadata({
+                              data: {
+                                restaurantId,
+                                audioId: item.audio_id,
+                                label: item.label,
+                                category: event.target.value,
+                                active: item.active,
+                                ordering: item.ordering,
+                              },
+                            }),
+                          )
+                        }
+                      />
+                    </details>
                   </li>
                 ),
               )}
@@ -205,6 +272,7 @@ function Audio() {
           ) : (
             <p role="alert">Katalog tidak dapat dimuat.</p>
           )}
+          {mutationError && <p role="alert">{mutationError}</p>}
         </>
       )}
     </section>

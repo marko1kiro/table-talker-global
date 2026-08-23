@@ -36,3 +36,7 @@ it("validates mutations before catalog version changes", () => {
   expect(sql).toContain("invalid catalog item");
   expect(sql.indexOf("invalid catalog metadata")).toBeLessThan(sql.indexOf("v_next_version :="));
 });
+
+it("bounds restaurant list deterministically", () => {
+  expect(sql).toContain("order by r.display_name, r.id limit 100");
+});

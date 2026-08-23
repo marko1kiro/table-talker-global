@@ -19,15 +19,16 @@ create index if not exists crew_sessions_restaurant_presence_idx
 
 create or replace function public.owner_restaurant_list()
 returns jsonb language sql security definer set search_path = public set statement_timeout = '3000ms' as $$
-  select coalesce(jsonb_agg(row_data order by row_data->>'display_name'), '[]'::jsonb)
+  select coalesce(jsonb_agg(row_data order by display_name, id), '[]'::jsonb)
   from (
     select jsonb_build_object(
       'id', r.id, 'display_name', r.display_name, 'is_active', r.is_active,
       'online_devices', (select count(*) from crew_sessions s where s.restaurant_id = r.id and s.connection_state = 'connected' and s.visibility_state = 'visible' and s.last_seen > now() - interval '30 seconds'),
       'catalog_version', r.catalog_version,
       'latest_sync_failure', (select jsonb_build_object('occurred_at', e.occurred_at, 'report_code', e.report_code) from operational_errors e where e.restaurant_id = r.id and e.stage = 'sync_cache' and e.resolved_at is null order by e.occurred_at desc limit 1),
-      'plays_today', (select count(*) from playback_events p where p.restaurant_id = r.id and p.status = 'played' and p.event_timestamp >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta')
-    ) row_data from restaurants r
+      'plays_today', (select count(*) from playback_events p where p.restaurant_id = r.id and p.status = 'played' and p.event_timestamp >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'),
+      r.display_name as display_name, r.id as id
+    ) row_data, r.display_name, r.id from restaurants r order by r.display_name, r.id limit 100
   ) rows;
 $$;
 
@@ -63,7 +64,7 @@ begin
   insert into audio_manifests (restaurant_id,audio_id,label,category,r2_url,content_hash,byte_size,active,ordering,catalog_version,created_at,updated_at)
   select restaurant_id,audio_id,label,category,r2_url,content_hash,byte_size,active,ordering,v_next_version,created_at,now() from audio_manifests where restaurant_id=p_restaurant_id and catalog_version=v_current_version;
   if p_action = 'upsert' then
-    insert into audio_manifests (restaurant_id,audio_id,label,category,r2_url,content_hash,byte_size,active,ordering,catalog_version) values (p_restaurant_id,p_audio_id,p_item->>'label',coalesce(p_item->>'category','BASE'),p_item->>'r2_url',p_item->>'content_hash',(p_item->>'byte_size')::integer,true,coalesce((p_item->>'ordering')::integer,0),v_next_version) on conflict (restaurant_id,audio_id,catalog_version) do update set label=excluded.label,category=excluded.category,r2_url=excluded.r2_url,content_hash=excluded.content_hash,byte_size=excluded.byte_size,active=true,ordering=excluded.ordering,updated_at=now();
+    insert into audio_manifests (restaurant_id,audio_id,label,category,r2_url,content_hash,byte_size,active,ordering,catalog_version) values (p_restaurant_id,p_audio_id,p_item->>'label',coalesce(p_item->>'category','BASE'),p_item->>'r2_url',p_item->>'content_hash',(p_item->>'byte_size')::integer,coalesce((p_item->>'active')::boolean,true),coalesce((p_item->>'ordering')::integer,0),v_next_version) on conflict (restaurant_id,audio_id,catalog_version) do update set label=excluded.label,category=excluded.category,r2_url=excluded.r2_url,content_hash=excluded.content_hash,byte_size=excluded.byte_size,active=excluded.active,ordering=excluded.ordering,updated_at=now();
   elsif p_action = 'toggle' then update audio_manifests set active=coalesce((p_item->>'active')::boolean,active),updated_at=now() where restaurant_id=p_restaurant_id and audio_id=p_audio_id and catalog_version=v_next_version;
   elsif p_action = 'reorder' then update audio_manifests set ordering=(p_item->>'ordering')::integer,updated_at=now() where restaurant_id=p_restaurant_id and audio_id=p_audio_id and catalog_version=v_next_version;
   else delete from audio_manifests where restaurant_id=p_restaurant_id and audio_id=p_audio_id and catalog_version=v_next_version;

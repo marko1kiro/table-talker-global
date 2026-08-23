@@ -15,6 +15,27 @@ function invalid(
   return { ok: false as const, code, message };
 }
 
+async function manifestItem(
+  client: NonNullable<ReturnType<typeof getServiceClient>>,
+  restaurantId: string,
+  audioId: string,
+) {
+  const { data: restaurant, error: restaurantError } = await client
+    .from("restaurants")
+    .select("catalog_version")
+    .eq("id", restaurantId)
+    .single();
+  if (restaurantError || !restaurant) return null;
+  const { data, error } = await client
+    .from("audio_manifests")
+    .select("audio_id, label, category, r2_url, content_hash, byte_size, active, ordering")
+    .eq("restaurant_id", restaurantId)
+    .eq("audio_id", audioId)
+    .eq("catalog_version", restaurant.catalog_version)
+    .maybeSingle();
+  return error ? undefined : data;
+}
+
 export const upsertManifestItem = createServerFn({ method: "POST" })
   .validator(
     z.object({
@@ -66,7 +87,11 @@ export const upsertManifestItem = createServerFn({ method: "POST" })
       return { ok: true as const, version };
     } catch {
       if (verified) await deleteFromR2(key);
-      return offline();
+      return {
+        ok: false as const,
+        code: "VERIFY_FAILED" as const,
+        message: "Verifikasi upload gagal.",
+      };
     }
   });
 
@@ -86,6 +111,9 @@ export const toggleManifestItem = createServerFn({ method: "POST" })
       return invalid("INVALID_AUDIO_ID", "Audio tidak valid.");
 
     try {
+      const item = await manifestItem(client, data.restaurantId, data.audioId);
+      if (item === undefined) return offline();
+      if (!item) return invalid("NOT_FOUND", "Audio tidak ditemukan.");
       const { data: version, error } = await client.rpc("mutate_catalog", {
         p_restaurant_id: data.restaurantId,
         p_action: "toggle",
@@ -93,12 +121,7 @@ export const toggleManifestItem = createServerFn({ method: "POST" })
         p_item: { active: data.active },
       });
 
-      if (error)
-        return {
-          ok: false as const,
-          code: "NOT_FOUND" as const,
-          message: "Audio tidak ditemukan.",
-        };
+      if (error) return offline();
       return { ok: true as const, version };
     } catch {
       return offline();
@@ -115,18 +138,16 @@ export const deleteManifestItem = createServerFn({ method: "POST" })
       return invalid("INVALID_AUDIO_ID", "Audio tidak valid.");
 
     try {
+      const item = await manifestItem(client, data.restaurantId, data.audioId);
+      if (item === undefined) return offline();
+      if (!item) return invalid("NOT_FOUND", "Audio tidak ditemukan.");
       const { data: version, error } = await client.rpc("mutate_catalog", {
         p_restaurant_id: data.restaurantId,
         p_action: "delete",
         p_audio_id: data.audioId,
       });
 
-      if (error)
-        return {
-          ok: false as const,
-          code: "NOT_FOUND" as const,
-          message: "Audio tidak ditemukan.",
-        };
+      if (error) return offline();
       return { ok: true as const, version };
     } catch {
       return offline();
@@ -148,15 +169,64 @@ export const reorderManifestItem = createServerFn({ method: "POST" })
     if (!isOwnerCatalogAudioId(data.audioId))
       return invalid("INVALID_AUDIO_ID", "Audio tidak valid.");
     try {
+      const item = await manifestItem(client, data.restaurantId, data.audioId);
+      if (item === undefined) return offline();
+      if (!item) return invalid("NOT_FOUND", "Audio tidak ditemukan.");
       const { data: version, error } = await client.rpc("mutate_catalog", {
         p_restaurant_id: data.restaurantId,
         p_action: "reorder",
         p_audio_id: data.audioId,
         p_item: { ordering: data.ordering },
       });
-      return error
-        ? { ok: false as const, code: "NOT_FOUND" as const, message: "Audio tidak ditemukan." }
-        : { ok: true as const, version };
+      return error ? offline() : { ok: true as const, version };
+    } catch {
+      return offline();
+    }
+  });
+
+export const updateManifestMetadata = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      restaurantId: z.string().uuid(),
+      audioId: z.string().max(120),
+      label: z.string().max(200),
+      category: z.string().max(60),
+      active: z.boolean(),
+      ordering: z.number().int().min(0).max(10_000),
+    }),
+  )
+  .handler(async ({ data }) => {
+    await requireSuperAdmin();
+    const client = getServiceClient();
+    if (!client) return offline();
+    if (!isOwnerCatalogAudioId(data.audioId))
+      return invalid("INVALID_AUDIO_ID", "Audio tidak valid.");
+    try {
+      const item = await manifestItem(client, data.restaurantId, data.audioId);
+      if (item === undefined) return offline();
+      if (!item) return invalid("NOT_FOUND", "Audio tidak ditemukan.");
+      const validated = validateCatalogMutation({
+        ...data,
+        r2Url: item.r2_url,
+        contentHash: item.content_hash,
+        byteSize: item.byte_size,
+      });
+      if (!validated.ok) return invalid(validated.code, "Metadata audio tidak valid.");
+      const { data: version, error } = await client.rpc("mutate_catalog", {
+        p_restaurant_id: data.restaurantId,
+        p_action: "upsert",
+        p_audio_id: data.audioId,
+        p_item: {
+          label: data.label,
+          category: data.category,
+          r2_url: item.r2_url,
+          content_hash: item.content_hash,
+          byte_size: item.byte_size,
+          ordering: data.ordering,
+          active: data.active,
+        },
+      });
+      return error ? offline() : { ok: true as const, version };
     } catch {
       return offline();
     }

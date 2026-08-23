@@ -29,6 +29,16 @@ it("exports reorderManifestItem through catalog RPC", () => {
   expect(source).toContain('p_action: "reorder"');
 });
 
+it("updates metadata without re-upload and distinguishes verification failures", () => {
+  const source = manifest();
+  expect(source).toContain("updateManifestMetadata");
+  expect(source).toContain("VERIFY_FAILED");
+  expect(source).toContain("r2_url: item.r2_url");
+  expect(source).toContain("content_hash: item.content_hash");
+  expect(source).toContain("byte_size: item.byte_size");
+  expect(source).toContain("manifestItem");
+});
+
 it("exports listManifestItems for admin view", () => {
   const source = manifest();
   expect(source).toContain("listManifestItems");
