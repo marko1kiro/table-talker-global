@@ -175,7 +175,7 @@ credential fields.
 1. Deploy compatibility release with restaurant-code feature flag off.
 2. `npx supabase login`
 3. `npx supabase link --project-ref YOUR_PROJECT_REF`
-4. Run `npx supabase db push --include-all`. Expected: additive migration applies, then cleanup stops with `UNPROVISIONED_RESTAURANT_CREDENTIALS`. Confirm migration `20260823110000_restaurant_code_credentials_additive.sql` exists remotely; do not bypass guard.
+4. Run `npx supabase db push --include-all`. Expected: additive and provisioning migrations apply, then cleanup stops with `UNPROVISIONED_RESTAURANT_CREDENTIALS`. Confirm migrations `20260823110000_restaurant_code_credentials_additive.sql` and `20260823111500_provision_restaurant_credentials.sql` exist remotely; do not bypass guard.
 5. Configure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `RESTAURANT_CODE_ENCRYPTION_KEY` only in protected runtime environment.
 6. Provision each row using exact UUID, or exact display name when UUID unavailable. Supply code through protected `RESTAURANT_CODE`; avoid `--code` because shell history can retain it:
 

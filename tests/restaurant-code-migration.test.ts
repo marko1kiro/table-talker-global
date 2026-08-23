@@ -6,6 +6,10 @@ const cleanupSql = readFileSync(
   new URL("../supabase/migrations/20260823120000_remove_legacy_restaurant_code.sql", import.meta.url),
   "utf8",
 );
+const provisioningSql = readFileSync(
+  new URL("../supabase/migrations/20260823111500_provision_restaurant_credentials.sql", import.meta.url),
+  "utf8",
+);
 
 it("adds derived credential fields without SQL plaintext backfill", () => {
   expect(sql).toMatch(/add column code_hash text/i);
@@ -25,6 +29,12 @@ it("removes legacy credential columns only after derived credentials are present
   expect(cleanupSql).toMatch(/alter column code_encrypted set not null/i);
   expect(cleanupSql).toMatch(/alter column credential_rotated_at set not null/i);
   expect(cleanupSql).toMatch(/raise exception 'UNPROVISIONED_RESTAURANT_CREDENTIALS'/i);
+});
+
+it("uses a service-role-only RPC for provisioning after additive fields exist", () => {
+  expect(provisioningSql).toMatch(/create function public\.provision_restaurant_credentials/i);
+  expect(provisioningSql).toMatch(/where id = p_restaurant_id and code_hash is null and code_encrypted is null/i);
+  expect(provisioningSql).toMatch(/grant execute.*to service_role/i);
 });
 
 it("binds opaque token rows and RPC authorization to current credential version", () => {
