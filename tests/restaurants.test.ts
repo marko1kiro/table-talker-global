@@ -29,24 +29,17 @@ it("backfills the pilot restaurant exactly once", () => {
 
 import { describe } from "vitest";
 import {
-  normalizeRestaurantCode,
+  validateRestaurantCode,
 } from "../src/lib/restaurant-domain";
 
-describe("normalizeRestaurantCode", () => {
-  it("trims and uppercases valid codes", () => {
-    expect(normalizeRestaurantCode(" kampung-bulu ")).toEqual({ code: "KAMPUNG-BULU" });
+describe("validateRestaurantCode", () => {
+  it("accepts exact uppercase alphanumeric codes", () => {
+    expect(validateRestaurantCode("KAMPUNG123")).toEqual({ code: "KAMPUNG123" });
   });
 
-  it("rejects empty, short, long, and invalid-character codes", () => {
-    expect(normalizeRestaurantCode("")).toEqual({ error: "Kode resto wajib diisi." });
-    expect(normalizeRestaurantCode("ab")).toEqual({
-      error: "Kode resto 3\u201332 karakter, huruf/angka/-/_ saja.",
-    });
-    expect(normalizeRestaurantCode("A".repeat(33))).toEqual({
-      error: "Kode resto 3\u201332 karakter, huruf/angka/-/_ saja.",
-    });
-    expect(normalizeRestaurantCode("BAD CODE!")).toEqual({
-      error: "Kode resto 3\u201332 karakter, huruf/angka/-/_ saja.",
-    });
+  it("rejects transformed, malformed, and out-of-range codes", () => {
+    for (const value of [" kampung123", "kampung123", "ABCDE", "A".repeat(33), "KAMPUNG-BULU"]) {
+      expect(validateRestaurantCode(value)).toEqual({ error: "Kode Resto salah." });
+    }
   });
 });

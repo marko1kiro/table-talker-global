@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
-import { normalizeRestaurantCode } from "./restaurant-domain";
+import { validateRestaurantCode } from "./restaurant-domain";
 import { getServiceClient } from "./remote-audio.server";
 import {
   createTenantSession,
@@ -31,7 +31,7 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
     if (!client) return offline();
 
     try {
-      const validated = normalizeRestaurantCode(data.code);
+      const validated = validateRestaurantCode(data.code);
       if ("error" in validated) return { error: validated.error };
        const { data: restaurant, error: lookupError } = await client
         .from("restaurants")
@@ -100,7 +100,7 @@ export const createRestaurant = createServerFn({ method: "POST" })
     if (!client) return offline();
 
     try {
-      const normalized = normalizeRestaurantCode(data.code);
+       const normalized = validateRestaurantCode(data.code);
       if ("error" in normalized) return { error: normalized.error };
       const displayName = data.displayName.trim();
       if (!displayName || displayName.length > 80)
