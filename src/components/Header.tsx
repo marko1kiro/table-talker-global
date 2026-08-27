@@ -4,9 +4,11 @@ import { Volume2 } from "lucide-react";
 interface HeaderProps {
   readyCount: number;
   totalCount: number;
+  restaurantDisplayName?: string;
 }
 
-export function Header({ readyCount, totalCount }: HeaderProps) {
+export function Header({ readyCount, totalCount, restaurantDisplayName }: HeaderProps) {
+  const restoLabel = restaurantDisplayName?.trim() || "Table Talker";
   return (
     <header className="sticky top-0 z-40 border-b-[3px] border-foreground bg-brutal-bg">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
@@ -22,9 +24,8 @@ export function Header({ readyCount, totalCount }: HeaderProps) {
                 Talker
               </span>
             </div>
-            <div className="mt-1 inline-block border-2 border-foreground bg-card px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider">
-              <span className="text-destructive">◆</span> Mie Gacoan{" "}
-              <span className="text-muted-foreground">·</span> Kampung Bulu
+            <div className="mt-1 inline-block max-w-[220px] truncate border-2 border-foreground bg-card px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider">
+              <span className="text-destructive">◆</span> {restoLabel}
             </div>
           </div>
         </Link>

@@ -460,7 +460,11 @@ function SoundboardPage() {
           Remote control tidak tersedia. Soundboard tetap bisa dipakai.
         </p>
       )}
-      <Header readyCount={availableAudioIds.size} totalCount={TABLE_COUNT} />
+      <Header
+        readyCount={availableAudioIds.size}
+        totalCount={TABLE_COUNT}
+        restaurantDisplayName={crewIdentity?.restaurantDisplayName}
+      />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
         <div className="mb-4 flex items-center justify-between gap-3">
