@@ -1,7 +1,8 @@
 import type { ManifestItem } from "./restaurants.server";
 
 const CACHE_NAME = "table-talker-audio-v1";
-const CONCURRENT = 2;
+const CONCURRENT = 6;
+const PRELOAD_CONCURRENT = 6;
 const MAX_RETRIES = 3;
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 
@@ -67,12 +68,13 @@ export async function computeHash(buffer: ArrayBuffer): Promise<string> {
 export async function getCachedMetadata(
   restaurantId: string,
   cacheName: string = CACHE_NAME,
+  openedCache?: Cache,
 ): Promise<Map<string, CachedMeta>> {
   const meta = new Map<string, CachedMeta>();
   if (typeof caches === "undefined") return meta;
 
   try {
-    const cache = await caches.open(cacheName);
+    const cache = openedCache ?? (await caches.open(cacheName));
     const keys = await cache.keys();
     for (const req of keys) {
       const url = new URL(req.url);
@@ -144,10 +146,11 @@ export async function putToCache(
   buffer: ArrayBuffer,
   hash: string,
   cacheName: string = CACHE_NAME,
+  openedCache?: Cache,
 ): Promise<boolean> {
   if (typeof caches === "undefined") return false;
   try {
-    const cache = await caches.open(cacheName);
+    const cache = openedCache ?? (await caches.open(cacheName));
     const response = new Response(buffer, {
       headers: {
         "Content-Type": "audio/mpeg",
@@ -229,7 +232,20 @@ export async function syncManifest(
     };
   }
 
-  const cached = await getCachedMetadata(restaurantId, cacheName);
+  let openedCache: Cache;
+  try {
+    openedCache = await caches.open(cacheName);
+  } catch {
+    return {
+      ok: false,
+      cachedCount: 0,
+      downloadedCount: 0,
+      failedIds: [],
+      message: "Cache Storage browser gagal dibuka. Kosongkan ruang penyimpanan lalu coba lagi.",
+      failureReason: "cache",
+    };
+  }
+  const cached = await getCachedMetadata(restaurantId, cacheName, openedCache);
 
   const needsDownload: ManifestItem[] = [];
   let cachedCount = 0;
@@ -251,52 +267,58 @@ export async function syncManifest(
 
   onProgress?.({ current: cachedCount, total, label: "Memulai unduhan..." });
 
-  for (let i = 0; i < needsDownload.length; i += CONCURRENT) {
-    const batch = needsDownload.slice(i, i + CONCURRENT);
-    await Promise.all(
-      batch.map(async (item) => {
-        try {
-          const download = await downloadAndVerify(
-            item.downloadUrl,
-            item.contentHash,
-            item.byteSize,
-            {
-              headers: options.downloadHeaders,
-              timeoutMs: options.downloadTimeoutMs,
-            },
-          );
-          if (!download.ok) {
-            failedIds.add(item.audioId);
-            failureReasons.set(item.audioId, download.reason);
-            return;
-          }
-          const cachedOk = await putToCache(
-            restaurantId,
-            item.audioId,
-            download.buffer,
-            item.contentHash,
-            cacheName,
-          );
-          if (!cachedOk) {
-            failedIds.add(item.audioId);
-            failureReasons.set(item.audioId, "cache");
-            return;
-          }
-          downloadedCount++;
-        } catch {
+  let nextDownloadIndex = 0;
+  const downloadWorker = async () => {
+    while (nextDownloadIndex < needsDownload.length) {
+      const item = needsDownload[nextDownloadIndex++];
+      try {
+        const headers = new Headers(options.downloadHeaders);
+        headers.set("X-Audio-Grant", item.downloadGrant);
+        const download = await downloadAndVerify(
+          item.downloadUrl,
+          item.contentHash,
+          item.byteSize,
+          {
+            headers,
+            timeoutMs: options.downloadTimeoutMs,
+          },
+        );
+        if (!download.ok) {
           failedIds.add(item.audioId);
-          failureReasons.set(item.audioId, "network");
-        } finally {
-          completedCount++;
-          onProgress?.({
-            current: cachedCount + completedCount,
-            total,
-            label: item.label,
-          });
+          failureReasons.set(item.audioId, download.reason);
+          continue;
         }
-      }),
-    );
-  }
+        const cachedOk = await putToCache(
+          restaurantId,
+          item.audioId,
+          download.buffer,
+          item.contentHash,
+          cacheName,
+          openedCache,
+        );
+        if (!cachedOk) {
+          failedIds.add(item.audioId);
+          failureReasons.set(item.audioId, "cache");
+          continue;
+        }
+        downloadedCount++;
+      } catch {
+        failedIds.add(item.audioId);
+        failureReasons.set(item.audioId, "network");
+      } finally {
+        completedCount++;
+        onProgress?.({
+          current: cachedCount + completedCount,
+          total,
+          label: item.label,
+        });
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENT, needsDownload.length) }, downloadWorker),
+  );
 
   if (failedIds.size === 0) {
     const manifestIds = new Set(manifest.map((m) => m.audioId));
@@ -327,6 +349,7 @@ export async function syncManifest(
 type CachedAudioUrlDependencies = {
   getCachedAudio?: typeof getCachedAudio;
   createObjectURL?: (blob: Blob) => string;
+  revokeObjectURL?: (url: string) => void;
 };
 
 export async function getCachedAudioUrl(
@@ -339,4 +362,56 @@ export async function getCachedAudioUrl(
 ): Promise<string | null> {
   const buffer = await readAudio(restaurantId, audioId);
   return buffer ? createObjectURL(new Blob([buffer], { type: "audio/mpeg" })) : null;
+}
+
+export function createCachedAudioUrlPool({
+  getCachedAudio: readAudio = getCachedAudio,
+  createObjectURL = URL.createObjectURL,
+  revokeObjectURL = URL.revokeObjectURL,
+}: CachedAudioUrlDependencies = {}) {
+  const urls = new Map<string, string>();
+  const pending = new Map<string, Promise<string | null>>();
+  let generation = 0;
+  const keyFor = (restaurantId: string, audioId: string) => `${restaurantId}\u0000${audioId}`;
+
+  const get = (restaurantId: string, audioId: string): Promise<string | null> => {
+    const key = keyFor(restaurantId, audioId);
+    const existing = urls.get(key);
+    if (existing) return Promise.resolve(existing);
+    const inFlight = pending.get(key);
+    if (inFlight) return inFlight;
+
+    const loadGeneration = generation;
+    const load = readAudio(restaurantId, audioId)
+      .then((buffer) => {
+        if (!buffer || generation !== loadGeneration) return null;
+        const url = createObjectURL(new Blob([buffer], { type: "audio/mpeg" }));
+        urls.set(key, url);
+        return url;
+      })
+      .finally(() => {
+        if (pending.get(key) === load) pending.delete(key);
+      });
+    pending.set(key, load);
+    return load;
+  };
+
+  return {
+    get,
+    async preload(restaurantId: string, audioIds: readonly string[]) {
+      for (let index = 0; index < audioIds.length; index += PRELOAD_CONCURRENT) {
+        await Promise.all(
+          audioIds
+            .slice(index, index + PRELOAD_CONCURRENT)
+            .map((audioId) => get(restaurantId, audioId)),
+        );
+      }
+    },
+    clear() {
+      generation++;
+      for (const url of urls.values()) revokeObjectURL(url);
+      urls.clear();
+      pending.clear();
+    },
+  };
 }

@@ -18,8 +18,13 @@ it("resets audioSynced when new identity is created", () => {
   expect(source).toContain("setAudioSynced(false)");
 });
 
-it("stores verified audio IDs then sets audioSynced on onSynced callback", () => {
+it("stores verified audio IDs, enables playback, then warms cached object URLs", () => {
   const source = route();
-  expect(source).toContain("setAvailableAudioIds(new Set(audioIds as AudioId[]))");
-  expect(source).toContain("setAudioSynced(true)");
+  const storeIds = source.indexOf("setAvailableAudioIds(new Set(audioIds as AudioId[]))");
+  const enablePlayback = source.indexOf("setAudioSynced(true)", storeIds);
+  const preload = source.indexOf("getAudioUrlPool().preload", enablePlayback);
+
+  expect(storeIds).toBeGreaterThan(-1);
+  expect(enablePlayback).toBeGreaterThan(storeIds);
+  expect(preload).toBeGreaterThan(enablePlayback);
 });

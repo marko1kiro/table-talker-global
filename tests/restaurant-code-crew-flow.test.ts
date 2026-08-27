@@ -26,7 +26,8 @@ it("blocks soundboard until sync and clears tenant state when version-bound acce
   expect(page).toContain("!audioSynced");
   expect(page).toContain("removeCrewSessionIdentity(browserSessionStorage())");
   expect(page).toContain("audioControllerRef.current?.stop()");
-  expect(page).toContain("URL.revokeObjectURL(objectUrlRef.current)");
+  expect(page).toContain("audioUrlPoolRef.current?.clear()");
+  expect(source("src/lib/audio-sync.ts")).toContain("revokeObjectURL(url)");
   expect(page).toContain("setAudioSynced(false)");
   expect(page).toContain("setAvailableAudioIds(new Set())");
   expect(page).toContain("clearQueuedEvents()");
