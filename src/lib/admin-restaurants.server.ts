@@ -5,21 +5,6 @@ import { requireSuperAdmin } from "./auth.server";
 import { validateRestaurantCode } from "./restaurant-domain";
 import { getServiceClient } from "./remote-audio.server";
 
-export type ManifestItem = {
-  audioId: string;
-  label: string;
-  category: string;
-  r2Url: string;
-  contentHash: string;
-  byteSize: number;
-};
-
-function offline() {
-  return { offline: true as const, message: "Realtime offline" };
-}
-
-const CODE_ERROR = "Kode Resto salah.";
-
 function noStore() {
   setResponseHeader("Cache-Control", "no-store");
 }
@@ -212,86 +197,3 @@ export const deactivateRestaurant = createServerFn({ method: "POST" })
       return { error: "Kode Resto tidak dapat disimpan." };
     }
   });
-
-export const getRestaurantDetail = createServerFn({ method: "GET" })
-  .validator(z.object({ restaurantId: z.string().uuid() }))
-  .handler(async ({ data }) => {
-    await requireSuperAdmin();
-    noStore();
-    const client = getServiceClient();
-    if (!client) return offline();
-    try {
-      const { data: restaurant, error } = await client
-        .from("restaurants")
-        .select("id, display_name, is_active, catalog_version, credential_rotated_at")
-        .eq("id", data.restaurantId)
-        .single();
-      return error || !restaurant ? offline() : { ok: true as const, restaurant };
-    } catch {
-      return offline();
-    }
-  });
-
-export const getRestaurantManifest = createServerFn({ method: "GET" })
-  .validator(z.object({ restaurantId: z.string().uuid(), tenantToken: z.string() }))
-  .handler(async ({ data }) => {
-    const client = getServiceClient();
-    if (!client) return offline();
-
-    try {
-      const { verifyActiveTenantSession } = await import("./restaurant-session.server");
-      const tenant = await verifyActiveTenantSession(client, data.tenantToken);
-      if (!tenant || tenant.restaurantId !== data.restaurantId)
-        return { error: "Sesi resto tidak valid." };
-
-      const { data: restaurant, error: restaurantError } = await client
-        .from("restaurants")
-        .select("catalog_version, is_active")
-        .eq("id", data.restaurantId)
-        .single();
-      if (restaurantError || !restaurant) return offline();
-
-      const { data: items, error } = await client
-        .from("audio_manifests")
-        .select("audio_id, label, category, r2_url, content_hash, byte_size")
-        .eq("restaurant_id", data.restaurantId)
-        .eq("catalog_version", restaurant.catalog_version)
-        .eq("active", true)
-        .order("category")
-        .order("ordering");
-
-      if (error) return offline();
-
-      const manifest: ManifestItem[] = (items ?? []).map((row) => ({
-        audioId: row.audio_id,
-        label: row.label,
-        category: row.category,
-        r2Url: row.r2_url,
-        contentHash: row.content_hash,
-        byteSize: row.byte_size,
-      }));
-
-      return { ok: true as const, version: restaurant.catalog_version, manifest };
-    } catch {
-      return offline();
-    }
-  });
-
-export const listRestaurants = createServerFn({ method: "GET" }).handler(async () => {
-  await requireSuperAdmin();
-  noStore();
-  const client = getServiceClient();
-  if (!client) return offline();
-
-  try {
-    const { data: restaurants, error } = await client
-      .from("restaurants")
-      .select("id, display_name, is_active, catalog_version")
-      .order("display_name");
-
-    if (error) return offline();
-    return { ok: true as const, restaurants: restaurants ?? [] };
-  } catch {
-    return offline();
-  }
-});

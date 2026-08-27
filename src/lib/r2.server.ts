@@ -7,7 +7,7 @@ import {
   S3ServiceException,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { ANNOUNCEMENT_CATALOG } from "./remote-audio-domain";
+import { isOwnerCatalogAudioId } from "./owner-restaurants-domain";
 
 const R2_ACCOUNT_ID = process.env.CF_ACCOUNT_ID ?? "";
 const R2_ACCESS_KEY_ID = process.env.CF_R2_ACCESS_KEY_ID ?? "";
@@ -83,7 +83,7 @@ type R2UploadRequest = {
 export function validateR2UploadRequest(input: R2UploadRequest): R2UploadRequest {
   if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(input.restaurantId))
     throw new Error("Restaurant tidak valid.");
-  if (!isAllowedAudioId(input.audioId)) throw new Error("Audio ID tidak valid.");
+  if (!isOwnerCatalogAudioId(input.audioId)) throw new Error("Audio ID tidak valid.");
   if (input.contentType !== R2_UPLOAD_CONTENT_TYPE) throw new Error("File harus MP3.");
   if (
     !Number.isInteger(input.byteSize) ||
@@ -93,12 +93,6 @@ export function validateR2UploadRequest(input: R2UploadRequest): R2UploadRequest
     throw new Error("Ukuran file harus 1-10 MB.");
   if (!/^[0-9a-f]{64}$/.test(input.contentHash)) throw new Error("Hash file tidak valid.");
   return input;
-}
-
-function isAllowedAudioId(audioId: string): boolean {
-  if (/^table:(?:[1-9]|[1-9][0-9]|100)$/.test(audioId)) return true;
-  if (ANNOUNCEMENT_CATALOG.some((item) => audioId === `announcement:${item.id}`)) return true;
-  return /^custom:[a-z0-9][a-z0-9_-]{0,99}$/.test(audioId);
 }
 
 function hexToBase64(value: string): string {

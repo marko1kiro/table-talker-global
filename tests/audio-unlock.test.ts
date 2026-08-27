@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAudioPlaybackController,
-  getBundledAudioUrl,
   getUnlockAudioUrl,
   unlockBundledAudio,
   createPlaybackGeneration,
@@ -31,7 +30,6 @@ function audioMock() {
 describe("bundled audio playback", () => {
   it("exposes real bundled sources", () => {
     expect(getUnlockAudioUrl).toBeTypeOf("function");
-    expect(getBundledAudioUrl).toBeTypeOf("function");
   });
 
   it("reuses supplied audio for muted unlock and restores its settings", async () => {
@@ -115,7 +113,6 @@ it("hydrates a same-tab crew after mount without persisting audio readiness", ()
   expect(hydrationEffect?.[0]).toContain("setIdentityHydrated(true)");
   expect(route).toContain("writeCrewSessionIdentity(browserSessionStorage(), identity)");
   expect(route).toContain("removeCrewSessionIdentity(browserSessionStorage())");
-  expect(route).toContain("Aktifkan Suara");
 });
 
 it("gates the crew dialog and remote registration until identity hydration completes", () => {

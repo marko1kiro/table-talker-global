@@ -438,29 +438,16 @@ function SoundboardPage() {
           onSessionInvalid={invalidateCrewSession}
         />
       )}
-      {(remoteCrew.needsAudioRecovery || !crewIdentity?.audioReady) && crewIdentity && (
-        <div className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 brutal-border bg-card p-3 text-center">
-          <p className="mb-2 text-sm">Remote audio diblokir browser.</p>
-          <button
-            type="button"
-            className="brutal-border brutal-press bg-accent px-3 py-2 font-display"
-            onClick={() => {
-              void unlockAudio().then((audioReady) => {
-                setCrewIdentity({ ...crewIdentity, audioReady });
-                remoteCrew.retryAudioUnlock();
-              });
-            }}
-          >
-            Aktifkan Suara
-          </button>
-        </div>
-      )}
       {remoteCrew.offline && crewIdentity && (
         <p className="mx-auto max-w-6xl px-3 pt-3 text-center text-sm text-muted-foreground">
           Remote control tidak tersedia. Soundboard tetap bisa dipakai.
         </p>
       )}
-      <Header readyCount={availableAudioIds.size} totalCount={TABLE_COUNT} />
+      <Header
+        readyCount={availableAudioIds.size}
+        totalCount={TABLE_COUNT}
+        restaurantDisplayName={crewIdentity?.restaurantDisplayName}
+      />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
         <div className="mb-4 flex items-center justify-between gap-3">

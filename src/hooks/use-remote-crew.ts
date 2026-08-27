@@ -159,50 +159,6 @@ export function crewClaimArgs(
   };
 }
 
-export function createVisibleClaimCoordinator({
-  ensureAuth,
-  isVisible,
-  claim,
-  subscribe,
-}: {
-  ensureAuth: () => Promise<string>;
-  isVisible: () => boolean;
-  claim: (userId: string) => Promise<boolean>;
-  subscribe: (userId: string) => void;
-}) {
-  let userId: string | null = null;
-  let authInFlight: Promise<void> | null = null;
-  let claimInFlight: Promise<void> | null = null;
-  let subscribed = false;
-
-  const claimWhenVisible = async () => {
-    if (!userId || !isVisible() || subscribed) return;
-    if (!claimInFlight)
-      claimInFlight = claim(userId)
-        .then((claimed) => {
-          if (claimed && !subscribed) {
-            subscribed = true;
-            subscribe(userId!);
-          }
-        })
-        .finally(() => {
-          claimInFlight = null;
-        });
-    return claimInFlight;
-  };
-
-  return {
-    start: () => {
-      if (!authInFlight)
-        authInFlight = ensureAuth().then((id) => {
-          userId = id;
-        });
-      return authInFlight.then(claimWhenVisible);
-    },
-    claimWhenVisible,
-  };
-}
-
 const PROCESSED_COMMAND_MAX_AGE_MS = 35_000;
 const PROCESSED_COMMAND_MAX_COUNT = 256;
 

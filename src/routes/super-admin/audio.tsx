@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   ArrowDown,
   ArrowUp,
-  AudioLines,
   FileAudio,
+  Megaphone,
   PencilLine,
-  Plus,
   Power,
+  Search,
+  Sparkles,
+  Table2,
   Trash2,
   UploadCloud,
 } from "lucide-react";
@@ -22,6 +24,7 @@ import {
   upsertManifestItem,
 } from "@/lib/manifest.server";
 import { requestR2Upload } from "@/lib/upload.server";
+import { ANNOUNCEMENT_CATALOG } from "@/lib/remote-audio-domain";
 import {
   OwnerEmpty,
   OwnerField,
@@ -45,6 +48,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type ManifestItem = {
   audio_id: string;
@@ -53,6 +57,36 @@ type ManifestItem = {
   active: boolean;
   ordering: number;
 };
+
+type AudioGroup = "table" | "announcement" | "custom";
+type AudioType = AudioGroup;
+
+const MAX_TABLE_NUMBER = 100;
+const TABLE_NUMBERS = Array.from({ length: MAX_TABLE_NUMBER }, (_, index) => index + 1);
+
+const GROUP_META: Record<AudioGroup, { title: string; empty: string }> = {
+  table: { title: "Sound Meja", empty: "Belum ada sound meja yang diunggah." },
+  announcement: { title: "Sound Pengumuman", empty: "Belum ada sound pengumuman yang diunggah." },
+  custom: { title: "Lainnya", empty: "Belum ada audio kustom yang diunggah." },
+};
+
+function classifyAudioId(audioId: string): AudioGroup {
+  if (/^table:\d+$/.test(audioId)) return "table";
+  if (/^announcement:/.test(audioId)) return "announcement";
+  return "custom";
+}
+
+function tableNumberOf(audioId: string): number {
+  const match = /^table:(\d+)$/.exec(audioId);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function matchesSearch(item: ManifestItem, query: string): boolean {
+  if (!query) return true;
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return item.label.toLowerCase().includes(needle) || item.audio_id.toLowerCase().includes(needle);
+}
 
 export const Route = createFileRoute("/super-admin/audio")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -65,6 +99,7 @@ function Audio() {
   const { restaurantId } = Route.useSearch();
   const navigate = Route.useNavigate();
   const qc = useQueryClient();
+  const [audioType, setAudioType] = useState<AudioType>("table");
   const [audioId, setAudioId] = useState("table:1");
   const [label, setLabel] = useState("Meja 1");
   const [category, setCategory] = useState("BASE");
@@ -73,6 +108,8 @@ function Audio() {
   const [pending, setPending] = useState(false);
   const [pendingItem, setPendingItem] = useState("");
   const [mutationError, setMutationError] = useState("");
+  const [activeGroup, setActiveGroup] = useState<AudioGroup>("table");
+  const [search, setSearch] = useState("");
   const restaurants = useQuery({ queryKey: ["owner-restaurants"], queryFn: listOwnerRestaurants });
   const manifest = useQuery({
     queryKey: ["owner-manifest", restaurantId],
@@ -103,6 +140,35 @@ function Audio() {
     } finally {
       setPendingItem("");
     }
+  };
+  const selectAudioType = (next: AudioType) => {
+    setAudioType(next);
+    if (next === "table") {
+      setAudioId("table:1");
+      setLabel("Meja 1");
+      setCategory("BASE");
+    } else if (next === "announcement") {
+      const first = ANNOUNCEMENT_CATALOG[0];
+      setAudioId(`announcement:${first.id}`);
+      setLabel(first.label);
+      setCategory(first.category);
+    } else {
+      setAudioId("custom:");
+      setLabel("");
+      setCategory("CUSTOM");
+    }
+  };
+  const selectTableNumber = (value: string) => {
+    const n = Math.min(MAX_TABLE_NUMBER, Math.max(1, Number(value) || 1));
+    setAudioId(`table:${n}`);
+    setLabel(`Meja ${n}`);
+  };
+  const selectAnnouncement = (id: string) => {
+    const item = ANNOUNCEMENT_CATALOG.find((entry) => entry.id === id);
+    if (!item) return;
+    setAudioId(`announcement:${item.id}`);
+    setLabel(item.label);
+    setCategory(item.category);
   };
   const upload = async () => {
     if (
@@ -158,9 +224,23 @@ function Audio() {
     }
   };
 
-  const items =
-    manifest.data && "items" in manifest.data ? (manifest.data.items as ManifestItem[]) : [];
+  const items = useMemo(
+    () =>
+      manifest.data && "items" in manifest.data ? (manifest.data.items as ManifestItem[]) : [],
+    [manifest.data],
+  );
   const activeCount = items.filter((item) => item.active).length;
+
+  const groups = useMemo(() => {
+    const table = items
+      .filter((item) => classifyAudioId(item.audio_id) === "table")
+      .sort((a, b) => tableNumberOf(a.audio_id) - tableNumberOf(b.audio_id));
+    const announcement = items.filter((item) => classifyAudioId(item.audio_id) === "announcement");
+    const custom = items.filter((item) => classifyAudioId(item.audio_id) === "custom");
+    return { table, announcement, custom };
+  }, [items]);
+
+  const visibleItems = groups[activeGroup].filter((item) => matchesSearch(item, search));
 
   return (
     <OwnerPage>
@@ -203,25 +283,99 @@ function Audio() {
         </OwnerPanel>
       ) : (
         <>
-          <section className="grid gap-4 sm:grid-cols-3">
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Restoran" value={selectedRestaurant?.display_name ?? "Terpilih"} />
-            <Metric label="Total audio" value={manifest.isLoading ? "—" : String(items.length)} />
-            <Metric label="Audio aktif" value={manifest.isLoading ? "—" : String(activeCount)} />
+            <Metric
+              label="Sound meja"
+              value={
+                manifest.isLoading
+                  ? "—"
+                  : `${groups.table.filter((i) => i.active).length}/${groups.table.length}`
+              }
+              icon={<Table2 className="size-4" />}
+            />
+            <Metric
+              label="Sound pengumuman"
+              value={
+                manifest.isLoading
+                  ? "—"
+                  : `${groups.announcement.filter((i) => i.active).length}/${groups.announcement.length}`
+              }
+              icon={<Megaphone className="size-4" />}
+            />
+            <Metric
+              label="Total audio aktif"
+              value={manifest.isLoading ? "—" : `${activeCount}/${items.length}`}
+            />
           </section>
 
           <OwnerPanel
             title="Tambah atau ganti audio"
-            description="ID yang sama akan memperbarui mapping audio tanpa mengubah riwayat objek lama."
+            description="Pilih tipe audio untuk mengisi ID dan label secara otomatis. ID yang sama akan memperbarui mapping tanpa mengubah riwayat objek lama."
           >
             <div className="grid gap-4 md:grid-cols-3">
-              <OwnerField label="Audio ID" hint="Contoh: table:1 atau custom:promo-sore">
-                <input
-                  aria-label="Audio ID"
+              <OwnerField label="Tipe audio" hint="Menentukan grup katalog di bawah.">
+                <select
+                  aria-label="Tipe audio"
                   className={ownerControlClass}
-                  value={audioId}
-                  onChange={(event) => setAudioId(event.target.value)}
-                />
+                  value={audioType}
+                  onChange={(event) => selectAudioType(event.target.value as AudioType)}
+                >
+                  <option value="table">Sound Meja</option>
+                  <option value="announcement">Sound Pengumuman</option>
+                  <option value="custom">Lainnya (custom)</option>
+                </select>
               </OwnerField>
+
+              {audioType === "table" && (
+                <OwnerField label="Nomor meja">
+                  <select
+                    aria-label="Nomor meja"
+                    className={ownerControlClass}
+                    value={String(tableNumberOf(audioId))}
+                    onChange={(event) => selectTableNumber(event.target.value)}
+                  >
+                    {TABLE_NUMBERS.map((n) => (
+                      <option key={n} value={n}>
+                        Meja {n}
+                      </option>
+                    ))}
+                  </select>
+                </OwnerField>
+              )}
+
+              {audioType === "announcement" && (
+                <OwnerField label="Pilih pengumuman">
+                  <select
+                    aria-label="Pilih pengumuman"
+                    className={ownerControlClass}
+                    value={
+                      audioId.startsWith("announcement:")
+                        ? audioId.slice("announcement:".length)
+                        : ""
+                    }
+                    onChange={(event) => selectAnnouncement(event.target.value)}
+                  >
+                    {ANNOUNCEMENT_CATALOG.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.label}
+                      </option>
+                    ))}
+                  </select>
+                </OwnerField>
+              )}
+
+              {audioType === "custom" && (
+                <OwnerField label="Audio ID" hint="Contoh: custom:promo-sore">
+                  <input
+                    aria-label="Audio ID"
+                    className={ownerControlClass}
+                    value={audioId}
+                    onChange={(event) => setAudioId(event.target.value)}
+                  />
+                </OwnerField>
+              )}
+
               <OwnerField label="Label audio">
                 <input
                   aria-label="Label audio"
@@ -230,6 +384,19 @@ function Audio() {
                   onChange={(event) => setLabel(event.target.value)}
                 />
               </OwnerField>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              {audioType !== "custom" && (
+                <OwnerField label="Audio ID" hint="Terisi otomatis, dapat disalin bila diperlukan.">
+                  <input
+                    aria-label="Audio ID"
+                    className={`${ownerControlClass} bg-slate-50 text-slate-500`}
+                    value={audioId}
+                    readOnly
+                  />
+                </OwnerField>
+              )}
               <OwnerField label="Kategori">
                 <input
                   aria-label="Kategori audio"
@@ -282,26 +449,72 @@ function Audio() {
           ) : manifest.data && "items" in manifest.data ? (
             <OwnerPanel
               title="Katalog audio"
-              description={`${activeCount} dari ${items.length} audio sedang aktif.`}
+              description="Sound meja dan sound pengumuman dikelompokkan agar lebih mudah dicari dan dikelola."
             >
-              {items.length ? (
-                <div className="space-y-3">
-                  {items.map((item) => (
-                    <AudioItem
-                      key={item.audio_id}
-                      item={item}
-                      pendingItem={pendingItem}
-                      onMutate={(action) => void mutate(item.audio_id, action)}
-                      restaurantId={restaurantId}
+              <Tabs
+                value={activeGroup}
+                onValueChange={(value) => setActiveGroup(value as AudioGroup)}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <TabsList>
+                    <TabsTrigger value="table" className="gap-1.5">
+                      <Table2 className="size-4" /> Sound Meja
+                      <StatusBadge tone={activeGroup === "table" ? "info" : "neutral"}>
+                        {groups.table.length}
+                      </StatusBadge>
+                    </TabsTrigger>
+                    <TabsTrigger value="announcement" className="gap-1.5">
+                      <Megaphone className="size-4" /> Sound Pengumuman
+                      <StatusBadge tone={activeGroup === "announcement" ? "info" : "neutral"}>
+                        {groups.announcement.length}
+                      </StatusBadge>
+                    </TabsTrigger>
+                    <TabsTrigger value="custom" className="gap-1.5">
+                      <Sparkles className="size-4" /> Lainnya
+                      <StatusBadge tone={activeGroup === "custom" ? "info" : "neutral"}>
+                        {groups.custom.length}
+                      </StatusBadge>
+                    </TabsTrigger>
+                  </TabsList>
+                  <div className="relative sm:w-64">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 mt-0.5 size-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      aria-label="Cari audio"
+                      className={`${ownerControlClass} pl-10`}
+                      value={search}
+                      placeholder="Cari label atau ID..."
+                      onChange={(event) => setSearch(event.target.value)}
                     />
-                  ))}
+                  </div>
                 </div>
-              ) : (
-                <OwnerEmpty
-                  title="Katalog masih kosong"
-                  description="Unggah audio pertama untuk mulai menyusun katalog restoran ini."
-                />
-              )}
+
+                {(["table", "announcement", "custom"] as const).map((group) => (
+                  <TabsContent key={group} value={group} className="mt-4">
+                    {visibleItems.length && activeGroup === group ? (
+                      <div className="space-y-3">
+                        {visibleItems.map((item) => (
+                          <AudioItem
+                            key={item.audio_id}
+                            item={item}
+                            pendingItem={pendingItem}
+                            onMutate={(action) => void mutate(item.audio_id, action)}
+                            restaurantId={restaurantId}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <OwnerEmpty
+                        title={groups[group].length ? "Tidak ada hasil" : GROUP_META[group].title}
+                        description={
+                          groups[group].length
+                            ? "Tidak ada audio yang cocok dengan pencarian ini."
+                            : GROUP_META[group].empty
+                        }
+                      />
+                    )}
+                  </TabsContent>
+                ))}
+              </Tabs>
             </OwnerPanel>
           ) : (
             <OwnerNotice role="alert" tone="danger">
@@ -319,10 +532,13 @@ function Audio() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
+        {icon}
+        {label}
+      </p>
       <p className="mt-2 truncate text-xl font-black text-slate-950">{value}</p>
     </div>
   );
@@ -340,12 +556,19 @@ function AudioItem({
   restaurantId: string;
 }) {
   const pending = pendingItem === item.audio_id;
+  const group = classifyAudioId(item.audio_id);
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 sm:p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700">
-          <FileAudio className="size-5" />
+          {group === "announcement" ? (
+            <Megaphone className="size-5" />
+          ) : group === "table" ? (
+            <Table2 className="size-5" />
+          ) : (
+            <FileAudio className="size-5" />
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
