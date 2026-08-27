@@ -19,6 +19,7 @@ import { Route as SuperAdminBroadcastRouteImport } from './routes/super-admin/br
 import { Route as SuperAdminAudioRouteImport } from './routes/super-admin/audio'
 import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
+import { Route as ApiAudioAudioIdRouteImport } from './routes/api/audio/$audioId'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -71,6 +72,11 @@ const SuperAdminRestaurantsIdRoute = SuperAdminRestaurantsIdRouteImport.update({
   path: '/restaurants/$id',
   getParentRoute: () => SuperAdminRouteRoute,
 } as any)
+const ApiAudioAudioIdRoute = ApiAudioAudioIdRouteImport.update({
+  id: '/api/audio/$audioId',
+  path: '/api/audio/$audioId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/': typeof SuperAdminIndexRoute
+  '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
 }
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin': typeof SuperAdminIndexRoute
+  '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants': typeof SuperAdminRestaurantsIndexRoute
 }
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/': typeof SuperAdminIndexRoute
+  '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
 }
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/super-admin/error-log'
     | '/super-admin/history'
     | '/super-admin/'
+    | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants/'
   fileRoutesByTo: FileRoutesByTo
@@ -130,6 +140,7 @@ export interface FileRouteTypes {
     | '/super-admin/error-log'
     | '/super-admin/history'
     | '/super-admin'
+    | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants'
   id:
@@ -142,6 +153,7 @@ export interface FileRouteTypes {
     | '/super-admin/error-log'
     | '/super-admin/history'
     | '/super-admin/'
+    | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants/'
   fileRoutesById: FileRoutesById
@@ -150,6 +162,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SuperAdminRouteRoute: typeof SuperAdminRouteRouteWithChildren
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  ApiAudioAudioIdRoute: typeof ApiAudioAudioIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -224,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminRestaurantsIdRouteImport
       parentRoute: typeof SuperAdminRouteRoute
     }
+    '/api/audio/$audioId': {
+      id: '/api/audio/$audioId'
+      path: '/api/audio/$audioId'
+      fullPath: '/api/audio/$audioId'
+      preLoaderRoute: typeof ApiAudioAudioIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -255,6 +275,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SuperAdminRouteRoute: SuperAdminRouteRouteWithChildren,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  ApiAudioAudioIdRoute: ApiAudioAudioIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

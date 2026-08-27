@@ -21,8 +21,16 @@ const R2_PUBLIC_URL = process.env.CF_R2_PUBLIC_URL;
 const SUPABASE_URL = "https://kjzxtmxdbcanvkgqqdow.supabase.co";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLL_KEY_STAGING;
 
-if (!R2_ACCESS_KEY_ID || !SUPABASE_KEY) {
-  console.error("Missing env vars. R2:", !!R2_ACCESS_KEY_ID, "Supabase:", !!SUPABASE_KEY);
+const missingEnv = [
+  ["CF_ACCOUNT_ID", R2_ACCOUNT_ID],
+  ["CF_R2_ACCESS_KEY_ID", R2_ACCESS_KEY_ID],
+  ["CF_R2_SECRET_ACCESS_KEY", R2_SECRET_ACCESS_KEY],
+  ["CF_R2_PUBLIC_URL", R2_PUBLIC_URL],
+  ["SUPABASE_SERVICE_ROLL_KEY_STAGING", SUPABASE_KEY],
+].filter(([, value]) => !value);
+
+if (missingEnv.length > 0) {
+  console.error(`Missing required env vars: ${missingEnv.map(([name]) => name).join(", ")}`);
   process.exit(1);
 }
 

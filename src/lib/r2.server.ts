@@ -1,5 +1,6 @@
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -11,7 +12,7 @@ import { ANNOUNCEMENT_CATALOG } from "./remote-audio-domain";
 const R2_ACCOUNT_ID = process.env.CF_ACCOUNT_ID ?? "";
 const R2_ACCESS_KEY_ID = process.env.CF_R2_ACCESS_KEY_ID ?? "";
 const R2_SECRET_ACCESS_KEY = process.env.CF_R2_SECRET_ACCESS_KEY ?? "";
-const R2_BUCKET = process.env.CF_R2_BUCKET ?? "table-talker-static";
+const R2_BUCKET = process.env.CF_R2_BUCKET ?? "soundboard";
 const R2_PUBLIC_BASE = process.env.CF_R2_PUBLIC_URL ?? "https://static.xdirga.xyz";
 export const R2_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 export const R2_UPLOAD_MIN_BYTES = 1024 * 1024;
@@ -60,6 +61,15 @@ export async function getR2Health(): Promise<{
 export function r2Key(restaurantId: string, audioId: string, hash: string): string {
   const safeAudio = audioId.replace(":", "_");
   return `restaurants/${restaurantId}/${safeAudio}/${hash}.mp3`;
+}
+
+export async function readFromR2(key: string): Promise<Uint8Array> {
+  const s3 = getClient();
+  if (!s3) throw new Error("R2 belum dikonfigurasi.");
+
+  const object = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+  if (!object.Body) throw new Error("Objek audio tidak tersedia.");
+  return object.Body.transformToByteArray();
 }
 
 type R2UploadRequest = {

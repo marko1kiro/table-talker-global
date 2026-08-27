@@ -9,7 +9,7 @@ export type ManifestItem = {
   audioId: string;
   label: string;
   category: string;
-  r2Url: string;
+  downloadUrl: string;
   contentHash: string;
   byteSize: number;
 };
@@ -88,7 +88,7 @@ export const getRestaurantManifest = createServerFn({ method: "GET" })
       if (restaurantError || !restaurant) return offline();
       const { data: items, error } = await client
         .from("audio_manifests")
-        .select("audio_id, label, category, r2_url, content_hash, byte_size")
+        .select("audio_id, label, category, content_hash, byte_size")
         .eq("restaurant_id", data.restaurantId)
         .eq("catalog_version", restaurant.catalog_version)
         .eq("active", true)
@@ -99,7 +99,7 @@ export const getRestaurantManifest = createServerFn({ method: "GET" })
         audioId: row.audio_id,
         label: row.label,
         category: row.category,
-        r2Url: row.r2_url,
+        downloadUrl: `/api/audio/${encodeURIComponent(row.audio_id)}?restaurantId=${encodeURIComponent(data.restaurantId)}`,
         contentHash: row.content_hash,
         byteSize: row.byte_size,
       }));

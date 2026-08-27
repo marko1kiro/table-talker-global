@@ -2,9 +2,9 @@
 
 Soundboard panggilan meja berbasis TanStack Start dan Vercel.
 
-Seluruh audio **ikut di-bundle bersama deployment**. Aplikasi tidak memanggil
-storage atau API eksternal apa pun untuk memutar suara — jadi tidak ada kuota
-penyimpanan/operasi yang bisa habis, dan tidak ada tombol yang tiba-tiba bisu.
+Aset audio sumber tersedia di repository, sedangkan katalog per restoran disimpan
+di Cloudflare R2. Crew mengunduh audio melalui endpoint aplikasi yang terautentikasi,
+memverifikasi ukuran dan SHA-256, lalu menyimpannya di Cache Storage browser.
 
 ## Menjalankan lokal
 
@@ -18,9 +18,8 @@ npm run dev
 ### Kredensial
 
 Setup dashboard awal hanya membutuhkan `AUTH_SECRET` dan `DASHBOARD_PASSWORD`.
-Lima variabel fitur remote bersifat opsional: `SUPER_ADMIN_PASSWORD` serta empat
-variabel Supabase. Tanpanya, dashboard dan soundboard bundled tetap berjalan,
-tetapi remote audio dinonaktifkan secara fail-open.
+Login restoran, katalog audio, sinkronisasi crew, dan Super Admin juga membutuhkan
+konfigurasi Supabase dan Cloudflare R2 server-only.
 
 | Variable                    | Dipakai untuk                                       |
 | --------------------------- | --------------------------------------------------- |
@@ -31,6 +30,11 @@ tetapi remote audio dinonaktifkan secara fail-open.
 | `VITE_SUPABASE_ANON_KEY`    | Anon key Supabase publik untuk browser crew         |
 | `SUPABASE_URL`              | URL Supabase untuk server Super Admin               |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role key Supabase untuk server Super Admin  |
+| `CF_ACCOUNT_ID`             | Account ID Cloudflare untuk akses R2                |
+| `CF_R2_ACCESS_KEY_ID`       | Access key R2 server-only                           |
+| `CF_R2_SECRET_ACCESS_KEY`   | Secret key R2 server-only                           |
+| `CF_R2_BUCKET`              | Bucket R2; default `soundboard`                     |
+| `CF_R2_PUBLIC_URL`          | Base URL metadata upload (bukan URL download crew)  |
 
 `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` memang publik karena dibundel ke
 browser. `SUPABASE_URL` dan terutama `SUPABASE_SERVICE_ROLE_KEY` hanya untuk
@@ -46,7 +50,7 @@ start kalau `AUTH_SECRET` kosong atau kurang dari 32 karakter.
 
 ## Struktur audio
 
-Audio hidup di dalam repo dan diproses oleh pipeline aset Vite:
+Aset sumber Pilot hidup di dalam repo dan dapat diunggah ke katalog R2:
 
 ```text
 src/assets/audio/
@@ -71,11 +75,9 @@ daftar file yang perlu ditulis manual.
 2. Commit dan push.
 3. Vercel otomatis deploy ulang. Selesai.
 
-Vite menuliskan nama file ber-hash konten (mis. `1-a1b2c3d4.mp3`), jadi:
-
-- file audio aman di-cache selamanya oleh browser dan CDN, dan
-- begitu isi audio berubah, URL-nya berubah juga — staf tidak akan terjebak
-  memutar audio versi lama dari cache.
+Uploader menghitung SHA-256 dan menyimpan objek dengan key immutable. Saat login,
+crew mengambilnya melalui endpoint same-origin yang memvalidasi tenant dan katalog
+aktif; browser kemudian memverifikasi hash dan ukuran sebelum menyimpan cache.
 
 Tombol pengumuman membaca keempat nama file di `announcements/` secara persis.
 Kalau salah satu filenya tidak ada, tombolnya otomatis tampil non-aktif.
@@ -93,7 +95,8 @@ Fitur remote hanya aktif bila lima variabel opsionalnya juga diisi:
 `SUPABASE_URL`, dan `SUPABASE_SERVICE_ROLE_KEY`. Tanpanya, remote dinonaktifkan
 secara fail-open; dashboard dan soundboard audio bundled tetap berfungsi.
 
-Tidak ada storage yang perlu dihubungkan.
+Untuk sinkronisasi crew, konfigurasi Supabase dan kredensial Cloudflare R2
+server-only pada deployment. Browser tidak mengakses hostname publik R2 secara langsung.
 
 ### Super Admin remote audio
 
@@ -182,27 +185,27 @@ credential fields.
 5. Configure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `RESTAURANT_CODE_ENCRYPTION_KEY` only in protected runtime environment.
 6. Reprovision each row using exact UUID only. Do not pass a code by argv or environment. Preferred Windows flow keeps code out of argv, environment, and files. The command rotates code version and immediately revokes existing restaurant and crew sessions:
 
-    ```powershell
-    $code = Read-Host -AsSecureString
-    [System.Net.NetworkCredential]::new('', $code).Password | node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID --code-stdin
-    ```
+   ```powershell
+   $code = Read-Host -AsSecureString
+   [System.Net.NetworkCredential]::new('', $code).Password | node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID --code-stdin
+   ```
 
-    `--code-stdin` only accepts a pipeline; interactive TTY stdin is rejected. It removes one pipeline terminal newline and never prints credential material.
+   `--code-stdin` only accepts a pipeline; interactive TTY stdin is rejected. It removes one pipeline terminal newline and never prints credential material.
 
-    Unix file input remains available for protected automation:
+   Unix file input remains available for protected automation:
 
-    ```bash
-    chmod 600 /secure/path/restaurant-code
-    RESTAURANT_CODE_FILE=/secure/path/restaurant-code node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID
-    ```
+   ```bash
+   chmod 600 /secure/path/restaurant-code
+   RESTAURANT_CODE_FILE=/secure/path/restaurant-code node scripts/provision-restaurant-code.mjs --restaurant-id YOUR_RESTAURANT_UUID
+   ```
 
-    On Windows, `RESTAURANT_CODE_FILE` or `--code-file` must resolve below current user temp/home directories. Script runs `icacls /getowner` and requires current `USERNAME` ownership; it rejects broad `Everyone`, `BUILTIN\Users`, `Authenticated Users`, and `Users` read/write access, and fails closed when ACL inspection fails. Verify a temporary code file before provisioning with:
+   On Windows, `RESTAURANT_CODE_FILE` or `--code-file` must resolve below current user temp/home directories. Script runs `icacls /getowner` and requires current `USERNAME` ownership; it rejects broad `Everyone`, `BUILTIN\Users`, `Authenticated Users`, and `Users` read/write access, and fails closed when ACL inspection fails. Verify a temporary code file before provisioning with:
 
-    ```powershell
-    icacls "$env:TEMP\restaurant-code"
-    ```
+   ```powershell
+   icacls "$env:TEMP\restaurant-code"
+   ```
 
-    `RESTAURANT_CODE_FILE` is only a file path, never credential content. Script rejects insecure files and never prints code, hash, or ciphertext.
+   `RESTAURANT_CODE_FILE` is only a file path, never credential content. Script rejects insecure files and never prints code, hash, or ciphertext.
 
 7. Reprovision every active restaurant credential after deploying this release. Pilot sudah direprovisioning. Fallback HKDF legacy sudah dihapus, jadi semua kredensial wajib reprovisioning sebelum login. Do not add credential value to files, shell history, SQL, fixtures, logs, or CI.
 8. Enable feature flag after monitoring provisioning audit records. Apply cleanup only then: `npx supabase db push --include-all`. Migration `20260823120000_remove_legacy_restaurant_code.sql` aborts if any restaurant lacks derived credentials.

@@ -3,6 +3,7 @@ import type { ManifestItem } from "./restaurants.server";
 const CACHE_NAME = "table-talker-audio-v1";
 const CONCURRENT = 2;
 const MAX_RETRIES = 3;
+const DOWNLOAD_TIMEOUT_MS = 15_000;
 
 export type SyncProgress = {
   current: number;
@@ -10,12 +11,32 @@ export type SyncProgress = {
   label: string;
 };
 
+export type DownloadFailureReason = "http" | "network" | "timeout" | "size" | "hash";
+export type SyncFailureReason = DownloadFailureReason | "cache";
+
 export type SyncResult = {
   ok: boolean;
   cachedCount: number;
   downloadedCount: number;
   failedIds: string[];
   message?: string;
+  failureReason?: SyncFailureReason;
+};
+
+export type DownloadResult =
+  | { ok: true; buffer: ArrayBuffer }
+  | { ok: false; reason: DownloadFailureReason };
+
+type DownloadOptions = {
+  headers?: HeadersInit;
+  retries?: number;
+  timeoutMs?: number;
+  fetcher?: typeof fetch;
+};
+
+type SyncOptions = {
+  downloadHeaders?: HeadersInit;
+  downloadTimeoutMs?: number;
 };
 
 type CachedMeta = {
@@ -75,21 +96,46 @@ export async function downloadAndVerify(
   url: string,
   expectedHash: string,
   expectedSize: number,
-): Promise<ArrayBuffer | null> {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  {
+    headers,
+    retries = MAX_RETRIES,
+    timeoutMs = DOWNLOAD_TIMEOUT_MS,
+    fetcher = fetch,
+  }: DownloadOptions = {},
+): Promise<DownloadResult> {
+  let lastReason: DownloadFailureReason = "network";
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
+      const res = await fetcher(url, { headers, signal: controller.signal });
+      if (!res.ok) {
+        lastReason = "http";
+        continue;
+      }
       const buffer = await res.arrayBuffer();
-      if (buffer.byteLength !== expectedSize) continue;
+      if (buffer.byteLength !== expectedSize) {
+        lastReason = "size";
+        continue;
+      }
       const hash = await computeHash(buffer);
-      if (hash !== expectedHash) continue;
-      return buffer;
-    } catch {
-      // retry
+      if (hash !== expectedHash) {
+        lastReason = "hash";
+        continue;
+      }
+      return { ok: true, buffer };
+    } catch (error) {
+      lastReason =
+        controller.signal.aborted || (error instanceof Error && error.name === "AbortError")
+          ? "timeout"
+          : "network";
+    } finally {
+      clearTimeout(timeout);
     }
   }
-  return null;
+
+  return { ok: false, reason: lastReason };
 }
 
 export async function putToCache(
@@ -153,6 +199,7 @@ export async function syncManifest(
   manifest: ManifestItem[],
   onProgress?: (progress: SyncProgress) => void,
   cacheName: string = CACHE_NAME,
+  options: SyncOptions = {},
 ): Promise<SyncResult> {
   if (typeof caches === "undefined") {
     return {
@@ -198,36 +245,57 @@ export async function syncManifest(
 
   const total = manifest.length;
   let downloadedCount = 0;
+  let completedCount = 0;
   const failedIds = new Set<string>();
+  const failureReasons = new Map<string, SyncFailureReason>();
+
+  onProgress?.({ current: cachedCount, total, label: "Memulai unduhan..." });
 
   for (let i = 0; i < needsDownload.length; i += CONCURRENT) {
     const batch = needsDownload.slice(i, i + CONCURRENT);
-    const results = await Promise.allSettled(
+    await Promise.all(
       batch.map(async (item) => {
-        onProgress?.({ current: cachedCount + downloadedCount, total, label: item.label });
-        const buffer = await downloadAndVerify(item.r2Url, item.contentHash, item.byteSize);
-        if (!buffer) {
+        try {
+          const download = await downloadAndVerify(
+            item.downloadUrl,
+            item.contentHash,
+            item.byteSize,
+            {
+              headers: options.downloadHeaders,
+              timeoutMs: options.downloadTimeoutMs,
+            },
+          );
+          if (!download.ok) {
+            failedIds.add(item.audioId);
+            failureReasons.set(item.audioId, download.reason);
+            return;
+          }
+          const cachedOk = await putToCache(
+            restaurantId,
+            item.audioId,
+            download.buffer,
+            item.contentHash,
+            cacheName,
+          );
+          if (!cachedOk) {
+            failedIds.add(item.audioId);
+            failureReasons.set(item.audioId, "cache");
+            return;
+          }
+          downloadedCount++;
+        } catch {
           failedIds.add(item.audioId);
-          return;
+          failureReasons.set(item.audioId, "network");
+        } finally {
+          completedCount++;
+          onProgress?.({
+            current: cachedCount + completedCount,
+            total,
+            label: item.label,
+          });
         }
-        const ok = await putToCache(
-          restaurantId,
-          item.audioId,
-          buffer,
-          item.contentHash,
-          cacheName,
-        );
-        if (!ok) {
-          failedIds.add(item.audioId);
-          return;
-        }
-        downloadedCount++;
       }),
     );
-
-    if (results.some((r) => r.status === "rejected")) {
-      batch.forEach((item) => failedIds.add(item.audioId));
-    }
   }
 
   if (failedIds.size === 0) {
@@ -236,13 +304,23 @@ export async function syncManifest(
     if (staleIds.length > 0) await removeFromCache(restaurantId, staleIds, cacheName);
   }
 
-  onProgress?.({ current: total, total, label: "Selesai" });
+  const failureReason = failureReasons.values().next().value;
+  const ok = failedIds.size === 0;
+  onProgress?.({ current: total, total, label: ok ? "Selesai" : "Pemeriksaan selesai" });
 
   return {
-    ok: failedIds.size === 0,
+    ok,
     cachedCount,
     downloadedCount,
     failedIds: [...failedIds],
+    failureReason,
+    message: ok
+      ? undefined
+      : failureReason === "cache"
+        ? "Cache Storage browser gagal menyimpan audio. Kosongkan ruang penyimpanan lalu coba lagi."
+        : failureReason === "timeout" || failureReason === "network"
+          ? `${failedIds.size} audio gagal diunduh. Periksa koneksi lalu coba lagi.`
+          : `${failedIds.size} audio tidak dapat diverifikasi. Coba lagi atau hubungi admin.`,
   };
 }
 
