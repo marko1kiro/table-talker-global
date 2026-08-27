@@ -41,3 +41,4 @@ dist-ssr
 
 # Local worktrees
 .worktrees/
+.env*
