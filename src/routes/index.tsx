@@ -13,7 +13,7 @@ import {
   runIfPlaybackCurrent,
   unlockBundledAudio,
 } from "@/lib/audio";
-import { getCachedAudioUrl } from "@/lib/audio-sync";
+import { createCachedAudioUrlPool } from "@/lib/audio-sync";
 import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
 import { SyncDialog } from "@/components/SyncDialog";
 import { CrewMessageOverlay } from "@/components/CrewMessageOverlay";
@@ -67,6 +67,12 @@ function announcementAudioId(announcementId: string): AudioId {
   return `announcement:${announcementId}` as AudioId;
 }
 
+const ACCESS_VALIDATION_INTERVAL_MS = 30_000;
+
+function crewAccessKey(identity: CrewIdentity) {
+  return `${identity.restaurantId}:${identity.crewSessionId}:${identity.crewSessionToken}`;
+}
+
 function SoundboardPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioControllerRef = useRef<ReturnType<typeof createAudioPlaybackController> | null>(null);
@@ -80,7 +86,9 @@ function SoundboardPage() {
   const [audioSynced, setAudioSynced] = useState(false);
   const [availableAudioIds, setAvailableAudioIds] = useState<ReadonlySet<AudioId>>(new Set());
   const [accessError, setAccessError] = useState("");
-  const objectUrlRef = useRef<string | null>(null);
+  const audioUrlPoolRef = useRef<ReturnType<typeof createCachedAudioUrlPool> | null>(null);
+  const validatedAccessRef = useRef({ identityKey: "", validatedAt: 0 });
+  const accessValidationPromiseRef = useRef<Promise<void> | null>(null);
   const crewIdentityRef = useRef<CrewIdentity | null>(null);
   crewIdentityRef.current = crewIdentity;
 
@@ -119,9 +127,15 @@ function SoundboardPage() {
   useScreenWakeLock(identityHydrated);
   const crewMessage = useCrewMessage(identityHydrated);
 
+  const getAudioUrlPool = useCallback(() => {
+    audioUrlPoolRef.current ??= createCachedAudioUrlPool();
+    return audioUrlPoolRef.current;
+  }, []);
+
   useEffect(() => {
     return () => {
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      audioUrlPoolRef.current?.clear();
+      audioUrlPoolRef.current = null;
       audioControllerRef.current?.stop();
       audioControllerRef.current = null;
       audioRef.current = null;
@@ -131,8 +145,6 @@ function SoundboardPage() {
   const stop = useCallback(() => {
     playbackGenerationRef.current.next();
     audioControllerRef.current?.stop();
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    objectUrlRef.current = null;
     activeAudioIdRef.current = null;
     setPlaying(null);
     setPaused(null);
@@ -144,8 +156,6 @@ function SoundboardPage() {
     audioRef.current = audio;
     audioControllerRef.current ??= createAudioPlaybackController(audio, (token) => {
       if (!playbackGenerationRef.current.isCurrent(token)) return;
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
       activeAudioIdRef.current = null;
       setPlaying(null);
       setPaused(null);
@@ -162,8 +172,10 @@ function SoundboardPage() {
   const invalidateCrewSession = useCallback(() => {
     playbackGenerationRef.current.next();
     audioControllerRef.current?.stop();
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    objectUrlRef.current = null;
+    audioUrlPoolRef.current?.clear();
+    audioUrlPoolRef.current = null;
+    validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
+    accessValidationPromiseRef.current = null;
     activeAudioIdRef.current = null;
     removeCrewSessionIdentity(browserSessionStorage());
     void clearQueuedEvents();
@@ -176,37 +188,57 @@ function SoundboardPage() {
     setAccessError("Audio diblokir karena sesi resto tidak valid.");
   }, []);
 
-  const assertCrewAccess = useCallback(async () => {
+  const validateCrewAccessInBackground = useCallback(() => {
     const identity = crewIdentityRef.current;
-    if (!identity) {
-      invalidateCrewSession();
-      throw new Error("Audio diblokir karena sesi resto tidak valid.");
-    }
-    const result = await validateCrewAccess({
+    if (!identity?.crewSessionId || !identity.crewSessionToken) return;
+
+    const identityKey = crewAccessKey(identity);
+    const lastValidation = validatedAccessRef.current;
+    if (
+      lastValidation.identityKey === identityKey &&
+      Date.now() - lastValidation.validatedAt < ACCESS_VALIDATION_INTERVAL_MS
+    )
+      return;
+    if (accessValidationPromiseRef.current) return;
+
+    const validation = validateCrewAccess({
       data: {
         tenantToken: identity.tenantToken,
         crewSessionToken: identity.crewSessionToken,
         crewSessionId: identity.crewSessionId,
       },
-    });
-    if (!result.ok) {
-      invalidateCrewSession();
-      throw new Error("Audio diblokir karena sesi resto tidak valid.");
-    }
+    })
+      .then((result) => {
+        const currentIdentity = crewIdentityRef.current;
+        if (!currentIdentity || crewAccessKey(currentIdentity) !== identityKey) return;
+        if (!result.ok) {
+          invalidateCrewSession();
+          return;
+        }
+        validatedAccessRef.current = { identityKey, validatedAt: Date.now() };
+      })
+      .catch(() => {
+        // A transient validation outage must not block verified local audio.
+      })
+      .finally(() => {
+        if (accessValidationPromiseRef.current === validation)
+          accessValidationPromiseRef.current = null;
+      });
+
+    accessValidationPromiseRef.current = validation;
   }, [invalidateCrewSession]);
 
   const playRemoteAudio = useCallback(
     async (audioId: AudioId) => {
-      await assertCrewAccess();
       if (!audioSynced) throw new Error("Audio belum selesai disinkronkan.");
+      validateCrewAccessInBackground();
       const restaurantId = crewIdentityRef.current?.restaurantId;
-      const url = restaurantId ? await getCachedAudioUrl(restaurantId, audioId) : null;
+      const url = restaurantId ? await getAudioUrlPool().get(restaurantId, audioId) : null;
       if (!url) throw new Error("Audio tidak tersedia.");
       stop();
       const { controller } = getAudioController();
       const token = playbackGenerationRef.current.next();
       activeAudioIdRef.current = audioId;
-      objectUrlRef.current = url;
       setLoading(audioId);
       try {
         await controller.play(url, token);
@@ -223,7 +255,7 @@ function SoundboardPage() {
         throw error;
       }
     },
-    [assertCrewAccess, audioSynced, getAudioController, stop],
+    [audioSynced, getAudioController, getAudioUrlPool, stop, validateCrewAccessInBackground],
   );
 
   const remoteCrew = useRemoteCrew({
@@ -236,11 +268,7 @@ function SoundboardPage() {
   const play = useCallback(
     async (id: number | AudioId) => {
       if (!audioSynced) return;
-      try {
-        await assertCrewAccess();
-      } catch {
-        return;
-      }
+      validateCrewAccessInBackground();
       // Kunci sinkron mencegah dua klik cepat memulai audio secara bersamaan.
       if (activeAudioIdRef.current !== null) return;
 
@@ -291,14 +319,20 @@ function SoundboardPage() {
 
       const audioId = typeof id === "number" ? tableAudioId(id) : id;
       const restaurantId = crewIdentityRef.current?.restaurantId;
-      const url = restaurantId ? await getCachedAudioUrl(restaurantId, audioId) : null;
-      if (!url) return;
+      if (!restaurantId) return;
 
       const token = playbackGenerationRef.current.next();
       activeAudioIdRef.current = id;
-      objectUrlRef.current = url;
       setPaused(null);
       setLoading(id);
+      const url = await getAudioUrlPool().get(restaurantId, audioId);
+      if (!playbackGenerationRef.current.isCurrent(token)) return;
+      if (!url) {
+        activeAudioIdRef.current = null;
+        setLoading(null);
+        return;
+      }
+
       const { controller } = getAudioController();
       try {
         await controller.play(url, token);
@@ -336,7 +370,14 @@ function SoundboardPage() {
         });
       }
     },
-    [assertCrewAccess, audioSynced, getAudioController, paused, recordEvent],
+    [
+      audioSynced,
+      getAudioController,
+      getAudioUrlPool,
+      paused,
+      recordEvent,
+      validateCrewAccessInBackground,
+    ],
   );
 
   const toggleAnnouncement = useCallback(
@@ -368,6 +409,9 @@ function SoundboardPage() {
           open={!crewIdentity}
           unlockAudio={unlockAudio}
           onContinue={(identity) => {
+            audioUrlPoolRef.current?.clear();
+            audioUrlPoolRef.current = null;
+            validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
             setAudioSynced(false);
             const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
             setCrewIdentity({ ...(saved ?? identity), audioReady: identity.audioReady });
@@ -389,6 +433,7 @@ function SoundboardPage() {
           onSynced={(audioIds) => {
             setAvailableAudioIds(new Set(audioIds as AudioId[]));
             setAudioSynced(true);
+            void getAudioUrlPool().preload(crewIdentity.restaurantId, audioIds);
           }}
           onSessionInvalid={invalidateCrewSession}
         />

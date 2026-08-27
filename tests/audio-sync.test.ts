@@ -22,6 +22,7 @@ const manifest = [
     label: "Meja 1",
     category: "BASE",
     downloadUrl: "/api/audio/table%3A1?restaurantId=restaurant-a",
+    downloadGrant: "grant-table-1",
     contentHash: "",
     byteSize: 1024,
   },
@@ -30,6 +31,7 @@ const manifest = [
     label: "Meja 2",
     category: "BASE",
     downloadUrl: "/api/audio/table%3A2?restaurantId=restaurant-a",
+    downloadGrant: "grant-table-2",
     contentHash: "",
     byteSize: 2048,
   },
@@ -224,25 +226,38 @@ describe("audio-sync", () => {
       expect(onProgress.mock.calls.at(-1)?.[0]).toMatchObject({ current: 2, total: 2 });
     });
 
-    it("sends tenant authorization only through request headers", async () => {
+    it("sends item-specific download grants only through request headers", async () => {
       setupCaches();
       globalThis.fetch = vi.fn(async (url: string) => {
         const data = url.includes("table%3A1") ? TABLE_1_DATA : TABLE_2_DATA;
         return new Response(data.buffer.slice(0), { status: 200 });
       }) as never;
 
-      await syncManifest("restaurant-a", manifest, undefined, "test-cache", {
-        downloadHeaders: { Authorization: "Bearer tenant-secret" },
-      });
+      await syncManifest("restaurant-a", manifest, undefined, "test-cache");
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/audio/"),
         expect.objectContaining({
-          headers: { Authorization: "Bearer tenant-secret" },
+          headers: expect.any(Headers),
           signal: expect.any(AbortSignal),
         }),
       );
-      expect(manifest.every((item) => !item.downloadUrl.includes("tenant-secret"))).toBe(true);
+      const headers = vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.headers as Headers;
+      expect(headers.get("x-audio-grant")).toBe("grant-table-1");
+      expect(headers.has("authorization")).toBe(false);
+      expect(manifest.every((item) => !item.downloadUrl.includes(item.downloadGrant))).toBe(true);
+    });
+
+    it("opens Cache Storage once for metadata and all writes", async () => {
+      setupCaches();
+      globalThis.fetch = vi.fn(async (url: string) => {
+        const data = url.includes("table%3A1") ? TABLE_1_DATA : TABLE_2_DATA;
+        return new Response(data.buffer.slice(0), { status: 200 });
+      }) as never;
+
+      await syncManifest("restaurant-a", manifest, undefined, "test-cache");
+
+      expect(caches.open).toHaveBeenCalledTimes(1);
     });
 
     it("reports progress via callback", async () => {

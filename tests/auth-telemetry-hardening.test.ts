@@ -161,7 +161,7 @@ it("defines legacy global restaurant-login rate-limit buckets", () => {
   expect(migration).toMatch(/clear_global_tenant_login_failures\(text\)/i);
 });
 
-it("validates tenant-bound crew access server-side before local playback", () => {
+it("validates tenant-bound crew access in the background without delaying local playback", () => {
   const access = source("../src/lib/playback-access.server.ts");
   expect(access).toContain("validateCrewAccess");
   expect(access).toContain("verifyActiveTenantSession");
@@ -170,7 +170,9 @@ it("validates tenant-bound crew access server-side before local playback", () =>
 
   const page = source("../src/routes/index.tsx");
   expect(page).toContain("validateCrewAccess");
-  expect(page).toContain("await validateCrewAccess({");
+  expect(page).toContain("const validation = validateCrewAccess({");
+  expect(page).toContain("validateCrewAccessInBackground();");
+  expect(page).not.toContain("await validateCrewAccess({");
   expect(page).toContain("invalidateCrewSession();");
   expect(page).toContain("Audio diblokir karena sesi resto tidak valid.");
 });

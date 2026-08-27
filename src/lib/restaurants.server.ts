@@ -10,6 +10,7 @@ export type ManifestItem = {
   label: string;
   category: string;
   downloadUrl: string;
+  downloadGrant: string;
   contentHash: string;
   byteSize: number;
 };
@@ -21,6 +22,7 @@ function offline() {
 }
 
 const serverCredentialModules = createServerOnlyFn(async () => ({
+  ...(await import("./audio-download-grant.server")),
   ...(await import("./restaurant-code.server")),
   ...(await import("./restaurant-session.server")),
 }));
@@ -76,7 +78,8 @@ export const getRestaurantManifest = createServerFn({ method: "GET" })
     const client = getServiceClient();
     if (!client) return offline();
     try {
-      const { verifyActiveTenantSession } = await serverCredentialModules();
+      const { createAudioDownloadGrant, verifyActiveTenantSession } =
+        await serverCredentialModules();
       const tenant = await verifyActiveTenantSession(client, data.tenantToken);
       if (!tenant || tenant.restaurantId !== data.restaurantId)
         return { error: "Sesi resto tidak valid." };
@@ -100,6 +103,12 @@ export const getRestaurantManifest = createServerFn({ method: "GET" })
         label: row.label,
         category: row.category,
         downloadUrl: `/api/audio/${encodeURIComponent(row.audio_id)}?restaurantId=${encodeURIComponent(data.restaurantId)}`,
+        downloadGrant: createAudioDownloadGrant({
+          restaurantId: data.restaurantId,
+          audioId: row.audio_id,
+          contentHash: row.content_hash,
+          byteSize: row.byte_size,
+        }),
         contentHash: row.content_hash,
         byteSize: row.byte_size,
       }));
