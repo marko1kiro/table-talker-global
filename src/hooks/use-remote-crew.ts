@@ -462,10 +462,13 @@ export function useRemoteCrew({
   const catchUpUncertain = useRef(false);
   const playRef = useRef(playRemoteAudio);
   playRef.current = playRemoteAudio;
+  const registrationRef = useRef(registration);
+  registrationRef.current = registration;
   const registrationKey = crewRegistrationKey(registration);
 
   useEffect(() => {
     const client = getSupabaseBrowserClient();
+    const registration = registrationRef.current;
     if (!registration) {
       setOffline(false);
       setConnectionState("offline");
@@ -731,7 +734,7 @@ export function useRemoteCrew({
       channel = null;
       if (currentChannel) void client.removeChannel(currentChannel);
     };
-  }, [registration, registrationKey, onCrewSessionId, onSessionInvalid]);
+  }, [registrationKey, onCrewSessionId, onSessionInvalid]);
 
   return {
     offline,
