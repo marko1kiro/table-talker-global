@@ -24,7 +24,7 @@ describe("validateRestaurantCode", () => {
   });
 
   it("rejects transformed, malformed, and out-of-range codes", () => {
-    for (const value of [" kampung123", "kampung123", "ABCDE", "A".repeat(33), "ABC-123"]) {
+    for (const value of [" kampung123", "kampung123", "ABCDE", "A".repeat(33)]) {
       expect(validateRestaurantCode(value)).toEqual({ error: "Kode Resto salah." });
     }
   });

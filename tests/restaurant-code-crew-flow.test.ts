@@ -9,7 +9,8 @@ it("collects exact Kode Resto before crew name without client transformation or 
   expect(dialog).not.toContain("toUpperCase");
   expect(dialog).not.toContain("PIN");
   expect(dialog).not.toContain("restaurantCode");
-  expect(dialog).toContain('setStep("name")');
+  expect(dialog).toContain("autoCrewName");
+  expect(dialog).toContain("restaurantId");
 });
 
 it("uses Kode Resto dialog as crew route entry gate without global dashboard auth", () => {

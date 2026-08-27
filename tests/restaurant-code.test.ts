@@ -16,6 +16,7 @@ const restaurantId = "00000000-0000-4000-8000-000000000001";
 it("accepts exact uppercase ASCII codes from six through thirty-two characters", () => {
   expect(validateRestaurantCode(code())).toEqual({ code: code() });
   expect(validateRestaurantCode("A".repeat(32))).toEqual({ code: "A".repeat(32) });
+  expect(validateRestaurantCode("KAMPUNG-BULU")).toEqual({ code: "KAMPUNG-BULU" });
 });
 
 it("rejects transformed and malformed values without returning input", () => {
@@ -25,7 +26,6 @@ it("rejects transformed and malformed values without returning input", () => {
     `${code()} `,
     "A".repeat(5),
     "A".repeat(33),
-    "A-BBBB",
     "A_BBBB",
     "AＡBBBB",
     "",

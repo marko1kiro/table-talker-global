@@ -77,7 +77,6 @@ function SoundboardPage() {
   const [loading, setLoading] = useState<number | AudioId | null>(null);
   const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(null);
   const [identityHydrated, setIdentityHydrated] = useState(false);
-  const [duplicateName, setDuplicateName] = useState(false);
   const [audioSynced, setAudioSynced] = useState(false);
   const [availableAudioIds, setAvailableAudioIds] = useState<ReadonlySet<AudioId>>(new Set());
   const [accessError, setAccessError] = useState("");
@@ -234,13 +233,6 @@ function SoundboardPage() {
     onSessionInvalid: invalidateCrewSession,
   });
 
-  useEffect(() => {
-    if (!remoteCrew.duplicateName) return;
-    setDuplicateName(true);
-    removeCrewSessionIdentity(browserSessionStorage());
-    setCrewIdentity(null);
-  }, [remoteCrew.duplicateName]);
-
   const play = useCallback(
     async (id: number | AudioId) => {
       if (!audioSynced) return;
@@ -374,10 +366,8 @@ function SoundboardPage() {
       {identityHydrated && (
         <CrewIdentityDialog
           open={!crewIdentity}
-          duplicateName={duplicateName}
           unlockAudio={unlockAudio}
           onContinue={(identity) => {
-            setDuplicateName(false);
             setAudioSynced(false);
             const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
             setCrewIdentity({ ...(saved ?? identity), audioReady: identity.audioReady });
