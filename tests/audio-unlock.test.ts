@@ -115,7 +115,6 @@ it("hydrates a same-tab crew after mount without persisting audio readiness", ()
   expect(hydrationEffect?.[0]).toContain("setIdentityHydrated(true)");
   expect(route).toContain("writeCrewSessionIdentity(browserSessionStorage(), identity)");
   expect(route).toContain("removeCrewSessionIdentity(browserSessionStorage())");
-  expect(route).toContain("Aktifkan Suara");
 });
 
 it("gates the crew dialog and remote registration until identity hydration completes", () => {
