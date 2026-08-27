@@ -10,8 +10,7 @@ import {
   syncManifest,
 } from "@/lib/audio-sync";
 import { Button } from "./ui/button";
-import { Card, CardContent } from "./ui/card";
-import { Loader2, Wifi, WifiOff } from "lucide-react";
+import { CheckCircle2, Loader2, Wifi, WifiOff } from "lucide-react";
 
 type SyncDialogProps = {
   restaurantId: string;
@@ -151,39 +150,53 @@ export function SyncDialog({
   }, [runSync]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-      <Card className="w-full max-w-sm mx-4">
-        <CardContent className="p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-brutal-fg/60 p-4 backdrop-blur-sm animate-in fade-in-0 duration-200">
+      <div className="brutal-border brutal-shadow-lg w-full max-w-sm animate-in zoom-in-95 fade-in-0 rounded-none bg-card duration-300">
+        <div className="space-y-4 p-6">
           {state.phase === "fetching" && (
-            <div className="flex flex-col items-center gap-3 py-4">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Memuat manifest audio...</p>
+            <div className="flex flex-col items-center gap-4 py-4">
+              <div className="relative flex h-16 w-16 items-center justify-center">
+                <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                <span className="brutal-border absolute inset-0 rounded-full bg-background" />
+                <Loader2 className="relative h-8 w-8 animate-spin text-primary" strokeWidth={2.5} />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-bold">Memuat manifest audio...</p>
+                <p className="mt-2 flex items-center justify-center gap-1">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
+                </p>
+              </div>
             </div>
           )}
 
           {state.phase === "syncing" && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <Wifi className="h-4 w-4 text-primary" />
-                <p className="text-sm font-medium">Sinkronisasi Audio</p>
+                <span className="relative flex h-6 w-6 items-center justify-center">
+                  <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                  <Wifi className="relative h-4 w-4 animate-pulse text-primary" strokeWidth={2.5} />
+                </span>
+                <p className="text-sm font-bold">Sinkronisasi Audio</p>
               </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{state.progress.label}</span>
-                  <span>
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-medium text-muted-foreground">
+                  <span className="truncate">{state.progress.label}</span>
+                  <span className="tabular-nums font-bold text-foreground">
                     {state.progress.current}/{state.progress.total}
                   </span>
                 </div>
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div className="brutal-border h-3 overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full bg-primary transition-all duration-300"
+                    className="brutal-shimmer h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
                     style={{
                       width: `${state.progress.total > 0 ? (state.progress.current / state.progress.total) * 100 : 0}%`,
                     }}
                   />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground text-center">
+              <p className="animate-pulse text-center text-xs font-medium text-muted-foreground">
                 Jangan tutup aplikasi selama sinkronisasi
               </p>
             </div>
@@ -191,26 +204,37 @@ export function SyncDialog({
 
           {state.phase === "done" && (
             <div className="flex flex-col items-center gap-3 py-4">
-              <Wifi className="h-8 w-8 text-green-500" />
-              <p className="text-sm font-medium">Audio siap digunakan</p>
+              <div className="relative flex h-16 w-16 items-center justify-center">
+                <span className="absolute inset-0 rounded-full bg-brutal-success/25 animate-ping" />
+                <CheckCircle2
+                  className="brutal-pop-in relative h-10 w-10 text-brutal-success"
+                  strokeWidth={2.5}
+                />
+              </div>
+              <p className="text-sm font-bold">Audio siap digunakan</p>
             </div>
           )}
 
           {state.phase === "error" && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <WifiOff className="h-4 w-4 text-destructive" />
-                <p className="text-sm font-medium">Sinkronisasi Gagal</p>
+              <div className="brutal-shake flex items-center gap-2">
+                <WifiOff className="h-4 w-4 text-destructive" strokeWidth={2.5} />
+                <p className="text-sm font-bold">Sinkronisasi Gagal</p>
               </div>
               <p className="text-sm text-muted-foreground">{state.message}</p>
               <p className="text-xs text-muted-foreground">Laporan: {state.reportCode}</p>
-              <Button onClick={runSync} className="w-full" size="sm">
+              <Button
+                onClick={runSync}
+                variant="ghost"
+                size="sm"
+                className="brutal-border brutal-shadow brutal-press w-full rounded-none bg-accent font-bold text-accent-foreground hover:bg-accent"
+              >
                 Coba Lagi
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
