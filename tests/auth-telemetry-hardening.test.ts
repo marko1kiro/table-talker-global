@@ -18,7 +18,7 @@ it("uses active database-backed tenant sessions for server tenant access", () =>
   const tenant = source("../src/lib/restaurant-session.server.ts");
   expect(tenant).toContain("verifyActiveTenantSession");
   expect(tenant).toContain("restaurant_access_tokens");
-  expect(tenant).toContain('"is_active", true');
+  expect(tenant).toContain("isRestaurantActive");
   expect(tenant).toContain("data.code_version !== currentRestaurantVersion(data.restaurants)");
 
   for (const path of [

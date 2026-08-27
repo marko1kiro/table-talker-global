@@ -17,15 +17,27 @@ function currentRestaurantVersion(
   return Array.isArray(restaurants) ? restaurants[0]?.code_version : restaurants.code_version;
 }
 
+function isRestaurantActive(
+  restaurants:
+    | { is_active: boolean; code_version: number }
+    | { is_active: boolean; code_version: number }[],
+) {
+  return Array.isArray(restaurants) ? restaurants[0]?.is_active : restaurants.is_active;
+}
+
 export async function verifyActiveTenantSession(client: SupabaseClient, token: string) {
   const { data, error } = await client
     .from("restaurant_access_tokens")
     .select("restaurant_id, code_version, restaurants!inner(is_active, code_version)")
     .eq("token_hash", hashOpaqueRestaurantToken(token))
     .gt("expires_at", new Date().toISOString())
-    .eq("is_active", true)
     .maybeSingle();
-  if (error || !data || data.code_version !== currentRestaurantVersion(data.restaurants))
+  if (
+    error ||
+    !data ||
+    !isRestaurantActive(data.restaurants) ||
+    data.code_version !== currentRestaurantVersion(data.restaurants)
+  )
     return null;
   return { restaurantId: data.restaurant_id as string, codeVersion: data.code_version as number };
 }
@@ -43,9 +55,13 @@ export async function verifyCrewSessionToken(
     .eq("token_hash", hashOpaqueRestaurantToken(token))
     .eq("restaurant_id", restaurantId)
     .gt("expires_at", new Date().toISOString())
-    .eq("is_active", true)
     .maybeSingle();
-  if (error || !data || data.code_version !== currentRestaurantVersion(data.restaurants))
+  if (
+    error ||
+    !data ||
+    !isRestaurantActive(data.restaurants) ||
+    data.code_version !== currentRestaurantVersion(data.restaurants)
+  )
     return null;
   return {
     crewSessionId: data.crew_session_id as string,
