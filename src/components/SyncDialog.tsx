@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getRestaurantManifest } from "@/lib/restaurants.server";
 import { captureError } from "@/lib/error-capture";
 import {
@@ -41,11 +41,14 @@ export function SyncDialog({
   const runGateRef = useRef(createSyncRunGate());
   const failedManifestRef = useRef<Set<string> | null>(null);
 
-  const reportSyncError = (reportCode: string, detail: string) => {
-    void captureError({ stage: "sync_cache", reportCode, detail, tenantToken });
-  };
+  const reportSyncError = useCallback(
+    (reportCode: string, detail: string) => {
+      void captureError({ stage: "sync_cache", reportCode, detail, tenantToken });
+    },
+    [tenantToken],
+  );
 
-  const runSync = async () => {
+  const runSync = useCallback(async () => {
     const runId = runGateRef.current.start();
     setState({ phase: "fetching" });
 
@@ -136,15 +139,16 @@ export function SyncDialog({
         });
       }
     }
-  };
+  }, [onSessionInvalid, onSynced, reportSyncError, restaurantId, tenantToken]);
 
   useEffect(() => {
+    const runGate = runGateRef.current;
     failedManifestRef.current = null;
-    runSync();
+    void runSync();
     return () => {
-      runGateRef.current.cancel();
+      runGate.cancel();
     };
-  }, [restaurantId, tenantToken]);
+  }, [runSync]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">

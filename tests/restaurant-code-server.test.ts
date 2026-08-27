@@ -5,11 +5,14 @@ const adminSource = readFileSync(
   new URL("../src/lib/admin-restaurants.server.ts", import.meta.url),
   "utf8",
 );
-const crewSource = readFileSync(new URL("../src/lib/restaurants.server.ts", import.meta.url), "utf8");
+const crewSource = readFileSync(
+  new URL("../src/lib/restaurants.server.ts", import.meta.url),
+  "utf8",
+);
 
 it("uses keyed exact-code lookup and one generic failure at crew boundary", () => {
   expect(crewSource).toContain("validateRestaurantCode(data.code)");
-  expect(crewSource).toContain('hashRestaurantCode(valid ? validated.code : "INVALID", key)');
+  expect(crewSource).toContain('hashRestaurantCode(valid ? validated.code : "\\n", key)');
   expect(crewSource).not.toContain("hashLegacyRestaurantCode");
   expect(crewSource).not.toContain('.ilike("code"');
   expect(crewSource).not.toContain("verifyLegacyRestaurantPin");

@@ -43,11 +43,7 @@ export function isDuplicateCrewMessage(
   return delivered.has(id);
 }
 
-export function markDeliveredCrewMessage(
-  id: string,
-  delivered: Map<string, number>,
-  now: number,
-) {
+export function markDeliveredCrewMessage(id: string, delivered: Map<string, number>, now: number) {
   delivered.set(id, now);
 }
 

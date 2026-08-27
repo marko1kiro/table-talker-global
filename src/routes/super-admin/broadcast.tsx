@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ALL_CONFIRMATION } from "@/lib/owner-broadcast-domain";
 import { previewOwnerBroadcast, sendOwnerBroadcast } from "@/lib/owner-broadcast.server";
 import { CREW_MESSAGE_MAX_LENGTH } from "@/lib/crew-message-domain";
 import { listOwnerRestaurants } from "@/lib/owner-restaurants.server";
+import { shouldResetBroadcastIdempotencyKey } from "@/lib/owner-broadcast-retry";
 
 export const Route = createFileRoute("/super-admin/broadcast")({ component: Broadcast });
 
@@ -19,18 +20,37 @@ function Broadcast() {
   );
   const [result, setResult] = useState<Awaited<ReturnType<typeof sendOwnerBroadcast>> | null>(null);
   const [error, setError] = useState("");
+  const idempotencyKey = useRef<string | null>(null);
+  const previewRequestId = useRef(0);
+  const resetRequest = () => {
+    idempotencyKey.current = null;
+    previewRequestId.current += 1;
+    setPreview(null);
+    setResult(null);
+    setError("");
+  };
   const restaurants = useQuery({ queryKey: ["owner-restaurants"], queryFn: listOwnerRestaurants });
   const previewMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: ({
+      scope: requestScope,
+      restaurantId: requestRestaurantId,
+    }: {
+      requestId: number;
+      scope: "restaurant" | "all";
+      restaurantId?: string;
+    }) =>
       previewOwnerBroadcast({
-        data: { scope, restaurantId: scope === "restaurant" ? restaurantId : undefined },
+        data: { scope: requestScope, restaurantId: requestRestaurantId },
       }),
-    onSuccess: (data) => {
+    onSuccess: (data, { requestId }) => {
+      if (requestId !== previewRequestId.current) return;
       setPreview(data);
       setResult(null);
       setError(data.ok ? "" : data.message);
     },
-    onError: () => setError("Preview broadcast gagal."),
+    onError: (_error, { requestId }) => {
+      if (requestId === previewRequestId.current) setError("Preview broadcast gagal.");
+    },
   });
   const sendMutation = useMutation({
     mutationFn: () =>
@@ -40,16 +60,19 @@ function Broadcast() {
           restaurantId: scope === "restaurant" ? restaurantId : undefined,
           message,
           confirmation: scope === "all" ? confirmation : undefined,
+          idempotencyKey: (idempotencyKey.current ??= crypto.randomUUID()),
         },
       }),
     onSuccess: async (data) => {
       setResult(data);
       setError(data.ok ? "" : data.message);
-      if (data.ok)
+      if (shouldResetBroadcastIdempotencyKey(data)) idempotencyKey.current = null;
+      if (data.ok) {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["owner-dashboard"] }),
           queryClient.invalidateQueries({ queryKey: ["owner-history"] }),
         ]);
+      }
     },
     onError: () => setError("Broadcast gagal dikirim."),
   });
@@ -72,7 +95,7 @@ function Broadcast() {
             value={scope}
             onChange={(event) => {
               setScope(event.target.value as "restaurant" | "all");
-              setPreview(null);
+              resetRequest();
               setConfirmation("");
             }}
           >
@@ -87,7 +110,7 @@ function Broadcast() {
               value={restaurantId}
               onChange={(event) => {
                 setRestaurantId(event.target.value);
-                setPreview(null);
+                resetRequest();
               }}
             >
               <option value="">Pilih resto</option>
@@ -109,7 +132,7 @@ function Broadcast() {
             maxLength={CREW_MESSAGE_MAX_LENGTH}
             onChange={(event) => {
               setMessage(event.target.value);
-              setPreview(null);
+              resetRequest();
             }}
           />
         </label>
@@ -119,7 +142,14 @@ function Broadcast() {
         <button
           type="button"
           disabled={previewMutation.isPending || (scope === "restaurant" && !restaurantId)}
-          onClick={() => previewMutation.mutate()}
+          onClick={() => {
+            const requestId = ++previewRequestId.current;
+            previewMutation.mutate({
+              requestId,
+              scope,
+              restaurantId: scope === "restaurant" ? restaurantId : undefined,
+            });
+          }}
         >
           {previewMutation.isPending ? "Memuat..." : "Preview target"}
         </button>

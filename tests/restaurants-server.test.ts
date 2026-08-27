@@ -17,19 +17,27 @@ it("exports createRestaurant bound to service-role client behind super admin", (
 
 it("initializes every required restaurant credential field before auditing creation", () => {
   const source = adminServer();
-  expect(source).toMatch(/code_hash: hashRestaurantCode[\s\S]*code_encrypted: encryptRestaurantCode[\s\S]*code_version: 1,[\s\S]*credential_rotated_at: new Date\(\)\.toISOString\(\)/);
-  expect(source).toMatch(/await writeRestaurantCredentialAudit\(client, \{[\s\S]*operation: "created",[\s\S]*success: !error/);
+  expect(source).toMatch(
+    /code_hash: hashRestaurantCode[\s\S]*code_encrypted: encryptRestaurantCode[\s\S]*code_version: 1,[\s\S]*credential_rotated_at: new Date\(\)\.toISOString\(\)/,
+  );
+  expect(source).toMatch(
+    /await writeRestaurantCredentialAudit\(client, \{[\s\S]*operation: "created",[\s\S]*success: !error/,
+  );
 });
 
-it("exports loginToRestaurant with opaque token scoped to credential version", () => {
+it("delegates restaurant login atomically through service-role RPC", () => {
   const source = crewServer();
   expect(source).toContain("loginToRestaurant");
   expect(source).toContain("createOpaqueRestaurantToken");
-  expect(source).toContain("code_version: restaurant.code_version");
-  expect(source).toContain("check_tenant_login_rate_limit");
-  expect(source).toContain('.eq("code_hash", codeHash)');
+  expect(source).toContain('client.rpc("login_to_restaurant_atomic"');
+  expect(source).toContain("p_lookup_hash: codeHash");
+  expect(source).toContain("p_client_bucket_hash: clientKeyHash");
+  expect(source).toContain("p_ip_bucket_hash: ipKeyHash");
+  expect(source).toContain("p_token_hash:");
+  expect(source).toContain("p_expires_at:");
+  expect(source).not.toContain("check_tenant_login_rate_limit");
+  expect(source).not.toContain('from("restaurant_sessions").upsert');
   expect(source).toContain("Kode Resto salah.");
-  expect(source).toContain("restaurant_sessions");
 });
 
 it("exports getRestaurantManifest that queries active audio_manifests", () => {

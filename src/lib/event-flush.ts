@@ -39,7 +39,9 @@ export function useEventFlush(flushToServer: FlushFn, getCrewSessionToken: () =>
         if (!result.ok) return;
         await removeEvents(result.ids);
         const removed = new Set(result.ids);
-        pagehideEventsRef.current = pagehideEventsRef.current.filter((event) => !removed.has(event.id));
+        pagehideEventsRef.current = pagehideEventsRef.current.filter(
+          (event) => !removed.has(event.id),
+        );
         if (batch.length < BATCH_SIZE) return;
       }
     } catch {
@@ -71,11 +73,18 @@ export function useEventFlush(flushToServer: FlushFn, getCrewSessionToken: () =>
   useEffect(() => {
     const handlePageHide = () => {
       const events = pagehideEventsRef.current;
-      const batch = events.filter((event) => event.tenantToken === events[0]?.tenantToken).slice(0, BATCH_SIZE);
+      const batch = events
+        .filter((event) => event.tenantToken === events[0]?.tenantToken)
+        .slice(0, BATCH_SIZE);
       if (!batch.length) return;
       const crewSessionToken = getCrewSessionToken();
-      const body = JSON.stringify({ tenantToken: batch[0].tenantToken, crewSessionToken, events: batch });
-      if (navigator.sendBeacon?.("/api/telemetry", new Blob([body], { type: "text/plain" }))) return;
+      const body = JSON.stringify({
+        tenantToken: batch[0].tenantToken,
+        crewSessionToken,
+        events: batch,
+      });
+      if (navigator.sendBeacon?.("/api/telemetry", new Blob([body], { type: "text/plain" })))
+        return;
       void fetch("/api/telemetry", {
         method: "POST",
         body,

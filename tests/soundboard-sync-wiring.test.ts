@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-const route = () =>
-  readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
+const route = () => readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
 
 it("imports SyncDialog component", () => {
   expect(route()).toContain('import { SyncDialog } from "@/components/SyncDialog"');

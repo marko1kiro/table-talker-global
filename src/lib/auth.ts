@@ -3,9 +3,14 @@ import { z } from "zod";
 
 export type AuthStatus = { superAdmin: boolean };
 
-export const loginInputSchema = z.object({ password: z.string() });
+export const loginInputSchema = z.object({
+  password: z.string(),
+  clientKey: z.string().min(16).max(200),
+});
 
-const MISCONFIGURED_MESSAGE = "Konfigurasi server belum lengkap. Hubungi administrator.";
+export function ownerLoginFailure() {
+  return { ok: false as const, message: "Login gagal." };
+}
 
 /**
  * Kredensial HANYA dibaca dari environment variable.
@@ -36,12 +41,20 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
     const { isPasswordValid, updateAuthSession } = await import("./auth.server");
     const expectedPassword = readEnv("SUPER_ADMIN_PASSWORD");
-    if (!isPasswordValid(data.password, expectedPassword)) {
-      return {
-        ok: false,
-        message: expectedPassword === null ? MISCONFIGURED_MESSAGE : "Password Super Admin salah.",
-      };
+    if (expectedPassword === null) return ownerLoginFailure();
+    const { completeOwnerLoginAttempt, reserveOwnerLoginAttempt } =
+      await import("./owner-login-rate-limit.server");
+    const reservationId = await reserveOwnerLoginAttempt(data.clientKey);
+    if (!reservationId) return ownerLoginFailure();
+
+    let valid = false;
+    try {
+      valid = isPasswordValid(data.password, expectedPassword);
+    } catch {
+      valid = false;
     }
+    if (!(await completeOwnerLoginAttempt(reservationId, valid))) return ownerLoginFailure();
+    if (!valid) return ownerLoginFailure();
     await updateAuthSession({ superAdmin: true });
     return { ok: true };
   });

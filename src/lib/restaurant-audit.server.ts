@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { redactCredentialAudit } from "./restaurant-code.server";
 
 export function serializeRestaurantCredentialAudit(value: unknown): string {
@@ -5,7 +6,7 @@ export function serializeRestaurantCredentialAudit(value: unknown): string {
 }
 
 export async function writeRestaurantCredentialAudit(
-  client: any,
+  client: SupabaseClient,
   value: {
     restaurantId: string;
     operation: "created" | "viewed" | "rotated" | "deactivated";

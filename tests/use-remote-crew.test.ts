@@ -2,17 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import {
   channelStateIsTerminal,
   canReconnectPresence,
+  canProcessCatchUp,
   canSendConnectedHeartbeat,
   createChannelStatusHandler,
   createVisibleClaimCoordinator,
+  deliveryIsUncertain,
   crewClaimArgs,
   crewRegistrationKey,
   createRemoteCommandProcessor,
   getAnonymousUserId,
   getRemoteCommandState,
+  isInvalidSessionError,
   pruneProcessedCommands,
   shouldActivatePresence,
   replaceHeartbeatTimer,
+  updateUncertainCommandIds,
 } from "../src/hooks/use-remote-crew";
 
 const command = {
@@ -389,7 +393,7 @@ describe("remote crew command processor", () => {
     await Promise.all([first, queued]);
 
     expect(playRemoteAudio).toHaveBeenCalledOnce();
-    expect(acknowledge).toHaveBeenCalledTimes(1);
+    expect(acknowledge).not.toHaveBeenCalled();
   });
 
   it("discards a queued command when visibility becomes hidden", async () => {
@@ -429,20 +433,419 @@ describe("remote crew command processor", () => {
 
   it("acknowledges playback failure once and reports acknowledgement uncertainty", async () => {
     const onNeedsAudioRecovery = vi.fn();
-    const onDeliveryUncertain = vi.fn();
+    const onPending = vi.fn();
     const processor = createRemoteCommandProcessor({
       sessionId: "crew-1",
       playRemoteAudio: vi.fn().mockRejectedValue(new Error("autoplay blocked")),
       acknowledge: vi.fn().mockRejectedValue(new Error("offline")),
       now: () => Date.parse("2026-08-12T10:00:03.000Z"),
       onNeedsAudioRecovery,
-      onDeliveryUncertain,
+      onPending,
     });
 
     await processor.process(command);
     await processor.process(command);
 
     expect(onNeedsAudioRecovery).toHaveBeenCalledOnce();
-    expect(onDeliveryUncertain).toHaveBeenCalledOnce();
+    expect(onPending).toHaveBeenCalledOnce();
+  });
+
+  it("retries a failed acknowledgement without replaying audio", async () => {
+    let retry: (() => void) | undefined;
+    const playRemoteAudio = vi.fn().mockResolvedValue(undefined);
+    const acknowledge = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(undefined);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio,
+      acknowledge,
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      schedule: (callback) => {
+        retry = callback;
+        return "retry" as never;
+      },
+      cancel: vi.fn(),
+    });
+
+    await processor.process(command);
+    await processor.process(command);
+    expect(playRemoteAudio).toHaveBeenCalledOnce();
+    expect(acknowledge).toHaveBeenCalledOnce();
+
+    retry?.();
+    await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledTimes(2));
+    expect(playRemoteAudio).toHaveBeenCalledOnce();
+  });
+
+  it("retries failed playback acknowledgement without replaying failed audio", async () => {
+    let retry: (() => void) | undefined;
+    const playRemoteAudio = vi.fn().mockRejectedValue(new Error("autoplay blocked"));
+    const acknowledge = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(undefined);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio,
+      acknowledge,
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      schedule: (callback) => {
+        retry = callback;
+        return "retry" as never;
+      },
+      cancel: vi.fn(),
+    });
+
+    await processor.process(command);
+    retry?.();
+    await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledTimes(2));
+
+    expect(playRemoteAudio).toHaveBeenCalledOnce();
+    expect(acknowledge).toHaveBeenNthCalledWith(1, command.id, "failed", "autoplay blocked");
+  });
+
+  it("stops retries after acknowledgement expiry", async () => {
+    let now = Date.parse("2026-08-12T10:00:03.000Z");
+    let retry: (() => void) | undefined;
+    const acknowledge = vi.fn().mockRejectedValue(new Error("offline"));
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge,
+      now: () => now,
+      schedule: (callback) => {
+        retry = callback;
+        return "retry" as never;
+      },
+      cancel: vi.fn(),
+    });
+
+    await processor.process(command);
+    now = Date.parse(command.expiresAt);
+    retry?.();
+    await Promise.resolve();
+
+    expect(acknowledge).toHaveBeenCalledOnce();
+  });
+
+  it("does not acknowledge when playback crosses command expiry", async () => {
+    let now = Date.parse("2026-08-12T10:00:03.000Z");
+    let releasePlayback!: () => void;
+    const acknowledge = vi.fn().mockResolvedValue(undefined);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: () =>
+        new Promise<void>((resolve) => {
+          releasePlayback = resolve;
+        }),
+      acknowledge,
+      now: () => now,
+    });
+
+    const processing = processor.process(command);
+    await vi.waitFor(() => expect(releasePlayback).toBeTypeOf("function"));
+    now = Date.parse(command.expiresAt);
+    releasePlayback();
+    await processing;
+
+    expect(acknowledge).not.toHaveBeenCalled();
+  });
+
+  it("clears delivery uncertainty after retry acknowledgement succeeds", async () => {
+    let retry: (() => void) | undefined;
+    const onPending = vi.fn();
+    const acknowledge = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(undefined);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge,
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      onPending,
+      schedule: (callback) => {
+        retry = callback;
+        return "retry" as never;
+      },
+      cancel: vi.fn(),
+    });
+
+    await processor.process(command);
+    expect(onPending).toHaveBeenLastCalledWith(command.id, true);
+    retry?.();
+    await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledTimes(2));
+
+    expect(onPending).toHaveBeenLastCalledWith(command.id, false);
+  });
+
+  it("recognizes only known session invalidation codes", () => {
+    expect(isInvalidSessionError(new Error("INVALID_CREW_SESSION"))).toBe(true);
+    expect(isInvalidSessionError(new Error("INVALID_TENANT_SESSION"))).toBe(true);
+    expect(isInvalidSessionError(new Error("SESSION_NOT_FOUND"))).toBe(true);
+    expect(isInvalidSessionError(new Error("INVALID_COMMAND"))).toBe(false);
+    expect(isInvalidSessionError(new Error("INVALID_STATUS"))).toBe(false);
+    expect(isInvalidSessionError(new Error("INVALID_CREW_SESSION_STALE"))).toBe(false);
+  });
+
+  it("keeps expired delivery uncertainty when another command succeeds", () => {
+    const ids = new Set<string>();
+
+    expect(updateUncertainCommandIds(ids, "expired", true)).toBe(true);
+    expect(updateUncertainCommandIds(ids, "delivered", false)).toBe(true);
+    expect(ids).toEqual(new Set(["expired"]));
+  });
+
+  it("processes catch-up only for active processor and channel", () => {
+    const processor = {};
+    const channel = {};
+
+    expect(canProcessCatchUp(true, processor, processor, channel, channel)).toBe(true);
+    expect(canProcessCatchUp(false, processor, processor, channel, channel)).toBe(false);
+    expect(canProcessCatchUp(true, {}, processor, channel, channel)).toBe(false);
+    expect(canProcessCatchUp(true, processor, processor, {}, channel)).toBe(false);
+  });
+
+  it("keeps catch-up uncertainty after unrelated acknowledgement succeeds", () => {
+    const ids = new Set<string>();
+
+    updateUncertainCommandIds(ids, "acknowledged", false);
+    expect(deliveryIsUncertain(true, ids)).toBe(true);
+    expect(deliveryIsUncertain(false, ids)).toBe(false);
+  });
+
+  it("does not schedule or report after disposal while an acknowledgement rejects", async () => {
+    let rejectAck!: (error: Error) => void;
+    const pendingAck = new Promise<void>((_, reject) => {
+      rejectAck = reject;
+    });
+    const schedule = vi.fn();
+    const onPending = vi.fn();
+    const acknowledge = vi.fn().mockReturnValue(pendingAck);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge,
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      schedule,
+      cancel: vi.fn(),
+      onPending,
+    });
+
+    const processing = processor.process(command);
+    await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledOnce());
+    processor.dispose();
+    rejectAck(new Error("offline"));
+    await processing;
+
+    expect(schedule).not.toHaveBeenCalled();
+    expect(onPending).not.toHaveBeenCalled();
+  });
+
+  it("does not play commands accepted after disposal", async () => {
+    const playRemoteAudio = vi.fn().mockResolvedValue(undefined);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio,
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+    });
+
+    processor.dispose();
+    await processor.process(command);
+
+    expect(playRemoteAudio).not.toHaveBeenCalled();
+  });
+
+  it("does not acknowledge playback completing after disposal", async () => {
+    let releasePlayback!: () => void;
+    const acknowledge = vi.fn().mockResolvedValue(undefined);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: () =>
+        new Promise<void>((resolve) => {
+          releasePlayback = resolve;
+        }),
+      acknowledge,
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+    });
+
+    const processing = processor.process(command);
+    await vi.waitFor(() => expect(releasePlayback).toBeTypeOf("function"));
+    processor.dispose();
+    releasePlayback();
+    await processing;
+
+    expect(acknowledge).not.toHaveBeenCalled();
+  });
+
+  it("keeps expired command uncertainty when another command acknowledgement succeeds", async () => {
+    let now = Date.parse("2026-08-12T10:00:03.000Z");
+    let releasePlayback!: () => void;
+    const onPending = vi.fn();
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              releasePlayback = resolve;
+            }),
+        )
+        .mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      now: () => now,
+      onPending,
+      cancel: vi.fn(),
+    });
+
+    const expired = processor.process({
+      ...command,
+      id: "expired",
+      createdAt: "2026-08-12T10:00:01.000Z",
+    });
+    await vi.waitFor(() => expect(releasePlayback).toBeTypeOf("function"));
+    now = Date.parse(command.expiresAt);
+    releasePlayback();
+    await expired;
+    now = Date.parse("2026-08-12T10:00:03.000Z");
+    await processor.process({ ...command, id: "delivered", createdAt: "2026-08-12T10:00:02.000Z" });
+
+    expect(onPending).toHaveBeenLastCalledWith("delivered", false);
+    expect(onPending).toHaveBeenCalledWith("expired", true);
+  });
+
+  it("retries invalid command acknowledgements without invalidating session", async () => {
+    const onSessionInvalid = vi.fn();
+    const schedule = vi.fn();
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockRejectedValue(new Error("INVALID_COMMAND")),
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      onSessionInvalid,
+      schedule,
+      cancel: vi.fn(),
+    });
+
+    await processor.process(command);
+
+    expect(onSessionInvalid).not.toHaveBeenCalled();
+    expect(schedule).toHaveBeenCalledOnce();
+  });
+
+  it("limits acknowledgement retry delays to 250, 500, and 1000 milliseconds", async () => {
+    const scheduled: Array<{ callback: () => void; delay: number }> = [];
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockRejectedValue(new Error("offline")),
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      schedule: (callback, delay) => {
+        scheduled.push({ callback, delay });
+        return scheduled.length as never;
+      },
+      cancel: vi.fn(),
+    });
+
+    await processor.process(command);
+    scheduled[0]?.callback();
+    await vi.waitFor(() => expect(scheduled).toHaveLength(2));
+    scheduled[1]?.callback();
+    await vi.waitFor(() => expect(scheduled).toHaveLength(3));
+    scheduled[2]?.callback();
+    await Promise.resolve();
+
+    expect(scheduled.map(({ delay }) => delay)).toEqual([250, 500, 1_000]);
+  });
+
+  it("invalidates session instead of retrying an invalid acknowledgement", async () => {
+    const onSessionInvalid = vi.fn();
+    const schedule = vi.fn();
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockRejectedValue(new Error("INVALID_SESSION")),
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      isInvalidSessionError: (error) =>
+        error instanceof Error && error.message === "INVALID_SESSION",
+      onSessionInvalid,
+      schedule,
+      cancel: vi.fn(),
+    });
+
+    await processor.process(command);
+
+    expect(onSessionInvalid).toHaveBeenCalledOnce();
+    expect(schedule).not.toHaveBeenCalled();
+  });
+
+  it("cancels every pending retry when an acknowledgement invalidates session", async () => {
+    const cancel = vi.fn();
+    const onSessionInvalid = vi.fn();
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockRejectedValueOnce(new Error("INVALID_SESSION")),
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      isInvalidSessionError: (error) =>
+        error instanceof Error && error.message === "INVALID_SESSION",
+      onSessionInvalid,
+      schedule: vi.fn().mockReturnValue("first-retry" as never),
+      cancel,
+    });
+
+    await processor.process({ ...command, id: "first", createdAt: "2026-08-12T10:00:01.000Z" });
+    await processor.process({ ...command, id: "second", createdAt: "2026-08-12T10:00:02.000Z" });
+
+    expect(onSessionInvalid).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledWith("first-retry");
+  });
+
+  it("does not issue concurrent acknowledgements for a duplicate during pending delivery", async () => {
+    let rejectAck!: (error: Error) => void;
+    const pendingAck = new Promise<void>((_, reject) => {
+      rejectAck = reject;
+    });
+    const acknowledge = vi.fn().mockReturnValue(pendingAck);
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge,
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      schedule: vi.fn().mockReturnValue("retry"),
+      cancel: vi.fn(),
+    });
+
+    const first = processor.process(command);
+    await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledOnce());
+    void processor.process(command);
+    expect(acknowledge).toHaveBeenCalledOnce();
+
+    rejectAck(new Error("offline"));
+    await first;
+  });
+
+  it("cancels pending acknowledgement retries when disposed", async () => {
+    const cancel = vi.fn();
+    const processor = createRemoteCommandProcessor({
+      sessionId: "crew-1",
+      playRemoteAudio: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockRejectedValue(new Error("offline")),
+      now: () => Date.parse("2026-08-12T10:00:03.000Z"),
+      schedule: vi.fn().mockReturnValue("retry"),
+      cancel,
+    });
+
+    await processor.process(command);
+    processor.dispose();
+
+    expect(cancel).toHaveBeenCalledWith("retry");
   });
 });

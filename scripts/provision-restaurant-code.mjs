@@ -90,10 +90,17 @@ function readCodeFile(codeFile) {
       !owner
         .toLowerCase()
         .split(/\r?\n/)
-        .some((line) => line.trim().startsWith("owner ") && line.trim().endsWith(`\\${username.toLowerCase()}`))
+        .some(
+          (line) =>
+            line.trim().startsWith("owner ") && line.trim().endsWith(`\\${username.toLowerCase()}`),
+        )
     )
       throw new Error("INSECURE_CODE_FILE");
-    if (/^(?:.*\s)?(?:Everyone|BUILTIN\\Users|Authenticated Users|Users):(?:\([^)]*\))*\((?:F|M|RX|R|W)\)/im.test(acl))
+    if (
+      /^(?:.*\s)?(?:Everyone|BUILTIN\\Users|Authenticated Users|Users):(?:\([^)]*\))*\((?:F|M|RX|R|W)\)/im.test(
+        acl,
+      )
+    )
       throw new Error("INSECURE_CODE_FILE");
   } else if (statSync(file).mode & 0o077) {
     throw new Error("INSECURE_CODE_FILE");
@@ -113,11 +120,7 @@ async function main() {
   const restaurantId = option("--restaurant-id");
   const codeFile = option("--code-file") ?? process.env.RESTAURANT_CODE_FILE;
   const codeStdin = process.argv.includes("--code-stdin");
-  if (
-    !restaurantId ||
-    !/^[0-9a-f-]{36}$/i.test(restaurantId) ||
-    codeStdin === Boolean(codeFile)
-  )
+  if (!restaurantId || !/^[0-9a-f-]{36}$/i.test(restaurantId) || codeStdin === Boolean(codeFile))
     throw new Error("INVALID_INPUT");
   const code = codeStdin ? await readCodeStdin() : readCodeFile(codeFile);
   if (!/^[A-Z0-9]{6,32}$/.test(code)) throw new Error("INVALID_INPUT");

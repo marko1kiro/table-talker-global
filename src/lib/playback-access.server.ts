@@ -12,7 +12,8 @@ async function verifyCrewAccess(data: z.infer<typeof crewAccessSchema>) {
   const client = getServiceClient();
   if (!client) return { ok: false as const };
   try {
-    const { verifyActiveTenantSession, verifyCrewSessionToken } = await import("./tenant-session.server");
+    const { verifyActiveTenantSession, verifyCrewSessionToken } =
+      await import("./tenant-session.server");
     const tenant = await verifyActiveTenantSession(client, data.tenantToken);
     if (!tenant) return { ok: false as const };
     const crew = await verifyCrewSessionToken(client, data.crewSessionToken, tenant.restaurantId);

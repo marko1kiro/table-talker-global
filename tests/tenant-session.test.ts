@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
 
-import { createOpaqueRestaurantToken, hashOpaqueRestaurantToken } from "../src/lib/restaurant-session.server";
+import {
+  createOpaqueRestaurantToken,
+  hashOpaqueRestaurantToken,
+} from "../src/lib/restaurant-session.server";
 
 it("creates random opaque bearer tokens whose hashes are independent of restaurant credentials", () => {
   const first = createOpaqueRestaurantToken();

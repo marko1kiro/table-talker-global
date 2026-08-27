@@ -17,5 +17,7 @@ it("creates daily tenant session table with unique restaurant+date", () => {
 
 it("denies anon and authenticated access and enables RLS", () => {
   expect(migrationSource).toMatch(/enable row level security/i);
-  expect(migrationSource).toMatch(/revoke all on public\.restaurant_sessions from anon, authenticated/i);
+  expect(migrationSource).toMatch(
+    /revoke all on public\.restaurant_sessions from anon, authenticated/i,
+  );
 });

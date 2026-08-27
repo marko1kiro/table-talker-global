@@ -148,12 +148,13 @@ kondisi tersebut: buka crew di foreground, tekan `LANJUT!!`, lalu gunakan pemuli
    `remote_commands` ke Realtime publication. Jangan membuat policy tabel longgar
    atau memberi service-role key ke client.
 
-`pg_cron` menjadwalkan expiry per menit dan pembersihan audit harian bila tersedia.
-Bila paket/izin cron tidak tersedia, pakai Supabase Dashboard Scheduled Function
-untuk memanggil `expire_remote_commands` dan `cleanup_remote_commands` dengan
-`SUPABASE_URL` serta `SUPABASE_SERVICE_ROLE_KEY`; ini fallback opsional dan tidak
-mempengaruhi delivery real-time. Detail fungsi ada di
-`docs/supabase-super-admin-remote-audio.md`.
+`pg_cron` menjadwalkan expiry per menit dan pembersihan audit remote harian bila
+tersedia. Bila paket/izin cron tidak tersedia, pakai Supabase Dashboard Scheduled
+Function untuk memanggil `expire_remote_commands` dan `cleanup_remote_commands`
+dengan `SUPABASE_URL` serta `SUPABASE_SERVICE_ROLE_KEY`; ini fallback opsional dan
+tidak mempengaruhi delivery real-time. Ini bukan scheduler owner retention. Lihat
+[Owner retention runbook](docs/supabase-super-admin-remote-audio.md#owner-retention)
+untuk mode scheduler owner `pg_cron` dan `edge_required`.
 
 > Jangan commit file `.env`. `AUTH_SECRET` dan `DASHBOARD_PASSWORD` wajib untuk
 > dashboard/sesi; lima variabel remote hanya diperlukan untuk mengaktifkan remote.

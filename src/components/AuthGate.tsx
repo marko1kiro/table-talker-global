@@ -1,13 +1,16 @@
 import { FormEvent, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Footer } from "@/components/Footer";
+import { getOwnerLoginClientKey } from "@/lib/owner-login-client-key";
 
 interface AuthGateProps {
   onSuccess: () => Promise<void> | void;
   title?: string;
   instruction?: string;
   submitLabel?: string;
-  loginAction: (input: { data: { password: string } }) => Promise<{ ok: boolean; message?: string }>;
+  loginAction: (input: {
+    data: { password: string; clientKey: string };
+  }) => Promise<{ ok: boolean; message?: string }>;
 }
 
 export function AuthGate({
@@ -26,7 +29,7 @@ export function AuthGate({
     setLoading(true);
     setError("");
     try {
-      const result = await loginAction({ data: { password } });
+      const result = await loginAction({ data: { password, clientKey: getOwnerLoginClientKey() } });
       if (!result.ok) {
         setError(result.message || "Login gagal.");
         return;

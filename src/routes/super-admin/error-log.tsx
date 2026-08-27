@@ -47,7 +47,7 @@ function ErrorLog() {
   const restaurants = useQuery({ queryKey: ["owner-restaurants"], queryFn: listOwnerRestaurants });
   const errors = useQuery({
     queryKey: [
-      "operational-errors",
+      "owner-operational-errors",
       restaurantId,
       stage,
       reportCode,
@@ -79,7 +79,7 @@ function ErrorLog() {
       setSelected(null);
       setNote("");
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["operational-errors"] }),
+        queryClient.invalidateQueries({ queryKey: ["owner-operational-errors"] }),
         queryClient.invalidateQueries({ queryKey: ["owner-dashboard"] }),
       ]);
     },

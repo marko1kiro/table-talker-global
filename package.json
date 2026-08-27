@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check:edge": "deno check supabase/functions/owner-retention/index.ts",
+    "verify": "npm test && npm run typecheck && npm run check:edge && npm run lint && npm run build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

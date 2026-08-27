@@ -5,7 +5,7 @@ const errorCapture = () =>
   readFileSync(new URL("../src/lib/error-capture.ts", import.meta.url), "utf8");
 
 it("imports reportOperationalError from server", () => {
-  expect(errorCapture()).toContain('import { reportOperationalError }');
+  expect(errorCapture()).toContain("import { reportOperationalError }");
 });
 
 it("exports captureError, consumeLastCapturedError, and captureSsrError", () => {

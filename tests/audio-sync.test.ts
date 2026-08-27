@@ -16,8 +16,22 @@ let table1Hash = "";
 let table2Hash = "";
 
 const manifest = [
-  { audioId: "table:1", label: "Meja 1", category: "BASE", r2Url: "https://r2.example/1.mp3", contentHash: "", byteSize: 1024 },
-  { audioId: "table:2", label: "Meja 2", category: "BASE", r2Url: "https://r2.example/2.mp3", contentHash: "", byteSize: 2048 },
+  {
+    audioId: "table:1",
+    label: "Meja 1",
+    category: "BASE",
+    r2Url: "https://r2.example/1.mp3",
+    contentHash: "",
+    byteSize: 1024,
+  },
+  {
+    audioId: "table:2",
+    label: "Meja 2",
+    category: "BASE",
+    r2Url: "https://r2.example/2.mp3",
+    contentHash: "",
+    byteSize: 2048,
+  },
 ];
 
 function setupCaches() {
@@ -139,7 +153,12 @@ describe("audio-sync", () => {
             "x-content-hash": item.contentHash,
           },
         });
-        await cache.put(new Request(`https://static.table-talker.local/restaurant-a/audio/${encodeURIComponent(item.audioId)}`), res);
+        await cache.put(
+          new Request(
+            `https://static.table-talker.local/restaurant-a/audio/${encodeURIComponent(item.audioId)}`,
+          ),
+          res,
+        );
       }
 
       globalThis.fetch = vi.fn() as never;
@@ -204,7 +223,13 @@ describe("audio-sync", () => {
 
     it("keeps obsolete entries when new manifest validation fails", async () => {
       const { store } = setupCaches();
-      await putToCache("restaurant-a", "table:stale", TABLE_1_DATA.buffer, table1Hash, "test-cache");
+      await putToCache(
+        "restaurant-a",
+        "table:stale",
+        TABLE_1_DATA.buffer,
+        table1Hash,
+        "test-cache",
+      );
       globalThis.fetch = vi.fn(async () => new Response(null, { status: 500 })) as never;
 
       await syncManifest("restaurant-a", manifest, undefined, "test-cache");

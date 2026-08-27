@@ -30,7 +30,12 @@ it("accepts one piped code line without printing it", () => {
   const code = "PILOT7";
   const result = spawnSync(
     process.execPath,
-    ["scripts/provision-restaurant-code.mjs", "--restaurant-id", "00000000-0000-4000-8000-000000000001", "--code-stdin"],
+    [
+      "scripts/provision-restaurant-code.mjs",
+      "--restaurant-id",
+      "00000000-0000-4000-8000-000000000001",
+      "--code-stdin",
+    ],
     { cwd: new URL("..", import.meta.url), encoding: "utf8", input: `${code}\r\n` },
   );
 

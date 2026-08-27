@@ -41,12 +41,12 @@ function Audio() {
   const [mutationError, setMutationError] = useState("");
   const restaurants = useQuery({ queryKey: ["owner-restaurants"], queryFn: listOwnerRestaurants });
   const manifest = useQuery({
-    queryKey: ["manifest", restaurantId],
+    queryKey: ["owner-manifest", restaurantId],
     queryFn: () => listManifestItems({ data: { restaurantId } }),
     enabled: !!restaurantId,
   });
   const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ["manifest", restaurantId] });
+    void qc.invalidateQueries({ queryKey: ["owner-manifest", restaurantId] });
     void qc.invalidateQueries({ queryKey: ["owner-restaurants"] });
     void qc.invalidateQueries({ queryKey: ["owner-restaurant", restaurantId] });
     void qc.invalidateQueries({ queryKey: ["owner-dashboard"] });

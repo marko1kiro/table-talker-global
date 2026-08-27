@@ -344,7 +344,7 @@ function SoundboardPage() {
         });
       }
     },
-    [assertCrewAccess, audioSynced, getAudioController, paused],
+    [assertCrewAccess, audioSynced, getAudioController, paused, recordEvent],
   );
 
   const toggleAnnouncement = useCallback(

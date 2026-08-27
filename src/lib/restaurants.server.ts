@@ -43,88 +43,26 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
       );
       const validated = validateRestaurantCode(data.code);
       const valid = "code" in validated;
-      const codeHash = hashRestaurantCode(valid ? validated.code : "INVALID", key);
+      const codeHash = hashRestaurantCode(valid ? validated.code : "\n", key);
       const { clientKeyHash, ipKeyHash } = getLoginRateLimitBuckets(
         getRequest().headers,
         data.clientKey,
         hashOpaqueRestaurantToken,
       );
-      const [globalClientLimit, globalIpLimit] = await Promise.all([
-        client.rpc("check_global_tenant_login_rate_limit", { p_bucket_hash: clientKeyHash }),
-        client.rpc("check_global_tenant_login_rate_limit", { p_bucket_hash: ipKeyHash }),
-      ]);
-      if (
-        globalClientLimit.error ||
-        globalIpLimit.error ||
-        globalClientLimit.data ||
-        globalIpLimit.data
-      )
-        return { error: CODE_ERROR };
-      const [clientLimit, ipLimit] = await Promise.all([
-        client.rpc("check_tenant_login_rate_limit", {
-          p_lookup_hash: codeHash,
-          p_bucket_hash: clientKeyHash,
-        }),
-        client.rpc("check_tenant_login_rate_limit", {
-          p_lookup_hash: codeHash,
-          p_bucket_hash: ipKeyHash,
-        }),
-      ]);
-      if (clientLimit.error || ipLimit.error || clientLimit.data || ipLimit.data)
-        return { error: CODE_ERROR };
-      await Promise.all([
-        client.rpc("record_global_tenant_login_failure", { p_bucket_hash: clientKeyHash }),
-        client.rpc("record_global_tenant_login_failure", { p_bucket_hash: ipKeyHash }),
-      ]);
-      const { data: restaurant, error: lookupError } = await client
-        .from("restaurants")
-        .select("id, code_version, display_name, is_active")
-        .eq("code_hash", codeHash)
-        .single();
-      if (!valid || !restaurant || lookupError || !restaurant.is_active) {
-        await Promise.all([
-          client.rpc("record_tenant_login_failure", {
-            p_lookup_hash: codeHash,
-            p_bucket_hash: clientKeyHash,
-          }),
-          client.rpc("record_tenant_login_failure", {
-            p_lookup_hash: codeHash,
-            p_bucket_hash: ipKeyHash,
-          }),
-        ]);
-        return { error: CODE_ERROR };
-      }
-      await Promise.all([
-        client.rpc("clear_global_tenant_login_failures", { p_bucket_hash: clientKeyHash }),
-        client.rpc("clear_global_tenant_login_failures", { p_bucket_hash: ipKeyHash }),
-        client.rpc("clear_tenant_login_failures", {
-          p_lookup_hash: codeHash,
-          p_bucket_hash: clientKeyHash,
-        }),
-        client.rpc("clear_tenant_login_failures", {
-          p_lookup_hash: codeHash,
-          p_bucket_hash: ipKeyHash,
-        }),
-      ]);
-      const { error: sessionError } = await client
-        .from("restaurant_sessions")
-        .upsert(
-          { restaurant_id: restaurant.id, session_date: new Date().toISOString().slice(0, 10) },
-          { onConflict: "restaurant_id,session_date" },
-        );
-      if (sessionError) return { error: CODE_ERROR };
       const tenantToken = createOpaqueRestaurantToken();
-      const { error: accessError } = await client.from("restaurant_access_tokens").insert({
-        token_hash: hashOpaqueRestaurantToken(tenantToken),
-        restaurant_id: restaurant.id,
-        code_version: restaurant.code_version,
-        expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      const { data: restaurant, error } = await client.rpc("login_to_restaurant_atomic", {
+        p_lookup_hash: codeHash,
+        p_client_bucket_hash: clientKeyHash,
+        p_ip_bucket_hash: ipKeyHash,
+        p_token_hash: hashOpaqueRestaurantToken(tenantToken),
+        p_expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });
-      if (accessError) return { error: CODE_ERROR };
+      const login = restaurant?.[0];
+      if (!valid || error || !login) return { error: CODE_ERROR };
       return {
         ok: true as const,
-        restaurantId: restaurant.id,
-        displayName: restaurant.display_name,
+        restaurantId: login.restaurant_id,
+        displayName: login.display_name,
         tenantToken,
       };
     } catch {

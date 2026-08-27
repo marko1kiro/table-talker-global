@@ -6,8 +6,8 @@ const component = () =>
 
 it("imports getRestaurantManifest and syncManifest", () => {
   const source = component();
-  expect(source).toContain('import { getRestaurantManifest }');
-  expect(source).toContain('import {');
+  expect(source).toContain("import { getRestaurantManifest }");
+  expect(source).toContain("import {");
   expect(source).toContain("syncManifest");
 });
 
@@ -39,7 +39,7 @@ it("blocks UI with fixed overlay (no cancel button)", () => {
 
 it("reports manifest, offline, cache, and download failures with stable sync codes", () => {
   const source = component();
-  expect(source).toContain('import { captureError }');
+  expect(source).toContain("import { captureError }");
   expect(source).toContain('stage: "sync_cache"');
   expect(source).toContain("tenantToken");
   expect(source).toContain("SYNC_MANIFEST");
@@ -57,7 +57,9 @@ it("retries only failed manifest items and shows a stable report code", () => {
 
 it("clears failed retry IDs when restaurant session changes", () => {
   const source = component();
-  const sessionEffect = source.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[restaurantId, tenantToken\]\);/);
+  const sessionEffect = source.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[runSync\]\);/);
   expect(sessionEffect).not.toBeNull();
   expect(sessionEffect?.[0]).toContain("failedManifestRef.current = null");
+  expect(sessionEffect?.[0]).toContain("const runGate = runGateRef.current");
+  expect(sessionEffect?.[0]).toContain("runGate.cancel()");
 });

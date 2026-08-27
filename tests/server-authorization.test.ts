@@ -28,14 +28,20 @@ it("requires owner auth for operational error administration", () => {
 
 it("requires owner auth to clean playback history without restricting ingestion", () => {
   handlerRequiresSuperAdmin("../src/lib/playback-events.server.ts", "cleanupOldPlaybackEvents");
-  expect(source("../src/lib/playback-events.server.ts")).toContain("export const ingestPlaybackEvents");
-  expect(source("../src/lib/operational-errors.server.ts")).toContain("export const reportOperationalError");
+  expect(source("../src/lib/playback-events.server.ts")).toContain(
+    "export const ingestPlaybackEvents",
+  );
+  expect(source("../src/lib/operational-errors.server.ts")).toContain(
+    "export const reportOperationalError",
+  );
 });
 
 it("removes global authenticated manifest reads", () => {
   const migration = source("../supabase/migrations/20260823101000_lock_manifest_rls.sql");
   expect(migration).toMatch(/revoke select on public\.audio_manifests from authenticated/i);
-  expect(migration).toMatch(/drop policy if exists "crew reads restaurant manifests" on public\.audio_manifests/i);
+  expect(migration).toMatch(
+    /drop policy if exists "crew reads restaurant manifests" on public\.audio_manifests/i,
+  );
   expect(migration).not.toMatch(/grant select on public\.audio_manifests to authenticated/i);
   expect(migration).not.toMatch(/for select to authenticated[\s\S]*?using \(true\)/i);
 });

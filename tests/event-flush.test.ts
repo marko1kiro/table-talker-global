@@ -46,7 +46,7 @@ it("uses bounded memory mirror synchronously during pagehide without deleting ev
   const source = eventFlush();
   expect(source).toContain("PAGEHIDE_MIRROR_LIMIT");
   expect(source).toContain("pagehideEventsRef");
-  const pagehide = source.match(/const handlePageHide = \(\) => \{[\s\S]*?\n    \};/);
+  const pagehide = source.match(/const handlePageHide = \(\) => \{[\s\S]*?\n {4}\};/);
   expect(pagehide).not.toBeNull();
   expect(pagehide?.[0]).not.toContain("getQueuedEvents");
   expect(pagehide?.[0]).not.toContain("removeEvents");
@@ -56,14 +56,18 @@ it("uses bounded memory mirror synchronously during pagehide without deleting ev
 
 it("includes required crew session token in pagehide telemetry payload", () => {
   const source = eventFlush();
-  const pagehide = source.match(/const handlePageHide = \(\) => \{[\s\S]*?\n    \};/);
+  const pagehide = source.match(/const handlePageHide = \(\) => \{[\s\S]*?\n {4}\};/);
   expect(pagehide).not.toBeNull();
-  expect(pagehide?.[0]).toMatch(/JSON\.stringify\(\{ tenantToken: batch\[0\]\.tenantToken, crewSessionToken, events: batch \}\)/);
+  const body = pagehide?.[0] ?? "";
+  expect(body).toContain("JSON.stringify({");
+  expect(body).toContain("tenantToken: batch[0].tenantToken");
+  expect(body).toContain("crewSessionToken");
+  expect(body).toContain("events: batch");
 });
 
 it("prestages event in memory before awaiting IndexedDB", () => {
   const source = eventFlush();
-  const recordEvent = source.match(/async \(event: PlaybackEvent\) => \{[\s\S]*?\n    \},/);
+  const recordEvent = source.match(/async \(event: PlaybackEvent\) => \{[\s\S]*?\n {4}\},/);
   expect(recordEvent).not.toBeNull();
   const body = recordEvent?.[0] ?? "";
   expect(body.indexOf("mirrorEvents")).toBeLessThan(body.indexOf("await enqueueEvent"));

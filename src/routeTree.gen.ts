@@ -9,18 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SuperAdminRouteImport } from './routes/super-admin'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as SuperAdminRouteRouteImport } from './routes/super-admin/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
+import { Route as SuperAdminHistoryRouteImport } from './routes/super-admin/history'
+import { Route as SuperAdminErrorLogRouteImport } from './routes/super-admin/error-log'
+import { Route as SuperAdminBroadcastRouteImport } from './routes/super-admin/broadcast'
+import { Route as SuperAdminAudioRouteImport } from './routes/super-admin/audio'
+import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
+import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
 
-const SuperAdminRoute = SuperAdminRouteImport.update({
-  id: '/super-admin',
-  path: '/super-admin',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SuperAdminRouteRoute = SuperAdminRouteRouteImport.update({
+  id: '/super-admin',
+  path: '/super-admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -28,51 +35,137 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SuperAdminIndexRoute = SuperAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
+const SuperAdminHistoryRoute = SuperAdminHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
+const SuperAdminErrorLogRoute = SuperAdminErrorLogRouteImport.update({
+  id: '/error-log',
+  path: '/error-log',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
+const SuperAdminBroadcastRoute = SuperAdminBroadcastRouteImport.update({
+  id: '/broadcast',
+  path: '/broadcast',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
+const SuperAdminAudioRoute = SuperAdminAudioRouteImport.update({
+  id: '/audio',
+  path: '/audio',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
+const SuperAdminRestaurantsIndexRoute =
+  SuperAdminRestaurantsIndexRouteImport.update({
+    id: '/restaurants/',
+    path: '/restaurants/',
+    getParentRoute: () => SuperAdminRouteRoute,
+  } as any)
+const SuperAdminRestaurantsIdRoute = SuperAdminRestaurantsIdRouteImport.update({
+  id: '/restaurants/$id',
+  path: '/restaurants/$id',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/super-admin': typeof SuperAdminRouteRouteWithChildren
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/super-admin': typeof SuperAdminRoute
+  '/super-admin/audio': typeof SuperAdminAudioRoute
+  '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
+  '/super-admin/error-log': typeof SuperAdminErrorLogRoute
+  '/super-admin/history': typeof SuperAdminHistoryRoute
+  '/super-admin/': typeof SuperAdminIndexRoute
+  '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
+  '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/super-admin': typeof SuperAdminRoute
+  '/super-admin/audio': typeof SuperAdminAudioRoute
+  '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
+  '/super-admin/error-log': typeof SuperAdminErrorLogRoute
+  '/super-admin/history': typeof SuperAdminHistoryRoute
+  '/super-admin': typeof SuperAdminIndexRoute
+  '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
+  '/super-admin/restaurants': typeof SuperAdminRestaurantsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/super-admin': typeof SuperAdminRouteRouteWithChildren
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/super-admin': typeof SuperAdminRoute
+  '/super-admin/audio': typeof SuperAdminAudioRoute
+  '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
+  '/super-admin/error-log': typeof SuperAdminErrorLogRoute
+  '/super-admin/history': typeof SuperAdminHistoryRoute
+  '/super-admin/': typeof SuperAdminIndexRoute
+  '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
+  '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/sitemap.xml' | '/super-admin'
+  fullPaths:
+    | '/'
+    | '/super-admin'
+    | '/sitemap.xml'
+    | '/super-admin/audio'
+    | '/super-admin/broadcast'
+    | '/super-admin/error-log'
+    | '/super-admin/history'
+    | '/super-admin/'
+    | '/super-admin/restaurants/$id'
+    | '/super-admin/restaurants/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/sitemap.xml' | '/super-admin'
-  id: '__root__' | '/' | '/sitemap.xml' | '/super-admin'
+  to:
+    | '/'
+    | '/sitemap.xml'
+    | '/super-admin/audio'
+    | '/super-admin/broadcast'
+    | '/super-admin/error-log'
+    | '/super-admin/history'
+    | '/super-admin'
+    | '/super-admin/restaurants/$id'
+    | '/super-admin/restaurants'
+  id:
+    | '__root__'
+    | '/'
+    | '/super-admin'
+    | '/sitemap.xml'
+    | '/super-admin/audio'
+    | '/super-admin/broadcast'
+    | '/super-admin/error-log'
+    | '/super-admin/history'
+    | '/super-admin/'
+    | '/super-admin/restaurants/$id'
+    | '/super-admin/restaurants/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SuperAdminRouteRoute: typeof SuperAdminRouteRouteWithChildren
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
-  SuperAdminRoute: typeof SuperAdminRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/super-admin': {
-      id: '/super-admin'
-      path: '/super-admin'
-      fullPath: '/super-admin'
-      preLoaderRoute: typeof SuperAdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/super-admin': {
+      id: '/super-admin'
+      path: '/super-admin'
+      fullPath: '/super-admin'
+      preLoaderRoute: typeof SuperAdminRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -82,13 +175,86 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/super-admin/': {
+      id: '/super-admin/'
+      path: '/'
+      fullPath: '/super-admin/'
+      preLoaderRoute: typeof SuperAdminIndexRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/super-admin/history': {
+      id: '/super-admin/history'
+      path: '/history'
+      fullPath: '/super-admin/history'
+      preLoaderRoute: typeof SuperAdminHistoryRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/super-admin/error-log': {
+      id: '/super-admin/error-log'
+      path: '/error-log'
+      fullPath: '/super-admin/error-log'
+      preLoaderRoute: typeof SuperAdminErrorLogRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/super-admin/broadcast': {
+      id: '/super-admin/broadcast'
+      path: '/broadcast'
+      fullPath: '/super-admin/broadcast'
+      preLoaderRoute: typeof SuperAdminBroadcastRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/super-admin/audio': {
+      id: '/super-admin/audio'
+      path: '/audio'
+      fullPath: '/super-admin/audio'
+      preLoaderRoute: typeof SuperAdminAudioRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/super-admin/restaurants/': {
+      id: '/super-admin/restaurants/'
+      path: '/restaurants'
+      fullPath: '/super-admin/restaurants/'
+      preLoaderRoute: typeof SuperAdminRestaurantsIndexRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/super-admin/restaurants/$id': {
+      id: '/super-admin/restaurants/$id'
+      path: '/restaurants/$id'
+      fullPath: '/super-admin/restaurants/$id'
+      preLoaderRoute: typeof SuperAdminRestaurantsIdRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
   }
 }
 
+interface SuperAdminRouteRouteChildren {
+  SuperAdminAudioRoute: typeof SuperAdminAudioRoute
+  SuperAdminBroadcastRoute: typeof SuperAdminBroadcastRoute
+  SuperAdminErrorLogRoute: typeof SuperAdminErrorLogRoute
+  SuperAdminHistoryRoute: typeof SuperAdminHistoryRoute
+  SuperAdminIndexRoute: typeof SuperAdminIndexRoute
+  SuperAdminRestaurantsIdRoute: typeof SuperAdminRestaurantsIdRoute
+  SuperAdminRestaurantsIndexRoute: typeof SuperAdminRestaurantsIndexRoute
+}
+
+const SuperAdminRouteRouteChildren: SuperAdminRouteRouteChildren = {
+  SuperAdminAudioRoute: SuperAdminAudioRoute,
+  SuperAdminBroadcastRoute: SuperAdminBroadcastRoute,
+  SuperAdminErrorLogRoute: SuperAdminErrorLogRoute,
+  SuperAdminHistoryRoute: SuperAdminHistoryRoute,
+  SuperAdminIndexRoute: SuperAdminIndexRoute,
+  SuperAdminRestaurantsIdRoute: SuperAdminRestaurantsIdRoute,
+  SuperAdminRestaurantsIndexRoute: SuperAdminRestaurantsIndexRoute,
+}
+
+const SuperAdminRouteRouteWithChildren = SuperAdminRouteRoute._addFileChildren(
+  SuperAdminRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SuperAdminRouteRoute: SuperAdminRouteRouteWithChildren,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
-  SuperAdminRoute: SuperAdminRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

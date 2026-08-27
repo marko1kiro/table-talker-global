@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-const r2Server = () =>
-  readFileSync(new URL("../src/lib/r2.server.ts", import.meta.url), "utf8");
+const r2Server = () => readFileSync(new URL("../src/lib/r2.server.ts", import.meta.url), "utf8");
 
 it("imports S3Client and commands from @aws-sdk/client-s3", () => {
   const source = r2Server();

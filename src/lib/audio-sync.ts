@@ -155,13 +155,31 @@ export async function syncManifest(
   cacheName: string = CACHE_NAME,
 ): Promise<SyncResult> {
   if (typeof caches === "undefined") {
-    return { ok: false, cachedCount: 0, downloadedCount: 0, failedIds: [], message: "Cache Storage tidak tersedia. Gunakan browser modern untuk sinkronisasi audio." };
+    return {
+      ok: false,
+      cachedCount: 0,
+      downloadedCount: 0,
+      failedIds: [],
+      message: "Cache Storage tidak tersedia. Gunakan browser modern untuk sinkronisasi audio.",
+    };
   }
   if (!globalThis.crypto?.subtle) {
-    return { ok: false, cachedCount: 0, downloadedCount: 0, failedIds: [], message: "Web Crypto tidak tersedia. Gunakan browser modern untuk verifikasi audio." };
+    return {
+      ok: false,
+      cachedCount: 0,
+      downloadedCount: 0,
+      failedIds: [],
+      message: "Web Crypto tidak tersedia. Gunakan browser modern untuk verifikasi audio.",
+    };
   }
   if (manifest.length === 0) {
-    return { ok: false, cachedCount: 0, downloadedCount: 0, failedIds: [], message: "Manifest audio kosong. Hubungi admin restoran." };
+    return {
+      ok: false,
+      cachedCount: 0,
+      downloadedCount: 0,
+      failedIds: [],
+      message: "Manifest audio kosong. Hubungi admin restoran.",
+    };
   }
 
   const cached = await getCachedMetadata(restaurantId, cacheName);
@@ -192,7 +210,13 @@ export async function syncManifest(
           failedIds.add(item.audioId);
           return;
         }
-        const ok = await putToCache(restaurantId, item.audioId, buffer, item.contentHash, cacheName);
+        const ok = await putToCache(
+          restaurantId,
+          item.audioId,
+          buffer,
+          item.contentHash,
+          cacheName,
+        );
         if (!ok) {
           failedIds.add(item.audioId);
           return;
@@ -230,7 +254,10 @@ type CachedAudioUrlDependencies = {
 export async function getCachedAudioUrl(
   restaurantId: string,
   audioId: string,
-  { getCachedAudio: readAudio = getCachedAudio, createObjectURL = URL.createObjectURL }: CachedAudioUrlDependencies = {},
+  {
+    getCachedAudio: readAudio = getCachedAudio,
+    createObjectURL = URL.createObjectURL,
+  }: CachedAudioUrlDependencies = {},
 ): Promise<string | null> {
   const buffer = await readAudio(restaurantId, audioId);
   return buffer ? createObjectURL(new Blob([buffer], { type: "audio/mpeg" })) : null;

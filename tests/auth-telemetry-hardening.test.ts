@@ -19,7 +19,7 @@ it("uses active database-backed tenant sessions for server tenant access", () =>
   expect(tenant).toContain("verifyActiveTenantSession");
   expect(tenant).toContain("restaurant_access_tokens");
   expect(tenant).toContain('"is_active", true');
-  expect(tenant).toContain("data.code_version !== data.restaurants.code_version");
+  expect(tenant).toContain("data.code_version !== currentRestaurantVersion(data.restaurants)");
 
   for (const path of [
     "../src/lib/restaurants.server.ts",
@@ -69,19 +69,12 @@ it("makes telemetry migration versions unique and backfills restaurant IDs befor
   expect(removeUnattributable).toBeLessThan(notNull);
 });
 
-it("uses database RPCs for login and operational-error rate limits", () => {
+it("uses database RPCs for operational-error rate limits", () => {
   const migration = source("../supabase/migrations/20260823104000_login_rate_limit.sql");
   expect(migration).toMatch(/create table public\.login_rate_limits/i);
   expect(migration).toMatch(/restaurant_id.*client_key_hash/is);
   expect(migration).toMatch(/create function public\.check_tenant_login_rate_limit/i);
   expect(migration).toMatch(/create function public\.record_tenant_login_failure/i);
-
-  const restaurants = source("../src/lib/restaurants.server.ts");
-  expect(restaurants).toContain("check_tenant_login_rate_limit");
-  expect(restaurants).toContain('client.rpc("check_tenant_login_rate_limit"');
-  expect(restaurants).toContain("clientLimit.error || ipLimit.error");
-  expect(restaurants).toContain('rpc("clear_tenant_login_failures"');
-  expect(restaurants).not.toContain("isTenantLoginRateLimited");
 });
 
 it("refreshes crew session token even when the session ID stays stable", () => {
@@ -130,7 +123,7 @@ it("uses pgcrypto digest portably in credential revocation RPCs", () => {
   );
 });
 
-it("rate limits every restaurant-code failure by opaque lookup and client hashes", () => {
+it("defines legacy tenant rate-limit tables keyed by opaque lookup and client hashes", () => {
   const migration = source(
     "../supabase/migrations/20260823131000_credential_revocation_contracts.sql",
   );
@@ -139,15 +132,9 @@ it("rate limits every restaurant-code failure by opaque lookup and client hashes
   expect(migration).toMatch(
     /grant execute on function public\.check_tenant_login_rate_limit\(text, text\), public\.record_tenant_login_failure\(text, text\), public\.clear_tenant_login_failures\(text, text\) to service_role/i,
   );
-  const restaurants = source("../src/lib/restaurants.server.ts");
-  expect(restaurants).toContain('rpc("record_tenant_login_failure"');
-  expect(restaurants).toContain("p_lookup_hash: codeHash");
-  expect(restaurants).toContain(
-    "if (!valid || !restaurant || lookupError || !restaurant.is_active)",
-  );
 });
 
-it("rate limits restaurant-code failures by server-derived IP even when client keys rotate", () => {
+it("derives restaurant-login IP bucket server-side even when client keys rotate", () => {
   const migration = source("../supabase/migrations/20260823132000_server_ip_login_rate_limit.sql");
   expect(migration).toMatch(/tenant_login_rate_limits.*bucket_hash/is);
   expect(migration).toMatch(/p_lookup_hash text, p_bucket_hash text/i);
@@ -160,15 +147,10 @@ it("rate limits restaurant-code failures by server-derived IP even when client k
   expect(requestIp).toContain('headers.get("x-forwarded-for")?.split(",")[0]');
   expect(requestIp).toContain('headers.get("x-real-ip")');
   expect(restaurants).toContain("getLoginRateLimitBuckets(");
-  expect(restaurants).toContain("p_bucket_hash: clientKeyHash");
-  expect(restaurants).toContain("p_bucket_hash: ipKeyHash");
-  expect(restaurants).toMatch(
-    /Promise\.all\(\[\s*client\.rpc\("check_tenant_login_rate_limit"[\s\S]*ipKeyHash/s,
-  );
   expect(restaurants).not.toMatch(/validator\(z\.object\([^)]*ip:/s);
 });
 
-it("checks global IP and client login buckets before restaurant lookup", () => {
+it("defines legacy global restaurant-login rate-limit buckets", () => {
   const migration = source("../supabase/migrations/20260823133000_global_login_rate_limit.sql");
   expect(migration).toMatch(/create table public\.tenant_global_login_rate_limits/i);
   expect(migration).toMatch(/primary key \(bucket_hash\)/i);
@@ -177,16 +159,6 @@ it("checks global IP and client login buckets before restaurant lookup", () => {
   );
   expect(migration).toMatch(/record_global_tenant_login_failure\(text\)/i);
   expect(migration).toMatch(/clear_global_tenant_login_failures\(text\)/i);
-
-  const restaurants = source("../src/lib/restaurants.server.ts");
-  const check = restaurants.indexOf('rpc("check_global_tenant_login_rate_limit"');
-  const record = restaurants.indexOf('rpc("record_global_tenant_login_failure"');
-  const lookup = restaurants.indexOf('.eq("code_hash", codeHash)');
-  expect(check).toBeGreaterThan(-1);
-  expect(check).toBeLessThan(lookup);
-  expect(record).toBeGreaterThan(-1);
-  expect(record).toBeLessThan(lookup);
-  expect(restaurants).toContain('rpc("clear_global_tenant_login_failures"');
 });
 
 it("validates tenant-bound crew access server-side before local playback", () => {

@@ -30,17 +30,24 @@ end;
 $$;
 
 do $$
+declare
+  owner_job_count integer;
+  exact_job_count integer;
 begin
-  if not exists(
-    select 1 from cron.job
+  if to_regclass('cron.job') is not null then
+    select count(*) into owner_job_count
+    from cron.job
+    where jobname = 'owner-retention-daily';
+
+    select count(*) into exact_job_count
+    from cron.job
     where jobname = 'owner-retention-daily'
       and schedule = '17 3 * * *'
-      and command = 'select public.cleanup_owner_retention()'
-  ) then
-    raise exception 'OWNER_RETENTION_SCHEDULER_MISSING';
+      and command = 'select public.cleanup_owner_retention()';
+
+    if owner_job_count <> 1 or exact_job_count <> 1 then
+      raise exception 'OWNER_RETENTION_SCHEDULER_INVALID';
+    end if;
   end if;
-exception
-  when undefined_table or invalid_schema_name then
-    raise exception 'OWNER_RETENTION_SCHEDULER_MISSING';
 end;
 $$;

@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
 const migrationSource = readFileSync(
-  new URL("../supabase/migrations/20260823120000_remove_legacy_restaurant_code.sql", import.meta.url),
+  new URL(
+    "../supabase/migrations/20260823120000_remove_legacy_restaurant_code.sql",
+    import.meta.url,
+  ),
   "utf8",
 );
 
@@ -13,9 +16,7 @@ it("removes public code lookup semantics from final schema", () => {
 });
 
 import { describe } from "vitest";
-import {
-  validateRestaurantCode,
-} from "../src/lib/restaurant-domain";
+import { validateRestaurantCode } from "../src/lib/restaurant-domain";
 
 describe("validateRestaurantCode", () => {
   it("accepts exact uppercase alphanumeric codes", () => {

@@ -29,10 +29,30 @@ export function shouldActivatePresence(status: string) {
   return status === "SUBSCRIBED";
 }
 
-function isInvalidSessionError(error: unknown) {
-  return /INVALID_|Sesi resto tidak valid/i.test(
+export function isInvalidSessionError(error: unknown) {
+  return /\b(?:INVALID_CREW_SESSION|INVALID_TENANT_SESSION|SESSION_NOT_FOUND)\b|Sesi resto tidak valid/i.test(
     error instanceof Error ? error.message : String(error),
   );
+}
+
+export function updateUncertainCommandIds(ids: Set<string>, commandId: string, uncertain: boolean) {
+  if (uncertain) ids.add(commandId);
+  else ids.delete(commandId);
+  return ids.size > 0;
+}
+
+export function canProcessCatchUp(
+  active: boolean,
+  activeProcessor: unknown,
+  processor: unknown,
+  channel: unknown,
+  nextChannel: unknown,
+) {
+  return active && activeProcessor === processor && channel === nextChannel;
+}
+
+export function deliveryIsUncertain(catchUpUncertain: boolean, uncertainCommandIds: Set<string>) {
+  return catchUpUncertain || uncertainCommandIds.size > 0;
 }
 
 export function createChannelStatusHandler<T extends object>({
@@ -231,7 +251,11 @@ type ProcessorOptions = {
   ) => Promise<void>;
   now: () => number;
   onNeedsAudioRecovery?: () => void;
-  onDeliveryUncertain?: () => void;
+  onPending?: (commandId: string, uncertain: boolean) => void;
+  onSessionInvalid?: () => void;
+  isInvalidSessionError?: (error: unknown) => boolean;
+  schedule?: (callback: () => void, delay: number) => ReturnType<typeof setTimeout>;
+  cancel?: (timer: ReturnType<typeof setTimeout>) => void;
   isVisible?: () => boolean;
   state?: RemoteCommandState;
 };
@@ -260,11 +284,101 @@ export function createRemoteCommandProcessor({
   acknowledge,
   now,
   onNeedsAudioRecovery,
-  onDeliveryUncertain,
+  onPending,
+  onSessionInvalid,
+  isInvalidSessionError: isInvalidAcknowledgementError = () => false,
+  schedule = setTimeout,
+  cancel = clearTimeout,
   isVisible = () => typeof document === "undefined" || document.visibilityState === "visible",
   state = { processedIds: new Map(), newest: null, queue: Promise.resolve() },
 }: ProcessorOptions) {
+  const pendingAcks = new Map<
+    string,
+    {
+      status: "played" | "failed";
+      reason: string | null;
+      expiresAt: number;
+      attempt: number;
+      timer: ReturnType<typeof setTimeout> | null;
+      inFlight: Promise<void> | null;
+    }
+  >();
+  const retryDelays = [250, 500, 1_000];
+  let disposed = false;
+  const removePendingAck = (commandId: string, delivered = false) => {
+    const pending = pendingAcks.get(commandId);
+    if (!pending) return;
+    if (pending.timer !== null) cancel(pending.timer);
+    pendingAcks.delete(commandId);
+    if (delivered) onPending?.(commandId, false);
+  };
+  const dispose = () => {
+    disposed = true;
+    for (const commandId of [...pendingAcks.keys()]) removePendingAck(commandId);
+  };
+  const acknowledgePending = (commandId: string): Promise<void> => {
+    const pending = pendingAcks.get(commandId);
+    if (!pending || disposed) return Promise.resolve();
+    if (now() >= pending.expiresAt) {
+      removePendingAck(commandId);
+      onPending?.(commandId, true);
+      return Promise.resolve();
+    }
+    if (pending.inFlight) return pending.inFlight;
+    pending.inFlight = acknowledge(commandId, pending.status, pending.reason)
+      .then(() => {
+        if (disposed || pendingAcks.get(commandId) !== pending) return;
+        removePendingAck(commandId, true);
+      })
+      .catch((error) => {
+        if (disposed || pendingAcks.get(commandId) !== pending) return;
+        pending.inFlight = null;
+        if (isInvalidAcknowledgementError(error)) {
+          dispose();
+          onSessionInvalid?.();
+          return;
+        }
+        onPending?.(commandId, true);
+        const delay = retryDelays[pending.attempt++];
+        if (delay === undefined) return;
+        const remaining = pending.expiresAt - now();
+        if (remaining <= 0) {
+          removePendingAck(commandId);
+          onPending?.(commandId, true);
+          return;
+        }
+        const timer = schedule(
+          () => {
+            if (disposed || pendingAcks.get(commandId) !== pending) return;
+            pending.timer = null;
+            void acknowledgePending(commandId);
+          },
+          Math.min(delay, remaining),
+        );
+        if (disposed || pendingAcks.get(commandId) !== pending) cancel(timer);
+        else pending.timer = timer;
+      });
+    return pending.inFlight;
+  };
+  const enqueueAcknowledgement = (
+    commandId: string,
+    status: "played" | "failed",
+    reason: string | null,
+    expiresAt: number,
+  ) => {
+    if (!pendingAcks.has(commandId))
+      pendingAcks.set(commandId, {
+        status,
+        reason,
+        expiresAt,
+        attempt: 0,
+        timer: null,
+        inFlight: null,
+      });
+    return acknowledgePending(commandId);
+  };
   const process = async (command: RemoteCommand) => {
+    if (disposed) return;
     if (state.newest?.createdAt !== command.createdAt || state.newest.id !== command.id) return;
     if (
       !commandIsProcessable(
@@ -280,23 +394,23 @@ export function createRemoteCommandProcessor({
     try {
       await playRemoteAudio(command.audioId);
     } catch (error) {
+      if (disposed) return;
       onNeedsAudioRecovery?.();
-      try {
-        await acknowledge(command.id, "failed", boundedFailureReason(error));
-      } catch {
-        onDeliveryUncertain?.();
-      }
+      await enqueueAcknowledgement(
+        command.id,
+        "failed",
+        boundedFailureReason(error),
+        Date.parse(command.expiresAt),
+      );
       return;
     }
-    try {
-      await acknowledge(command.id, "played", null);
-    } catch {
-      onDeliveryUncertain?.();
-    }
+    if (disposed) return;
+    await enqueueAcknowledgement(command.id, "played", null, Date.parse(command.expiresAt));
   };
 
   return {
     process(command: RemoteCommand) {
+      if (disposed) return state.queue;
       const currentTime = now();
       pruneProcessedCommands(state.processedIds, currentTime);
       if (
@@ -318,6 +432,7 @@ export function createRemoteCommandProcessor({
       state.queue = state.queue.then(() => process(command));
       return state.queue;
     },
+    dispose,
   };
 }
 
@@ -343,6 +458,8 @@ export function useRemoteCrew({
   const [duplicateName, setDuplicateName] = useState(false);
   const [needsAudioRecovery, setNeedsAudioRecovery] = useState(false);
   const [deliveryUncertain, setDeliveryUncertain] = useState(false);
+  const uncertainCommandIds = useRef(new Set<string>());
+  const catchUpUncertain = useRef(false);
   const playRef = useRef(playRemoteAudio);
   playRef.current = playRemoteAudio;
   const registrationKey = crewRegistrationKey(registration);
@@ -362,6 +479,7 @@ export function useRemoteCrew({
 
     let active = true;
     let channel: ReturnType<SupabaseClient["channel"]> | null = null;
+    let activeProcessor: ReturnType<typeof createRemoteCommandProcessor> | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
     let userId: string | null = null;
     let crewSessionToken = registration.crewSessionToken;
@@ -372,6 +490,19 @@ export function useRemoteCrew({
     const update = (setter: (value: boolean) => void, value: boolean) => {
       if (active) setter(value);
     };
+    const resetDeliveryUncertainty = () => {
+      uncertainCommandIds.current.clear();
+      catchUpUncertain.current = false;
+      update(setDeliveryUncertain, false);
+    };
+    const updatePending = (commandId: string, uncertain: boolean) => {
+      updateUncertainCommandIds(uncertainCommandIds.current, commandId, uncertain);
+      update(
+        setDeliveryUncertain,
+        deliveryIsUncertain(catchUpUncertain.current, uncertainCommandIds.current),
+      );
+    };
+    resetDeliveryUncertainty();
     update(setDuplicateName, false);
     const stopHeartbeat = () => {
       if (timer) clearInterval(timer);
@@ -379,6 +510,9 @@ export function useRemoteCrew({
     };
     const invalidateSession = () => {
       stopHeartbeat();
+      activeProcessor?.dispose();
+      activeProcessor = null;
+      resetDeliveryUncertainty();
       if (channel) void client.removeChannel(channel);
       channel = null;
       channelTerminal = true;
@@ -422,6 +556,8 @@ export function useRemoteCrew({
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
+        activeProcessor?.dispose();
+        activeProcessor = null;
         if (channel) void client.removeChannel(channel);
         channel = null;
         channelTerminal = false;
@@ -473,41 +609,48 @@ export function useRemoteCrew({
           update(setDuplicateName, false);
           update(setOffline, true);
           if (active) setConnectionState("connecting");
+          activeProcessor?.dispose();
           const processor = createRemoteCommandProcessor({
             sessionId: userId,
             state: getRemoteCommandState(client, userId),
             playRemoteAudio: (audioId) => playRef.current(audioId),
             acknowledge: async (commandId, status, reason) => {
-              try {
-                await rpc("ack_remote_command", {
-                  p_command_id: commandId,
-                  p_status: status,
-                  p_failure_reason: reason,
-                  p_session_token: crewSessionToken,
-                });
-              } catch (error) {
-                if (isInvalidSessionError(error)) invalidateSession();
-                throw new Error("ACK_FAILED");
-              }
+              await rpc("ack_remote_command", {
+                p_command_id: commandId,
+                p_status: status,
+                p_failure_reason: reason,
+                p_session_token: crewSessionToken,
+              });
             },
             now: Date.now,
             isVisible: () => active && document.visibilityState === "visible",
             onNeedsAudioRecovery: () => update(setNeedsAudioRecovery, true),
-            onDeliveryUncertain: () => update(setDeliveryUncertain, true),
+            onPending: updatePending,
+            isInvalidSessionError,
+            onSessionInvalid: invalidateSession,
           });
+          activeProcessor = processor;
           const catchUp = async () => {
             const { data, error } = await client.rpc("claim_pending_remote_command", {
               p_session_token: crewSessionToken,
             });
             if (!active) return;
+            if (!canProcessCatchUp(active, activeProcessor, processor, channel, nextChannel))
+              return;
             if (error) {
               if (isInvalidSessionError(error)) {
                 invalidateSession();
                 return;
               }
+              catchUpUncertain.current = true;
               update(setDeliveryUncertain, true);
               return;
             }
+            catchUpUncertain.current = false;
+            update(
+              setDeliveryUncertain,
+              deliveryIsUncertain(catchUpUncertain.current, uncertainCommandIds.current),
+            );
             if (data) await processor.process(toRemoteCommand(data as RemoteCommandRow));
           };
           const nextChannel = client.channel(`remote-commands:${userId}`).on(
@@ -541,6 +684,8 @@ export function useRemoteCrew({
                 if (active) setConnectionState(value);
               },
               removeChannel: (current) => {
+                activeProcessor?.dispose();
+                activeProcessor = null;
                 void client.removeChannel(current);
                 channel = null;
                 presenceActive = false;
@@ -579,12 +724,14 @@ export function useRemoteCrew({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pagehide", disconnect);
       stopHeartbeat();
+      activeProcessor?.dispose();
+      activeProcessor = null;
       disconnect();
       const currentChannel = channel;
       channel = null;
       if (currentChannel) void client.removeChannel(currentChannel);
     };
-  }, [registrationKey, onCrewSessionId, onSessionInvalid]);
+  }, [registration, registrationKey, onCrewSessionId, onSessionInvalid]);
 
   return {
     offline,
