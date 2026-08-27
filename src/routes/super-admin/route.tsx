@@ -1,19 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useRouter } from "@tanstack/react-router";
-import { Menu } from "lucide-react";
+import {
+  AudioLines,
+  Building2,
+  ChevronRight,
+  CircleGauge,
+  History,
+  LogOut,
+  Menu,
+  Megaphone,
+  ShieldCheck,
+  TriangleAlert,
+} from "lucide-react";
 import { AuthGate } from "@/components/AuthGate";
 import { getAuthStatus, loginSuperAdmin, logout } from "@/lib/auth";
 import { isOwnerQueryKey } from "@/lib/owner-query-cache";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 const nav = [
-  ["Dashboard", "/super-admin"],
-  ["Resto", "/super-admin/restaurants"],
-  ["Audio", "/super-admin/audio"],
-  ["Riwayat", "/super-admin/history"],
-  ["Error Log", "/super-admin/error-log"],
-  ["Broadcast", "/super-admin/broadcast"],
+  { label: "Dashboard", to: "/super-admin", icon: CircleGauge, exact: true },
+  { label: "Restoran", to: "/super-admin/restaurants", icon: Building2, exact: false },
+  { label: "Audio", to: "/super-admin/audio", icon: AudioLines, exact: false },
+  { label: "Riwayat", to: "/super-admin/history", icon: History, exact: false },
+  { label: "Error Log", to: "/super-admin/error-log", icon: TriangleAlert, exact: false },
+  { label: "Broadcast", to: "/super-admin/broadcast", icon: Megaphone, exact: false },
 ] as const;
 
 export const Route = createFileRoute("/super-admin")({
@@ -41,28 +52,40 @@ function OwnerShell() {
   }
 
   return (
-    <main className="min-h-[100svh] bg-background text-foreground">
-      <button
-        type="button"
-        aria-label="Buka navigasi owner"
-        aria-expanded={menuOpen}
-        onClick={() => setMenuOpen(true)}
-        className="brutal-border brutal-press fixed left-4 top-4 z-20 bg-accent p-2 md:hidden"
-      >
-        <Menu className="size-5" />
-      </button>
-      <aside className="brutal-border fixed inset-y-0 left-0 z-30 hidden w-64 bg-card p-4 md:block">
+    <main className="owner-console min-h-[100svh] bg-slate-50 text-slate-950">
+      <header className="fixed inset-x-0 top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:hidden">
+        <button
+          type="button"
+          aria-label="Buka navigasi owner"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(true)}
+          className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+        >
+          <Menu className="size-5" />
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="grid size-8 place-items-center rounded-lg bg-amber-400 text-slate-950">
+            <AudioLines className="size-4" />
+          </span>
+          <span className="text-sm font-black tracking-tight">TABLE TALKER</span>
+        </div>
+        <span className="size-10" aria-hidden="true" />
+      </header>
+
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-slate-200 bg-slate-950 p-4 md:block">
         <Navigation onNavigate={() => setMenuOpen(false)} />
       </aside>
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="brutal-border w-72 bg-card p-4 md:hidden">
+        <SheetContent
+          side="left"
+          className="w-[19rem] border-0 bg-slate-950 p-4 text-white md:hidden"
+        >
           <SheetTitle className="sr-only">Navigasi owner</SheetTitle>
-          <div className="pt-6">
-            <Navigation onNavigate={() => setMenuOpen(false)} />
-          </div>
+          <Navigation onNavigate={() => setMenuOpen(false)} />
         </SheetContent>
       </Sheet>
-      <section className="mx-auto max-w-7xl p-4 pt-20 md:ml-64 md:p-8">
+
+      <section className="mx-auto max-w-[96rem] px-4 pb-12 pt-24 sm:px-6 md:ml-72 md:px-8 md:pt-10 lg:px-10">
         <Outlet />
       </section>
     </main>
@@ -107,35 +130,67 @@ function Navigation({ onNavigate }: { onNavigate: () => void }) {
   }
 
   return (
-    <nav aria-label="Navigasi owner">
-      <p className="font-display text-xl uppercase">Table Talker</p>
-      <p className="mt-1 text-xs font-bold uppercase text-muted-foreground">Owner Console</p>
-      <div className="mt-8 grid gap-2">
-        {nav.map(([label, to]) => (
+    <nav aria-label="Navigasi owner" className="flex h-full flex-col">
+      <div className="flex items-center gap-3 px-2 py-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-400 text-slate-950 shadow-[0_0_0_4px_rgba(251,191,36,0.12)]">
+          <AudioLines className="size-5" />
+        </span>
+        <div>
+          <p className="text-base font-black tracking-tight text-white">TABLE TALKER</p>
+          <p className="mt-0.5 flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
+            <ShieldCheck className="size-3" /> Owner Console
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-7 space-y-1">
+        <p className="px-3 pb-2 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
+          Workspace
+        </p>
+        {nav.map(({ label, to, icon: Icon, exact }) => (
           <Link
             key={to}
             to={to}
+            activeOptions={{ exact }}
             onClick={onNavigate}
-            activeProps={{ className: "bg-accent" }}
-            className="brutal-border brutal-press px-3 py-2 font-display uppercase"
+            activeProps={{
+              className: "bg-amber-400 text-slate-950 shadow-sm hover:bg-amber-400",
+            }}
+            inactiveProps={{ className: "text-slate-300 hover:bg-white/8 hover:text-white" }}
+            className="group flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition"
           >
-            {label}
+            <Icon className="size-[18px]" />
+            <span className="flex-1">{label}</span>
+            <ChevronRight className="size-4 opacity-0 transition group-hover:opacity-60" />
           </Link>
         ))}
       </div>
-      <button
-        type="button"
-        onClick={handleLogout}
-        disabled={loggingOut}
-        className="brutal-border brutal-press mt-8 w-full px-3 py-2 font-display uppercase"
-      >
-        {loggingOut ? "Keluar..." : "Keluar"}
-      </button>
-      {logoutError && (
-        <p role="alert" className="mt-2 text-sm text-destructive">
-          {logoutError}
-        </p>
-      )}
+
+      <div className="mt-auto border-t border-white/10 pt-4">
+        <div className="mb-3 rounded-xl bg-white/5 px-3 py-3">
+          <p className="text-xs font-bold text-white">Mode pemilik</p>
+          <p className="mt-1 text-[11px] leading-4 text-slate-400">
+            Akses penuh ke operasional restoran.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-300 transition hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
+        >
+          <LogOut className="size-[18px]" />
+          {loggingOut ? "Keluar..." : "Keluar"}
+        </button>
+        {logoutError && (
+          <p
+            role="alert"
+            className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300"
+          >
+            {logoutError}
+          </p>
+        )}
+      </div>
     </nav>
   );
 }

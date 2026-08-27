@@ -99,11 +99,17 @@ export function SyncDialog({
         progress: { current: 0, total: syncItems.length, label: "Memulai..." },
       });
 
-      const result = await syncManifest(restaurantId, syncItems, (progress: SyncProgress) => {
-        if (runGateRef.current.isCurrent(runId)) {
-          setState({ phase: "syncing", progress });
-        }
-      });
+      const result = await syncManifest(
+        restaurantId,
+        syncItems,
+        (progress: SyncProgress) => {
+          if (runGateRef.current.isCurrent(runId)) {
+            setState({ phase: "syncing", progress });
+          }
+        },
+        undefined,
+        { downloadHeaders: { Authorization: `Bearer ${tenantToken}` } },
+      );
 
       if (!runGateRef.current.isCurrent(runId)) return;
 

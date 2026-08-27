@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   computeHash,
+  downloadAndVerify,
   syncManifest,
   getCachedMetadata,
   putToCache,
@@ -20,7 +21,7 @@ const manifest = [
     audioId: "table:1",
     label: "Meja 1",
     category: "BASE",
-    r2Url: "https://r2.example/1.mp3",
+    downloadUrl: "/api/audio/table%3A1?restaurantId=restaurant-a",
     contentHash: "",
     byteSize: 1024,
   },
@@ -28,7 +29,7 @@ const manifest = [
     audioId: "table:2",
     label: "Meja 2",
     category: "BASE",
-    r2Url: "https://r2.example/2.mp3",
+    downloadUrl: "/api/audio/table%3A2?restaurantId=restaurant-a",
     contentHash: "",
     byteSize: 2048,
   },
@@ -86,6 +87,26 @@ describe("audio-sync", () => {
     expect(runs.isCurrent(tenantBRun)).toBe(true);
   });
 
+  it("aborts a download that exceeds the configured timeout", async () => {
+    const fetcher = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          });
+        }),
+    ) as typeof fetch;
+
+    const result = await downloadAndVerify("/api/audio/table%3A1", table1Hash, 1024, {
+      fetcher,
+      retries: 1,
+      timeoutMs: 5,
+    });
+
+    expect(result).toEqual({ ok: false, reason: "timeout" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("getCachedMetadata returns empty map when caches unavailable", async () => {
     const meta = await getCachedMetadata("restaurant-a");
     expect(meta.size).toBe(0);
@@ -127,7 +148,7 @@ describe("audio-sync", () => {
       setupCaches();
 
       globalThis.fetch = vi.fn(async (url: string) => {
-        const data = url.includes("1.mp3") ? TABLE_1_DATA : TABLE_2_DATA;
+        const data = url.includes("table%3A1") ? TABLE_1_DATA : TABLE_2_DATA;
         return new Response(data.buffer.slice(0), { status: 200 });
       }) as never;
 
@@ -191,11 +212,44 @@ describe("audio-sync", () => {
       expect(new Set(result.failedIds).size).toBe(result.failedIds.length);
     });
 
+    it("advances progress for failed download attempts", async () => {
+      setupCaches();
+      globalThis.fetch = vi.fn(async () => new Response(null, { status: 503 })) as never;
+
+      const onProgress = vi.fn();
+      const result = await syncManifest("restaurant-a", manifest, onProgress, "test-cache");
+
+      expect(result.ok).toBe(false);
+      expect(onProgress.mock.calls.some(([progress]) => progress.current === 1)).toBe(true);
+      expect(onProgress.mock.calls.at(-1)?.[0]).toMatchObject({ current: 2, total: 2 });
+    });
+
+    it("sends tenant authorization only through request headers", async () => {
+      setupCaches();
+      globalThis.fetch = vi.fn(async (url: string) => {
+        const data = url.includes("table%3A1") ? TABLE_1_DATA : TABLE_2_DATA;
+        return new Response(data.buffer.slice(0), { status: 200 });
+      }) as never;
+
+      await syncManifest("restaurant-a", manifest, undefined, "test-cache", {
+        downloadHeaders: { Authorization: "Bearer tenant-secret" },
+      });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/audio/"),
+        expect.objectContaining({
+          headers: { Authorization: "Bearer tenant-secret" },
+          signal: expect.any(AbortSignal),
+        }),
+      );
+      expect(manifest.every((item) => !item.downloadUrl.includes("tenant-secret"))).toBe(true);
+    });
+
     it("reports progress via callback", async () => {
       setupCaches();
 
       globalThis.fetch = vi.fn(async (url: string) => {
-        const data = url.includes("1.mp3") ? TABLE_1_DATA : TABLE_2_DATA;
+        const data = url.includes("table%3A1") ? TABLE_1_DATA : TABLE_2_DATA;
         return new Response(data.buffer.slice(0), { status: 200 });
       }) as never;
 
