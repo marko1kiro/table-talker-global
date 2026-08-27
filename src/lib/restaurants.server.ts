@@ -61,8 +61,8 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
       if (!valid || error || !login) return { error: CODE_ERROR };
       return {
         ok: true as const,
-        restaurantId: login.restaurant_id,
-        displayName: login.display_name,
+        restaurantId: login.p_rid,
+        displayName: login.p_rname,
         tenantToken,
       };
     } catch {

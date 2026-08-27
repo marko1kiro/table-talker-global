@@ -102,7 +102,7 @@ create or replace function public.login_to_restaurant_atomic(
   p_token_hash text,
   p_expires_at timestamptz
 )
-returns table(restaurant_id uuid, display_name text, code_version integer)
+returns table(p_rid uuid, p_rname text, p_rversion integer)
 language plpgsql security definer set search_path = pg_catalog, public as $$
 declare
   v_now timestamptz := now();
