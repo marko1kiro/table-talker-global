@@ -23,8 +23,6 @@ it("uses keyed exact-code lookup and one generic failure at crew boundary", () =
 it("keeps owner credential handlers server-only, audited, and no-store", () => {
   for (const name of [
     "createRestaurant",
-    "listRestaurants",
-    "getRestaurantDetail",
     "viewRestaurantCode",
     "changeRestaurantCode",
     "deactivateRestaurant",

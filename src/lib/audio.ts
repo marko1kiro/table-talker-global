@@ -1,14 +1,10 @@
-import { ANNOUNCEMENT_CATALOG, type AnnouncementId, type AudioId } from "./remote-audio-domain";
+import { ANNOUNCEMENT_CATALOG, type AnnouncementId } from "./remote-audio-domain";
 
 export { TABLE_COUNT } from "./remote-audio-domain";
 
 export const ANNOUNCEMENT_IDS = ANNOUNCEMENT_CATALOG.map(
   ({ id }) => id,
 ) as readonly AnnouncementId[];
-
-export function getBundledAudioUrl(_audioId: AudioId): string | null {
-  return null;
-}
 
 export function getUnlockAudioUrl(): string | null {
   return "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";

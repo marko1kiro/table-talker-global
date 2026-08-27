@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAudioPlaybackController,
-  getBundledAudioUrl,
   getUnlockAudioUrl,
   unlockBundledAudio,
   createPlaybackGeneration,
@@ -31,7 +30,6 @@ function audioMock() {
 describe("bundled audio playback", () => {
   it("exposes real bundled sources", () => {
     expect(getUnlockAudioUrl).toBeTypeOf("function");
-    expect(getBundledAudioUrl).toBeTypeOf("function");
   });
 
   it("reuses supplied audio for muted unlock and restores its settings", async () => {
