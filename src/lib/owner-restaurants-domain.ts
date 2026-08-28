@@ -26,7 +26,7 @@ export function validateCatalogMutation(
     !/^https:\/\/.+/.test(input.r2Url) ||
     !/^[0-9a-f]{64}$/.test(input.contentHash) ||
     !Number.isInteger(input.byteSize) ||
-    input.byteSize < 1024 * 1024 ||
+    input.byteSize < 1024 ||
     input.byteSize > 10 * 1024 * 1024 ||
     !Number.isInteger(input.ordering) ||
     input.ordering < 0

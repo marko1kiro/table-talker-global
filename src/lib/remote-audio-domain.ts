@@ -1,4 +1,4 @@
-export const TABLE_COUNT = 70;
+export const TABLE_COUNT = 100;
 
 export const TABLE_AUDIO_IDS = Array.from(
   { length: TABLE_COUNT },

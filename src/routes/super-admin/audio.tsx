@@ -171,13 +171,8 @@ function Audio() {
     setCategory(item.category);
   };
   const upload = async () => {
-    if (
-      !file ||
-      file.type !== "audio/mpeg" ||
-      file.size < 1024 * 1024 ||
-      file.size > 10 * 1024 * 1024
-    )
-      return setError("Pilih MP3 1-10 MB.");
+    if (!file || file.type !== "audio/mpeg" || file.size < 1024 || file.size > 10 * 1024 * 1024)
+      return setError("Pilih MP3 1 KB–10 MB.");
     setPending(true);
     setError("");
     try {
@@ -415,7 +410,11 @@ function Audio() {
                 {file ? file.name : "Pilih file MP3"}
               </span>
               <span className="mt-1 text-xs text-slate-500">
-                {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Ukuran file 1–10 MB"}
+                {file
+                  ? file.size < 1024 * 1024
+                    ? `${(file.size / 1024).toFixed(2)} KB`
+                    : `${(file.size / 1024 / 1024).toFixed(2)} MB`
+                  : "Ukuran file 1 KB–10 MB"}
               </span>
               <input
                 aria-label="File MP3"
