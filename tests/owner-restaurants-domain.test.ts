@@ -95,10 +95,19 @@ it("rejects invalid mutation metadata, size, hashes, and ordering", () => {
       ...table,
       r2Url: "https://static.example/audio.mp3",
       contentHash: "a".repeat(64),
-      byteSize: 1024 * 1024 - 1,
+      byteSize: 1023,
       ordering: 0,
     }),
   ).toMatchObject({ code: "INVALID_METADATA" });
+  expect(
+    validateCatalogMutation({
+      ...table,
+      r2Url: "https://static.example/audio.mp3",
+      contentHash: "a".repeat(64),
+      byteSize: 1024,
+      ordering: 0,
+    }),
+  ).toMatchObject({ ok: true });
   expect(
     validateCatalogMutation({
       ...table,

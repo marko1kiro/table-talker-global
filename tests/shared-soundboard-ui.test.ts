@@ -18,7 +18,7 @@ it("keeps the announcement trigger at the default bottom position", () => {
 });
 
 it("derives all table and categorized announcement controls from shared metadata", () => {
-  expect(TABLE_AUDIO_IDS).toHaveLength(70);
+  expect(TABLE_AUDIO_IDS).toHaveLength(100);
   expect(ANNOUNCEMENT_CATALOG.filter(({ category }) => category === "INFO")).toHaveLength(3);
   expect(ANNOUNCEMENT_CATALOG.filter(({ category }) => category === "LARANGAN")).toHaveLength(3);
   expect(source).toContain("TABLE_AUDIO_IDS.map");

@@ -15,10 +15,10 @@ import {
 } from "../src/lib/remote-audio-domain";
 
 describe("remote audio domain", () => {
-  it("exposes one 70-table range and categorized announcement metadata without asset URLs", () => {
-    expect(TABLE_AUDIO_IDS).toHaveLength(70);
+  it("exposes one 100-table range and categorized announcement metadata without asset URLs", () => {
+    expect(TABLE_AUDIO_IDS).toHaveLength(100);
     expect(TABLE_AUDIO_IDS[0]).toBe("table:1");
-    expect(TABLE_AUDIO_IDS[69]).toBe("table:70");
+    expect(TABLE_AUDIO_IDS[99]).toBe("table:100");
     expect(ANNOUNCEMENT_CATALOG.map(({ id, category }) => ({ id, category }))).toEqual([
       { id: "seating", category: "INFO" },
       { id: "himbauan-barang-bawaan-pelanggan", category: "INFO" },
@@ -28,7 +28,7 @@ describe("remote audio domain", () => {
       { id: "larangan-gabung-meja", category: "LARANGAN" },
     ]);
     expect(JSON.stringify({ TABLE_AUDIO_IDS, ANNOUNCEMENT_CATALOG })).not.toContain(".mp3");
-    expect(getCatalogMetadata("table:71")).toBeNull();
+    expect(getCatalogMetadata("table:101")).toBeNull();
     expect(getCatalogMetadata("announcement:no-smoking")).toEqual({
       id: "announcement:no-smoking",
       label: "Dilarang Merokok di Area Lobby",
