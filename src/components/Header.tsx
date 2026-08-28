@@ -51,10 +51,15 @@ export function Header({ readyCount, totalCount, restaurantDisplayName }: Header
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2">
           <Link
             to="/help"
-            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider underline-offset-2 hover:underline"
+            className="brutal-press flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider"
           >
-            <LifeBuoy className="h-3.5 w-3.5 shrink-0" strokeWidth={3} />
-            KLIK DISINI Jika kamu butuh bantuan atau ada Error
+            <span className="brutal-border brutal-shadow-sm inline-flex shrink-0 items-center gap-1 bg-foreground px-1.5 py-0.5 font-black text-primary-foreground">
+              <LifeBuoy className="h-3.5 w-3.5" strokeWidth={3} />
+              KLIK DISINI
+            </span>
+            <span className="truncate normal-case tracking-normal opacity-80">
+              Jika kamu butuh bantuan atau ada Error
+            </span>
           </Link>
           <span className="font-display shrink-0 text-sm">
             {readyCount}
