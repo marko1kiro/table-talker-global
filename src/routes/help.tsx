@@ -6,6 +6,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { buildWhatsAppHelpUrl } from "@/lib/help-message";
 
 export const Route = createFileRoute("/help")({
   head: () => ({
@@ -23,22 +24,6 @@ export const Route = createFileRoute("/help")({
   }),
   component: HelpPage,
 });
-
-// Nomor tujuan laporan kendala (format internasional tanpa "+" untuk wa.me).
-const SUPPORT_WHATSAPP_NUMBER = "6283826748958";
-
-function buildWhatsAppMessage(restaurantCode: string, crewName: string, issue: string): string {
-  const lines = [
-    "*LAPORAN KENDALA TABLE TALKER*",
-    "",
-    `Kode Resto: ${restaurantCode}`,
-    `Nama Crew: ${crewName}`,
-    "",
-    "Kendala:",
-    issue,
-  ];
-  return lines.join("\n");
-}
 
 function HelpPage() {
   const [restaurantCode, setRestaurantCode] = useState("");
@@ -58,8 +43,7 @@ function HelpPage() {
     }
     setError("");
 
-    const message = buildWhatsAppMessage(trimmedCode, trimmedName, trimmedIssue);
-    const url = `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+    const url = buildWhatsAppHelpUrl(trimmedCode, trimmedName, trimmedIssue);
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
