@@ -258,7 +258,7 @@ function SoundboardPage() {
     [audioSynced, getAudioController, getAudioUrlPool, stop, validateCrewAccessInBackground],
   );
 
-  const remoteCrew = useRemoteCrew({
+  useRemoteCrew({
     registration: identityHydrated ? crewIdentity : null,
     playRemoteAudio,
     onCrewSessionId,
@@ -403,7 +403,7 @@ function SoundboardPage() {
   const activeAudioLabel = activeAnnouncement?.label ?? activeAudioId;
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="brutal-bg-lines relative min-h-screen pb-24">
       {identityHydrated && (
         <CrewIdentityDialog
           open={!crewIdentity}
@@ -437,11 +437,6 @@ function SoundboardPage() {
           }}
           onSessionInvalid={invalidateCrewSession}
         />
-      )}
-      {remoteCrew.offline && crewIdentity && (
-        <p className="mx-auto max-w-6xl px-3 pt-3 text-center text-sm text-muted-foreground">
-          Remote control tidak tersedia. Soundboard tetap bisa dipakai.
-        </p>
       )}
       <Header
         readyCount={availableAudioIds.size}

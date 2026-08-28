@@ -15,11 +15,11 @@ export function TableButton({ tableNumber, status, onClick, disabled = false }: 
   const isLoading = status === "loading";
 
   const base =
-    "brutal-border brutal-press relative flex aspect-square w-full select-none flex-col items-center justify-center font-display uppercase disabled:cursor-not-allowed disabled:opacity-40";
+    "brutal-border brutal-press relative flex aspect-square w-full select-none flex-col items-center justify-center font-display uppercase disabled:cursor-not-allowed";
   const state = isPlaying
     ? "bg-accent brutal-shadow-lg"
     : isEmpty
-      ? "bg-muted brutal-shadow-sm opacity-60"
+      ? "bg-muted brutal-shadow-sm"
       : "bg-card brutal-shadow";
 
   return (

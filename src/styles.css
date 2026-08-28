@@ -163,6 +163,24 @@
   }
 }
 
+@utility brutal-bg-lines {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--brutal-bg);
+
+  &::before {
+    content: "";
+    position: fixed;
+    inset: -20px;
+    z-index: -1;
+    background-image: url("/dashboard-bg-shapes.webp");
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+    filter: blur(9px);
+  }
+}
+
 @utility brutal-pop-in {
   animation: brutal-pop-in-kf 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }

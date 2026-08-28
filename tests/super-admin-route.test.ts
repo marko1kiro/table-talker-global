@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-it("shows remote unavailable copy only after a failed registration", () => {
+it("never shows remote unavailable copy in the crew UI", () => {
   const dialog = readFileSync(
     new URL("../src/components/CrewIdentityDialog.tsx", import.meta.url),
     "utf8",
@@ -9,7 +9,8 @@ it("shows remote unavailable copy only after a failed registration", () => {
   const route = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
 
   expect(dialog).not.toContain("Remote control tidak tersedia. Soundboard tetap bisa dipakai.");
-  expect(route).toContain("remoteCrew.offline && crewIdentity");
+  expect(route).not.toContain("Remote control tidak tersedia. Soundboard tetap bisa dipakai.");
+  expect(route).not.toContain("remoteCrew.offline");
 });
 
 it("guards owner shell with super-admin session bit and noindex", () => {

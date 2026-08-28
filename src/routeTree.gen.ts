@@ -9,7 +9,12 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsOfUseRouteImport } from './routes/terms-of-use'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
+import { Route as FaqRouteImport } from './routes/faq'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as SuperAdminRouteRouteImport } from './routes/super-admin/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
@@ -21,9 +26,34 @@ import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-a
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
 import { Route as ApiAudioAudioIdRouteImport } from './routes/api/audio/$audioId'
 
+const TermsOfUseRoute = TermsOfUseRouteImport.update({
+  id: '/terms-of-use',
+  path: '/terms-of-use',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
+  id: '/privacy-policy',
+  path: '/privacy-policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaqRoute = FaqRouteImport.update({
+  id: '/faq',
+  path: '/faq',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SuperAdminRouteRoute = SuperAdminRouteRouteImport.update({
@@ -81,7 +111,12 @@ const ApiAudioAudioIdRoute = ApiAudioAudioIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/super-admin': typeof SuperAdminRouteRouteWithChildren
+  '/about': typeof AboutRoute
+  '/contact': typeof ContactRoute
+  '/faq': typeof FaqRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
   '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
@@ -93,7 +128,12 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/contact': typeof ContactRoute
+  '/faq': typeof FaqRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
   '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
@@ -107,7 +147,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/super-admin': typeof SuperAdminRouteRouteWithChildren
+  '/about': typeof AboutRoute
+  '/contact': typeof ContactRoute
+  '/faq': typeof FaqRoute
+  '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
   '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
@@ -122,7 +167,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/super-admin'
+    | '/about'
+    | '/contact'
+    | '/faq'
+    | '/privacy-policy'
     | '/sitemap.xml'
+    | '/terms-of-use'
     | '/super-admin/audio'
     | '/super-admin/broadcast'
     | '/super-admin/error-log'
@@ -134,7 +184,12 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
+    | '/contact'
+    | '/faq'
+    | '/privacy-policy'
     | '/sitemap.xml'
+    | '/terms-of-use'
     | '/super-admin/audio'
     | '/super-admin/broadcast'
     | '/super-admin/error-log'
@@ -147,7 +202,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/super-admin'
+    | '/about'
+    | '/contact'
+    | '/faq'
+    | '/privacy-policy'
     | '/sitemap.xml'
+    | '/terms-of-use'
     | '/super-admin/audio'
     | '/super-admin/broadcast'
     | '/super-admin/error-log'
@@ -161,17 +221,57 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SuperAdminRouteRoute: typeof SuperAdminRouteRouteWithChildren
+  AboutRoute: typeof AboutRoute
+  ContactRoute: typeof ContactRoute
+  FaqRoute: typeof FaqRoute
+  PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  TermsOfUseRoute: typeof TermsOfUseRoute
   ApiAudioAudioIdRoute: typeof ApiAudioAudioIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms-of-use': {
+      id: '/terms-of-use'
+      path: '/terms-of-use'
+      fullPath: '/terms-of-use'
+      preLoaderRoute: typeof TermsOfUseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy-policy': {
+      id: '/privacy-policy'
+      path: '/privacy-policy'
+      fullPath: '/privacy-policy'
+      preLoaderRoute: typeof PrivacyPolicyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/faq': {
+      id: '/faq'
+      path: '/faq'
+      fullPath: '/faq'
+      preLoaderRoute: typeof FaqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/super-admin': {
@@ -274,7 +374,12 @@ const SuperAdminRouteRouteWithChildren = SuperAdminRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SuperAdminRouteRoute: SuperAdminRouteRouteWithChildren,
+  AboutRoute: AboutRoute,
+  ContactRoute: ContactRoute,
+  FaqRoute: FaqRoute,
+  PrivacyPolicyRoute: PrivacyPolicyRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  TermsOfUseRoute: TermsOfUseRoute,
   ApiAudioAudioIdRoute: ApiAudioAudioIdRoute,
 }
 export const routeTree = rootRouteImport
