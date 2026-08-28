@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Volume2 } from "lucide-react";
+import { LifeBuoy, Volume2 } from "lucide-react";
 
 interface HeaderProps {
   readyCount: number;
@@ -31,6 +31,13 @@ export function Header({ readyCount, totalCount, restaurantDisplayName }: Header
         </Link>
 
         <div className="flex items-center gap-2">
+          <Link
+            to="/help"
+            aria-label="Butuh bantuan?"
+            className="brutal-border brutal-shadow-sm brutal-press hidden h-11 w-11 items-center justify-center bg-card sm:flex"
+          >
+            <LifeBuoy className="h-5 w-5" strokeWidth={3} />
+          </Link>
           <div className="brutal-border hidden bg-card px-3 py-1.5 sm:block">
             <div className="text-[9px] font-bold uppercase text-muted-foreground">Siap</div>
             <div className="font-display text-sm leading-none">
@@ -41,11 +48,15 @@ export function Header({ readyCount, totalCount, restaurantDisplayName }: Header
         </div>
       </div>
       <div className="border-t-[3px] border-foreground bg-accent px-4 py-1.5 sm:hidden">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <span className="text-[10px] font-black uppercase tracking-wider">
-            JANGAN LUPA BERDO'A DULU YA GAES! 🙏
-          </span>
-          <span className="font-display text-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2">
+          <Link
+            to="/help"
+            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider underline-offset-2 hover:underline"
+          >
+            <LifeBuoy className="h-3.5 w-3.5 shrink-0" strokeWidth={3} />
+            KLIK DISINI Jika kamu butuh bantuan atau ada Error
+          </Link>
+          <span className="font-display shrink-0 text-sm">
             {readyCount}
             <span className="opacity-60">/{totalCount}</span>
           </span>
