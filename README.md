@@ -2,9 +2,10 @@
 
 Soundboard panggilan meja berbasis TanStack Start dan Vercel.
 
-Aset audio sumber tersedia di repository, sedangkan katalog per restoran disimpan
-di Cloudflare R2. Crew mengunduh audio melalui endpoint aplikasi yang terautentikasi,
-memverifikasi ukuran dan SHA-256, lalu menyimpannya di Cache Storage browser.
+Seluruh audio (termasuk sound CKRBUL) disimpan di katalog per restoran pada
+Cloudflare R2 — tidak ada lagi audio bawaan di dalam repository. Crew mengunduh
+audio melalui endpoint aplikasi yang terautentikasi, memverifikasi ukuran dan
+SHA-256, lalu menyimpannya di Cache Storage browser.
 
 ## Menjalankan lokal
 
@@ -50,34 +51,22 @@ start kalau `AUTH_SECRET` kosong atau kurang dari 32 karakter.
 
 ## Struktur audio
 
-Aset sumber Pilot hidup di dalam repo dan dapat diunggah ke katalog R2:
-
-```text
-src/assets/audio/
-├── tables/
-│   ├── 1.mp3
-│   ├── 2.mp3
-│   └── ... 70.mp3
-└── announcements/
-    ├── seating.mp3
-    ├── outside-food.mp3
-    ├── no-smoking.mp3
-    └── jam-buka-resto.mp3
-```
-
-Nama file meja wajib `<nomor-meja>.mp3` dengan nomor 1–70. `src/lib/audio.ts`
-memindai folder tersebut saat build dan menyusun katalognya otomatis — tidak ada
-daftar file yang perlu ditulis manual.
+Semua audio dikelola sepenuhnya lewat database (Supabase `audio_manifests`) dan
+objek Cloudflare R2 — tidak ada file MP3 apa pun yang dibundel di dalam repo.
+Audio ditambahkan/diganti melalui `/super-admin` (upload MP3 ke katalog restoran
+yang dipilih), bukan dengan mengedit file di repository.
 
 ### Cara mengganti audio
 
-1. Ganti/tambah file MP3 di `src/assets/audio/**` (nama file tetap).
-2. Commit dan push.
-3. Vercel otomatis deploy ulang. Selesai.
+1. Login ke `/super-admin` dengan `SUPER_ADMIN_PASSWORD`.
+2. Pilih restoran, lalu unggah/ganti file MP3 pada Audio ID yang sesuai
+   (`table:<nomor>` untuk sound meja, `announcement:<id>` untuk pengumuman).
+3. Uploader menghitung SHA-256 dan menyimpan objek R2 dengan key immutable, lalu
+   menyimpan mapping-nya ke `audio_manifests`.
 
-Uploader menghitung SHA-256 dan menyimpan objek dengan key immutable. Saat login,
-crew mengambilnya melalui endpoint same-origin yang memvalidasi tenant dan katalog
-aktif; browser kemudian memverifikasi hash dan ukuran sebelum menyimpan cache.
+Saat login, crew mengambil manifest lewat endpoint same-origin yang memvalidasi
+tenant dan katalog aktif; browser kemudian memverifikasi hash dan ukuran sebelum
+menyimpan cache.
 
 Tombol pengumuman membaca keempat nama file di `announcements/` secara persis.
 Kalau salah satu filenya tidak ada, tombolnya otomatis tampil non-aktif.
@@ -93,7 +82,8 @@ Kalau salah satu filenya tidak ada, tombolnya otomatis tampil non-aktif.
 Fitur remote hanya aktif bila lima variabel opsionalnya juga diisi:
 `SUPER_ADMIN_PASSWORD`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
 `SUPABASE_URL`, dan `SUPABASE_SERVICE_ROLE_KEY`. Tanpanya, remote dinonaktifkan
-secara fail-open; dashboard dan soundboard audio bundled tetap berfungsi.
+secara fail-open; dashboard dan soundboard tetap berfungsi dengan audio dari
+katalog R2 restoran yang sudah disinkronkan.
 
 Untuk sinkronisasi crew, konfigurasi Supabase dan kredensial Cloudflare R2
 server-only pada deployment. Browser tidak mengakses hostname publik R2 secara langsung.
@@ -102,13 +92,14 @@ server-only pada deployment. Browser tidak mengakses hostname publik R2 secara l
 
 `/super-admin` memakai `SUPER_ADMIN_PASSWORD` terpisah dari dashboard. Pilih crew
 yang siap dan audio, lalu kirim perintah. Aplikasi tetap fail-open: bila Supabase
-atau Realtime tidak dikonfigurasi, dashboard dan soundboard audio bundled normal
-tetap berjalan; crew menampilkan remote tidak tersedia, sedangkan `/super-admin`
-menampilkan `Realtime offline` dan tidak dapat mengirim perintah.
+atau Realtime tidak dikonfigurasi, dashboard dan soundboard normal tetap berjalan
+dengan audio dari katalog R2 restoran; crew menampilkan remote tidak tersedia,
+sedangkan `/super-admin` menampilkan `Realtime offline` dan tidak dapat mengirim
+perintah.
 
-Crew memasukkan nama lalu menekan `LANJUT!!`. Gesture ini membuka sumber audio
-bundled yang nyata dalam keadaan muted agar browser mengizinkan pemutaran remote.
-Hanya crew audio-ready, tab terlihat, dan koneksi aktif yang mengirim heartbeat
+Crew memasukkan nama lalu menekan `LANJUT!!`. Gesture ini memutar sumber audio
+bisu (silent) singkat dalam keadaan muted agar browser mengizinkan pemutaran
+remote. Hanya crew audio-ready, tab terlihat, dan koneksi aktif yang mengirim heartbeat
 foreground setiap 10 detik yang dapat dipilih; kelayakannya berakhir setelah 30
 detik tanpa heartbeat. Perintah berlaku 5 detik, diproses sekali tanpa replay saat
 duplikat, reconnect, tab tersembunyi, atau perangkat kembali aktif. Audit perintah
@@ -211,3 +202,4 @@ credential fields.
 8. Enable feature flag after monitoring provisioning audit records. Apply cleanup only then: `npx supabase db push --include-all`. Migration `20260823120000_remove_legacy_restaurant_code.sql` aborts if any restaurant lacks derived credentials.
 
 The reprovision script prints restaurant display name and UUID only. It computes hash and ciphertext in memory, then calls service-role-only `rotate_restaurant_credentials` RPC. It never prints credential material.
+ints credential material.
