@@ -571,14 +571,70 @@ grant execute on function public.set_table_occupied_kasir(uuid, integer, text) t
   choice in this file once made). Callable by any authenticated role-session
   holder for that restaurant (SS excluded — SS has no occupancy UI).
 
-- [ ] **Step 9: Server wrappers** — `src/lib/table-occupancy.server.ts` and
-  `src/lib/role-session.server.ts` following the exact pattern of
-  `restaurants.server.ts`/`restaurant-session.server.ts`: `createServerFn`,
-  Zod validators, service-role Supabase client, try/catch returning
-  discriminated-union results, no leaking of raw Postgres error text to the
-  client.
+- [x] **Step 9: Server wrappers** — `src/lib/table-occupancy.server.ts` and
+  `src/lib/role-session.server.ts`, `createServerFn` + Zod validators +
+  try/catch returning discriminated-union results, no leaking of raw
+  Postgres error text to the client — same *shape* as
+  `restaurants.server.ts`/`restaurant-session.server.ts`, but with one
+  correction to the client-construction step below.
 
-- [ ] **Step 10: Run RPC-contract tests — must pass (green).**
+  **⚠️ Correction to this step's original wording (found and resolved
+  during implementation, 2026-08-30):** the text above originally said
+  "service-role Supabase client" for both files. That is only true for
+  `record_qr_scan`. The other six RPCs
+  (`claim_role_session`, `set_table_occupied_kasir`,
+  `set_table_empty_cleanup`, `create_escort_intent`,
+  `confirm_escort_intent`, `get_table_occupancy_snapshot`) are all
+  `revoke ... from ... service_role` / `grant execute ... to authenticated`
+  in `supabase/migrations/20260829020000_table_occupancy_rpcs.sql`, and
+  `claim_role_session`'s body additionally hard-fails with `UNAUTHORIZED`
+  whenever `auth.uid() is null` — which a service-role JWT always is. A
+  service-role client can never call these six successfully in production.
+  This matches the design spec's own RPC Surface table
+  (`docs/superpowers/specs/2026-08-29-table-occupancy-tracking-design.md`),
+  which already documents these as "authenticated (post-QR-login anonymous
+  auth)" — the plan text was simply out of sync with the spec.
+
+  **Implemented resolution** (confirmed with the user before coding):
+  - `role-session.server.ts` exports `getAnonAuthedSupabaseClient(accessToken)`:
+    builds a **per-request** Supabase client using the public anon key
+    (`process.env.VITE_SUPABASE_URL` / `process.env.VITE_SUPABASE_ANON_KEY`
+    — these are plain OS-level env vars readable via `process.env` in
+    server code exactly like `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` are
+    in `remote-audio.server.ts`; the Vite `define`-based
+    `import.meta.env` injection is a *separate*, client-bundle-only
+    mechanism and irrelevant here) plus an `Authorization: Bearer
+    <accessToken>` header. `claimRoleSession` and the five analogous
+    `table-occupancy.server.ts` wrappers (`setTableOccupiedKasir`,
+    `setTableEmptyCleanup`, `createEscortIntent`, `confirmEscortIntent`,
+    `getTableOccupancySnapshot`) all take a new required `accessToken`
+    input field and call this per-request client's `.rpc(...)` instead of
+    the service client.
+  - **Scope note for Task 8**: this means Task 8 must obtain an
+    anonymous-auth Supabase session (`signInAnonymously()`, same mechanism
+    already used for SS today) for **all four roles**, not just SS, and
+    pass that session's access token into these server functions. Small
+    addition to Task 8's original scope — see its Step 2 note below.
+  - `verifyRoleSessionToken` (in `role-session.server.ts`, mirroring
+    `verifyActiveTenantSession`/`verifyCrewSessionToken` in
+    `restaurant-session.server.ts`) still uses the plain
+    `getServiceClient()` service-role client and queries the
+    `role_session_tokens` table directly (no RPC call). This remains valid
+    and unaffected by the grant mismatch above: Task 5's schema migration
+    only revokes **table**-level access from `public, anon, authenticated`
+    — it never revokes `service_role`, and the revoke this step is working
+    around is strictly on **function EXECUTE** privileges, not table
+    `SELECT`.
+  - `recordQrScan` (in `table-occupancy.server.ts`, used by Task 7) is
+    unaffected by any of the above and correctly uses the plain
+    `getServiceClient()` service-role client with no `accessToken`
+    parameter — `record_qr_scan` really is `grant execute ... to
+    service_role` in the migration, the sole RPC of the seven for which
+    the original "service-role Supabase client" wording was accurate.
+
+- [x] **Step 10: Run RPC-contract tests — must pass (green).** (Unaffected
+  by Step 9 — that test file only asserts against the migration SQL text,
+  not against these wrapper files.)
 
 ## Task 7: QR Interceptor
 
@@ -608,7 +664,12 @@ grant execute on function public.set_table_occupied_kasir(uuid, integer, text) t
   calls `record_qr_scan` RPC via service-role client with a bounded
   timeout (e.g. `Promise.race` against a short timer); any rejection is
   caught and swallowed (logged to `operational_errors` if feasible without
-  blocking, but never rethrown).
+  blocking, but never rethrown). **Task 6 Step 9 note:** this is exactly
+  `recordQrScan` already exported from `src/lib/table-occupancy.server.ts`
+  (built in Task 6) — reuse it directly rather than re-implementing the
+  RPC call here; it is the one Task 6 wrapper genuinely built on the plain
+  service-role client, since `record_qr_scan` alone is `grant execute ...
+  to service_role` in the migration.
 
 - [ ] **Step 4: Implement the route handler** — resolve params → resolve
   redirect URL → fire `recordQrScan` without `await`-blocking the response
@@ -652,6 +713,22 @@ grant execute on function public.set_table_occupied_kasir(uuid, integer, text) t
   `crew_sessions` row via the existing RPC and a `crew_role_sessions` row
   via the new one) so `src/routes/index.tsx`'s existing session-token/
   access-validation code keeps working unmodified.
+
+  **⚠️ Scope addition found during Task 6 Step 9 (2026-08-30):**
+  `claimRoleSession` and the other five Task 6 `authenticated`-only RPC
+  wrappers (see the Task 6 Step 9 correction note above) now require an
+  `accessToken` parameter — a Supabase Auth access token from an
+  **anonymous-auth session** (`getSupabaseBrowserClient().auth.signInAnonymously()`,
+  the same mechanism already relied on for SS's flow), obtained **once per
+  device** before calling any of these server functions. This step must
+  therefore perform (or reuse, if already established earlier in the flow)
+  an anonymous sign-in for **all four roles** — `ss`, `kasir`, `satgas`,
+  and `clear_up` — not only `ss` as originally scoped, and pass the
+  resulting `session.access_token` through to `claimRoleSession` (and to
+  every subsequent Task 9+ call into `table-occupancy.server.ts`'s
+  `authenticated`-only wrappers). Small addition to this task's original
+  scope; store the token alongside the existing `CrewSessionIdentity`-style
+  storage so it survives a page reload without re-prompting sign-in.
 
 - [ ] **Step 3: Wire `src/routes/index.tsx`** to render `RoleLoginFlow`
   instead of `CrewIdentityDialog` when no crew identity is hydrated; on
