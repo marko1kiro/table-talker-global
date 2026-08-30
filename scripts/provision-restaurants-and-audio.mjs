@@ -106,7 +106,7 @@ const RESTAURANTS = [
   },
   {
     displayName: "Mie Gacoan Tarum Barat",
-    code: "CKRTAM",
+    code: "CKRTAR",
     slug: "tarum-barat",
     action: "create",
   },
