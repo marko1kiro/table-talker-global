@@ -77,13 +77,14 @@ it("uses database RPCs for operational-error rate limits", () => {
   expect(migration).toMatch(/create function public\.record_tenant_login_failure/i);
 });
 
-it("refreshes crew session token even when the session ID stays stable", () => {
-  const index = source("../src/routes/index.tsx");
-  expect(index).toContain("if (!identity) return;");
-  expect(index).not.toContain("identity.crewSessionId === crewSessionId) return");
-});
-
-it("requires active version-bound crew tokens for every remote command RPC", () => {
+it("historically required active version-bound crew tokens for every remote command RPC", () => {
+  // The remote-command/heartbeat RPC surface and src/hooks/use-remote-crew.ts
+  // were removed in the Major Update (see
+  // docs/superpowers/plans/2026-08-29-table-occupancy-tracking.md, Task 3).
+  // This historical migration file is immutable and still accurately
+  // documents the version-bound token requirement it introduced at the
+  // time, so only the assertions against the (now-deleted) live hook are
+  // dropped; the migration-text assertions are kept.
   const migration = source(
     "../supabase/migrations/20260823131000_credential_revocation_contracts.sql",
   );
@@ -103,13 +104,6 @@ it("requires active version-bound crew tokens for every remote command RPC", () 
   );
   expect(migration).toMatch(
     /grant execute on function public\.rotate_restaurant_credentials\(uuid, text, text, integer\), public\.deactivate_restaurant_credentials\(uuid, integer\) to service_role/i,
-  );
-
-  const hook = source("../src/hooks/use-remote-crew.ts");
-  expect(hook).toContain("let crewSessionToken = registration.crewSessionToken");
-  expect(hook).toContain("crewSessionToken = claimedSession.session_token");
-  expect(hook).toMatch(
-    /client\.rpc\("claim_pending_remote_command",\s*\{\s*p_session_token: crewSessionToken,?\s*\}\)/,
   );
 });
 

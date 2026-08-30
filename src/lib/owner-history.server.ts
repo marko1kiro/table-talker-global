@@ -8,7 +8,7 @@ const PAGE_SIZE = 50;
 
 const historySchema = z.object({
   restaurantId: z.string().uuid().optional(),
-  type: z.enum(["playback", "sync", "broadcast"]).default("playback"),
+  type: z.enum(["playback", "sync"]).default("playback"),
   status: z.string().trim().max(60).optional(),
   text: z.string().max(101).optional(),
   from: z.string().optional(),
@@ -36,36 +36,6 @@ export const listOwnerHistory = createServerFn({ method: "GET" })
     const offset = (data.page - 1) * PAGE_SIZE;
 
     try {
-      if (data.type === "broadcast") {
-        let query = client
-          .from("owner_broadcast_deliveries")
-          .select(
-            "id,broadcast_id,restaurant_id,status,failure_code,created_at,owner_broadcasts(message,scope)",
-            { count: "exact" },
-          )
-          .gte("created_at", range.from)
-          .lte("created_at", range.to)
-          .order("created_at", { ascending: false })
-          .range(offset, offset + PAGE_SIZE - 1);
-        if (data.restaurantId) query = query.eq("restaurant_id", data.restaurantId);
-        if (data.status) query = query.eq("status", data.status);
-        const { data: rows, count, error } = await query;
-        if (error)
-          return {
-            ok: false as const,
-            code: "UNAVAILABLE" as const,
-            message: "Riwayat broadcast tidak tersedia.",
-          };
-        return {
-          ok: true as const,
-          type: data.type,
-          rows: rows ?? [],
-          page: data.page,
-          total: count ?? 0,
-          nextPage: offset + PAGE_SIZE < (count ?? 0) ? data.page + 1 : null,
-        };
-      }
-
       if (data.type === "sync") {
         let query = client
           .from("operational_errors")

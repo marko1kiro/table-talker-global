@@ -27,7 +27,7 @@ function History() {
   const now = useMemo(() => new Date(), []);
   const initial = normalizeHistoryRange({}, now);
   const [restaurantId, setRestaurantId] = useState("");
-  const [type, setType] = useState<"playback" | "sync" | "broadcast">("playback");
+  const [type, setType] = useState<"playback" | "sync">("playback");
   const [status, setStatus] = useState("");
   const [text, setText] = useState("");
   const [from, setFrom] = useState(initial.ok ? initial.from.slice(0, 10) : dateInput(now));
@@ -62,7 +62,7 @@ function History() {
       <OwnerPageHeader
         eyebrow="Audit Aktivitas"
         title="Riwayat"
-        description="Telusuri playback, sinkronisasi, dan broadcast. Default 7 hari terakhir, maksimal 30 hari."
+        description="Telusuri playback dan sinkronisasi. Default 7 hari terakhir, maksimal 30 hari."
       />
       <OwnerPanel
         title="Filter riwayat"
@@ -99,7 +99,6 @@ function History() {
             >
               <option value="playback">Playback</option>
               <option value="sync">Sinkronisasi</option>
-              <option value="broadcast">Broadcast</option>
             </select>
           </OwnerField>
           <OwnerField label="Status">
@@ -116,13 +115,6 @@ function History() {
                 <>
                   <option value="played">Diputar</option>
                   <option value="failed">Gagal</option>
-                </>
-              ) : type === "broadcast" ? (
-                <>
-                  <option value="delivered">Terkirim</option>
-                  <option value="failed">Gagal</option>
-                  <option value="rejected">Ditolak</option>
-                  <option value="expired">Kedaluwarsa</option>
                 </>
               ) : (
                 <>

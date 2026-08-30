@@ -46,7 +46,6 @@ function Restaurants() {
     id: string;
     display_name: string;
     is_active: boolean;
-    online_devices: number;
     catalog_version: number;
     plays_today: number;
     latest_sync_failure: { report_code: string; occurred_at: string } | null;
@@ -89,13 +88,7 @@ function Restaurants() {
                   {row.display_name}
                   <ArrowRight className="size-4 transition group-hover:translate-x-1" />
                 </Link>
-                <div className="mt-4 grid grid-cols-3 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
-                  <div>
-                    <p className="text-lg font-black text-slate-900">{row.online_devices}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Online
-                    </p>
-                  </div>
+                <div className="mt-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
                   <div>
                     <p className="text-lg font-black text-slate-900">v{row.catalog_version}</p>
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">

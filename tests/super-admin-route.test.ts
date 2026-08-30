@@ -55,7 +55,6 @@ it("keeps every owner route query namespace logout-purgeable", () => {
     "../src/routes/super-admin/error-log.tsx",
     "../src/routes/super-admin/history.tsx",
     "../src/routes/super-admin/index.tsx",
-    "../src/routes/super-admin/broadcast.tsx",
     "../src/routes/super-admin/restaurants/index.tsx",
     "../src/routes/super-admin/restaurants/$id.tsx",
   ]) {

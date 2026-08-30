@@ -21,7 +21,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
 import { Route as SuperAdminHistoryRouteImport } from './routes/super-admin/history'
 import { Route as SuperAdminErrorLogRouteImport } from './routes/super-admin/error-log'
-import { Route as SuperAdminBroadcastRouteImport } from './routes/super-admin/broadcast'
 import { Route as SuperAdminAudioRouteImport } from './routes/super-admin/audio'
 import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
@@ -87,11 +86,6 @@ const SuperAdminErrorLogRoute = SuperAdminErrorLogRouteImport.update({
   path: '/error-log',
   getParentRoute: () => SuperAdminRouteRoute,
 } as any)
-const SuperAdminBroadcastRoute = SuperAdminBroadcastRouteImport.update({
-  id: '/broadcast',
-  path: '/broadcast',
-  getParentRoute: () => SuperAdminRouteRoute,
-} as any)
 const SuperAdminAudioRoute = SuperAdminAudioRouteImport.update({
   id: '/audio',
   path: '/audio',
@@ -125,7 +119,6 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
-  '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/': typeof SuperAdminIndexRoute
@@ -143,7 +136,6 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
-  '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin': typeof SuperAdminIndexRoute
@@ -163,7 +155,6 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
-  '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/': typeof SuperAdminIndexRoute
@@ -184,7 +175,6 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms-of-use'
     | '/super-admin/audio'
-    | '/super-admin/broadcast'
     | '/super-admin/error-log'
     | '/super-admin/history'
     | '/super-admin/'
@@ -202,7 +192,6 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms-of-use'
     | '/super-admin/audio'
-    | '/super-admin/broadcast'
     | '/super-admin/error-log'
     | '/super-admin/history'
     | '/super-admin'
@@ -221,7 +210,6 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms-of-use'
     | '/super-admin/audio'
-    | '/super-admin/broadcast'
     | '/super-admin/error-log'
     | '/super-admin/history'
     | '/super-admin/'
@@ -329,13 +317,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminErrorLogRouteImport
       parentRoute: typeof SuperAdminRouteRoute
     }
-    '/super-admin/broadcast': {
-      id: '/super-admin/broadcast'
-      path: '/broadcast'
-      fullPath: '/super-admin/broadcast'
-      preLoaderRoute: typeof SuperAdminBroadcastRouteImport
-      parentRoute: typeof SuperAdminRouteRoute
-    }
     '/super-admin/audio': {
       id: '/super-admin/audio'
       path: '/audio'
@@ -369,7 +350,6 @@ declare module '@tanstack/react-router' {
 
 interface SuperAdminRouteRouteChildren {
   SuperAdminAudioRoute: typeof SuperAdminAudioRoute
-  SuperAdminBroadcastRoute: typeof SuperAdminBroadcastRoute
   SuperAdminErrorLogRoute: typeof SuperAdminErrorLogRoute
   SuperAdminHistoryRoute: typeof SuperAdminHistoryRoute
   SuperAdminIndexRoute: typeof SuperAdminIndexRoute
@@ -379,7 +359,6 @@ interface SuperAdminRouteRouteChildren {
 
 const SuperAdminRouteRouteChildren: SuperAdminRouteRouteChildren = {
   SuperAdminAudioRoute: SuperAdminAudioRoute,
-  SuperAdminBroadcastRoute: SuperAdminBroadcastRoute,
   SuperAdminErrorLogRoute: SuperAdminErrorLogRoute,
   SuperAdminHistoryRoute: SuperAdminHistoryRoute,
   SuperAdminIndexRoute: SuperAdminIndexRoute,

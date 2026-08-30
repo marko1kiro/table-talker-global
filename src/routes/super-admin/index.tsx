@@ -11,7 +11,6 @@ import {
   HardDrive,
   RefreshCw,
   Radio,
-  Users,
   Volume2,
   Wifi,
 } from "lucide-react";
@@ -108,13 +107,6 @@ function OwnerDashboard() {
           tone: "bg-emerald-50 text-emerald-700",
         },
         {
-          label: "Crew Online",
-          value: aggregates.active_crew_devices,
-          to: "/super-admin/restaurants",
-          icon: Users,
-          tone: "bg-sky-50 text-sky-700",
-        },
-        {
           label: "Diputar Hari Ini",
           value: aggregates.plays_today,
           to: "/super-admin/history",
@@ -162,7 +154,7 @@ function OwnerDashboard() {
       {aggregates ? (
         <section
           aria-label="Ringkasan metrik"
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6"
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5"
         >
           {metrics.map(({ label, value, to, icon: Icon, tone }) => (
             <Link
