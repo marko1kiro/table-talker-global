@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { CREW_ROLES, type CrewRole } from "./role-session-domain";
 
 // Task 6 Step 9 (revised design -- see docs/superpowers/plans/
 // 2026-08-29-table-occupancy-tracking.md, Task 6 Step 9 note): the plan's
@@ -28,8 +28,11 @@ export function getAnonAuthedSupabaseClient(accessToken: string): SupabaseClient
   });
 }
 
-export const CREW_ROLES = ["ss", "kasir", "satgas", "clear_up"] as const;
-export type CrewRole = (typeof CREW_ROLES)[number];
+// Re-exported for backward compatibility with existing Task 6 imports
+// (table-occupancy.server.ts, tests/role-session-server.test.ts); canonical
+// definition now lives in role-session-domain.ts (see import above).
+export { CREW_ROLES };
+export type { CrewRole };
 
 const GENERIC_ERROR = "Gagal memulai sesi peran.";
 
@@ -137,6 +140,15 @@ export async function verifyRoleSessionToken(
   restaurantId: string,
   role?: CrewRole,
 ) {
+  // Dynamic import (not a top-level `import ... from "node:crypto"`) so this
+  // module stays safe to import from client code: RoleLoginFlow.tsx imports
+  // claimRoleSession from this file, and a static node:crypto import at the
+  // top of the file gets pulled into the client bundle by Vite even though
+  // this specific function is server-only (see
+  // tests/restaurant-login-build.test.ts, and restaurant-code.server.ts's
+  // dynamic-import split in restaurants.server.ts for the established
+  // pattern this follows).
+  const { createHash } = await import("node:crypto");
   let query = client
     .from("role_session_tokens")
     .select("role_session_id, restaurant_id, role, expires_at")

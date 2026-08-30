@@ -172,7 +172,7 @@ it("validates tenant-bound crew access in the background without delaying local 
 });
 
 it("gets localStorage client key outside dialog render", () => {
-  const dialog = source("../src/components/CrewIdentityDialog.tsx");
+  const dialog = source("../src/components/RoleLoginFlow.tsx");
   expect(dialog).toContain("function getClientKey()");
   expect(dialog).not.toContain('const clientKey = typeof window === "undefined"');
   expect(dialog).toContain("const clientKey = getClientKey();");
