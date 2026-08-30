@@ -36,7 +36,9 @@ function fakeClient({
       ? { data: { session: null }, error: { message: "anonymous sign-ins are disabled" } }
       : { data: { session: { access_token: signInToken } }, error: null },
   );
-  return { auth: { getSession, signInAnonymously } } as unknown as import("@supabase/supabase-js").SupabaseClient;
+  return {
+    auth: { getSession, signInAnonymously },
+  } as unknown as import("@supabase/supabase-js").SupabaseClient;
 }
 
 it("reuses an already-persisted session's access token without signing in again", async () => {

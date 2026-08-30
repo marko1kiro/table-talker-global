@@ -25,9 +25,7 @@ export function getSupabaseBrowserClient(): SupabaseClient | null {
 // keeps a prior anonymous session across reloads, so this only calls
 // signInAnonymously() when no session exists yet. Never throws -- callers
 // treat a null return as "cannot claim a role session right now".
-export async function ensureAnonAccessToken(
-  client: SupabaseClient | null,
-): Promise<string | null> {
+export async function ensureAnonAccessToken(client: SupabaseClient | null): Promise<string | null> {
   if (!client) return null;
   try {
     const { data } = await client.auth.getSession();

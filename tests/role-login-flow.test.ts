@@ -43,9 +43,10 @@ describe("RoleLoginFlow: step 2 - confirmation dialog", () => {
 describe("RoleLoginFlow: step 3 - role picker (exactly 4 roles)", () => {
   it("imports the canonical 4-role order and label map from role-session-domain", () => {
     const text = source();
-    expect(text).toContain(
-      'import { CREW_ROLE_LABELS, CREW_ROLE_ORDER, jakartaCheckedInAtToIso } from "@/lib/role-session-domain"',
+    expect(text).toMatch(
+      /CREW_ROLE_LABELS,?\s*\n?\s*CREW_ROLE_ORDER,?\s*\n?\s*jakartaCheckedInAtToIso/,
     );
+    expect(text).toMatch(/}\s*from\s*"@\/lib\/role-session-domain"/);
     expect(text).toContain("CREW_ROLE_ORDER.map");
   });
 
@@ -59,7 +60,9 @@ describe("RoleLoginFlow: step 4 - manual Nama + Tanggal & Jam Masuk (all 4 roles
   it("initializes the name field to an empty string, never auto-generated for any role", () => {
     const text = source();
     expect(text).not.toContain("autoCrewName");
-    expect(text).toMatch(/useState\(\s*""\s*\)[^;]*;?\s*\/\/\s*name|const \[name, setName\] = useState\(""\)/);
+    expect(text).toMatch(
+      /useState\(\s*""\s*\)[^;]*;?\s*\/\/\s*name|const \[name, setName\] = useState\(""\)/,
+    );
   });
 
   it("initializes checked-in date/time to an empty string, never pre-filled with the current time", () => {

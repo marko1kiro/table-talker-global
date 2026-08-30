@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { validateRestaurantCode } from "@/lib/restaurant-domain";
 import { loginToRestaurant } from "@/lib/restaurants.server";
 import { normalizeCrewName } from "@/lib/remote-audio-domain";
-import { CREW_ROLE_LABELS, CREW_ROLE_ORDER, jakartaCheckedInAtToIso } from "@/lib/role-session-domain";
+import {
+  CREW_ROLE_LABELS,
+  CREW_ROLE_ORDER,
+  jakartaCheckedInAtToIso,
+} from "@/lib/role-session-domain";
 import type { CrewRole } from "@/lib/role-session-domain";
 import { claimRoleSession } from "@/lib/role-session.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";

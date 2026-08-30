@@ -22,8 +22,7 @@ export const CREW_ROLE_LABELS: Record<CrewRole, string> = {
   clear_up: "Clear Up",
 };
 
-const DATETIME_LOCAL_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
+const DATETIME_LOCAL_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
 
 // Converts an HTML <input type="datetime-local"> value (which carries no
 // timezone information) into a UTC ISO timestamp, interpreting the wall
