@@ -9,6 +9,7 @@ import {
   History,
   LogOut,
   Menu,
+  QrCode,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const nav = [
   { label: "Audio", to: "/super-admin/audio", icon: AudioLines, exact: false },
   { label: "Riwayat", to: "/super-admin/history", icon: History, exact: false },
   { label: "Error Log", to: "/super-admin/error-log", icon: TriangleAlert, exact: false },
+  { label: "ESB & Export QR", to: "/super-admin/esb-export", icon: QrCode, exact: false },
 ] as const;
 
 export const Route = createFileRoute("/super-admin")({

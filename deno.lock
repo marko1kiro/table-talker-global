@@ -78,6 +78,7 @@
         "npm:vite-tsconfig-paths@^6.0.2",
         "npm:vite@^8.0.16",
         "npm:vitest@^4.1.10",
+        "npm:write-excel-file@^4.1.1",
         "npm:zod@^3.24.2"
       ]
     }
