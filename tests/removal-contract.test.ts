@@ -55,6 +55,11 @@ const historicalMigrationTestExemptions = [
   // quote the exact banned RPC/table names to assert the migration drops
   // them, so it legitimately contains those tokens forever.
   "tests/removal-migration.test.ts",
+  // Contract test for the 20260829000001 fix-up migration: its explanatory
+  // comment legitimately references the now-dropped public.crew_messages
+  // table to document why create_crew_message was orphaned, so it
+  // legitimately contains that banned token forever.
+  "tests/fix-create-crew-message-drop-migration.test.ts",
   // Contains a legitimate negative assertion
   // (expect(source).not.toContain("owner_broadcast_deliveries")) whose
   // literal text includes the banned token; the assertion itself is what
@@ -133,5 +138,15 @@ describe("removal migration exists", () => {
     expect(
       existsSync("supabase/migrations/20260829000000_remove_remote_command_heartbeat.sql"),
     ).toBe(true);
+  });
+
+  // 20260829000000 dropped create_crew_message using a stale 4-parameter
+  // signature that was never actually live, silently no-op'ing and leaving
+  // the real (3-parameter) function orphaned. This follow-up migration
+  // corrects that with the correct, live signature.
+  it("fix-up migration for the create_crew_message signature mismatch exists", () => {
+    expect(existsSync("supabase/migrations/20260829000001_fix_create_crew_message_drop.sql")).toBe(
+      true,
+    );
   });
 });
