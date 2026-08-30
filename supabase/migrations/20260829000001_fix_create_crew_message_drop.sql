@@ -1,0 +1,12 @@
+-- Fix-up for 20260829000000_remove_remote_command_heartbeat.sql: that
+-- migration attempted to drop public.create_crew_message with the stale
+-- 4-parameter signature (uuid, text, uuid, bigint) from an intermediate
+-- draft (20260822100020_crew_messages_restaurant_id.sql). The function was
+-- later redefined with a 3-parameter signature (uuid, text, bigint) by
+-- 20260823100000_fix_tenant_rpcs.sql, which is what is actually live. The
+-- mismatched `drop function if exists` silently no-op'd, leaving the
+-- function orphaned (its body still references the now-dropped
+-- public.crew_messages table, so any live call would fail at runtime, but
+-- it remained wrongly exposed via PostgREST). This migration drops the
+-- correct, live signature.
+drop function if exists public.create_crew_message(uuid, text, bigint);
