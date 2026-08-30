@@ -20,12 +20,14 @@ import { Route as SuperAdminRouteRouteImport } from './routes/super-admin/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
 import { Route as SuperAdminHistoryRouteImport } from './routes/super-admin/history'
+import { Route as SuperAdminEsbExportRouteImport } from './routes/super-admin/esb-export'
 import { Route as SuperAdminErrorLogRouteImport } from './routes/super-admin/error-log'
 import { Route as SuperAdminAudioRouteImport } from './routes/super-admin/audio'
 import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
 import { Route as ApiAudioAudioIdRouteImport } from './routes/api/audio/$audioId'
 import { Route as RRestaurantIdTTableNumberRouteImport } from './routes/r/$restaurantId/t/$tableNumber'
+import { Route as ApiSuperAdminQrExportRestaurantIdFormatRouteImport } from './routes/api/super-admin/qr-export/$restaurantId/$format'
 
 const TermsOfUseRoute = TermsOfUseRouteImport.update({
   id: '/terms-of-use',
@@ -82,6 +84,11 @@ const SuperAdminHistoryRoute = SuperAdminHistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => SuperAdminRouteRoute,
 } as any)
+const SuperAdminEsbExportRoute = SuperAdminEsbExportRouteImport.update({
+  id: '/esb-export',
+  path: '/esb-export',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
 const SuperAdminErrorLogRoute = SuperAdminErrorLogRouteImport.update({
   id: '/error-log',
   path: '/error-log',
@@ -114,6 +121,12 @@ const RRestaurantIdTTableNumberRoute =
     path: '/r/$restaurantId/t/$tableNumber',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiSuperAdminQrExportRestaurantIdFormatRoute =
+  ApiSuperAdminQrExportRestaurantIdFormatRouteImport.update({
+    id: '/api/super-admin/qr-export/$restaurantId/$format',
+    path: '/api/super-admin/qr-export/$restaurantId/$format',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -127,12 +140,14 @@ export interface FileRoutesByFullPath {
   '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
+  '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
   '/r/$restaurantId/t/$tableNumber': typeof RRestaurantIdTTableNumberRoute
+  '/api/super-admin/qr-export/$restaurantId/$format': typeof ApiSuperAdminQrExportRestaurantIdFormatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -145,12 +160,14 @@ export interface FileRoutesByTo {
   '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
+  '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants': typeof SuperAdminRestaurantsIndexRoute
   '/r/$restaurantId/t/$tableNumber': typeof RRestaurantIdTTableNumberRoute
+  '/api/super-admin/qr-export/$restaurantId/$format': typeof ApiSuperAdminQrExportRestaurantIdFormatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -165,12 +182,14 @@ export interface FileRoutesById {
   '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
+  '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
   '/r/$restaurantId/t/$tableNumber': typeof RRestaurantIdTTableNumberRoute
+  '/api/super-admin/qr-export/$restaurantId/$format': typeof ApiSuperAdminQrExportRestaurantIdFormatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -186,12 +205,14 @@ export interface FileRouteTypes {
     | '/terms-of-use'
     | '/super-admin/audio'
     | '/super-admin/error-log'
+    | '/super-admin/esb-export'
     | '/super-admin/history'
     | '/super-admin/'
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants/'
     | '/r/$restaurantId/t/$tableNumber'
+    | '/api/super-admin/qr-export/$restaurantId/$format'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -204,12 +225,14 @@ export interface FileRouteTypes {
     | '/terms-of-use'
     | '/super-admin/audio'
     | '/super-admin/error-log'
+    | '/super-admin/esb-export'
     | '/super-admin/history'
     | '/super-admin'
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants'
     | '/r/$restaurantId/t/$tableNumber'
+    | '/api/super-admin/qr-export/$restaurantId/$format'
   id:
     | '__root__'
     | '/'
@@ -223,12 +246,14 @@ export interface FileRouteTypes {
     | '/terms-of-use'
     | '/super-admin/audio'
     | '/super-admin/error-log'
+    | '/super-admin/esb-export'
     | '/super-admin/history'
     | '/super-admin/'
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants/'
     | '/r/$restaurantId/t/$tableNumber'
+    | '/api/super-admin/qr-export/$restaurantId/$format'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -243,6 +268,7 @@ export interface RootRouteChildren {
   TermsOfUseRoute: typeof TermsOfUseRoute
   ApiAudioAudioIdRoute: typeof ApiAudioAudioIdRoute
   RRestaurantIdTTableNumberRoute: typeof RRestaurantIdTTableNumberRoute
+  ApiSuperAdminQrExportRestaurantIdFormatRoute: typeof ApiSuperAdminQrExportRestaurantIdFormatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -324,6 +350,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminHistoryRouteImport
       parentRoute: typeof SuperAdminRouteRoute
     }
+    '/super-admin/esb-export': {
+      id: '/super-admin/esb-export'
+      path: '/esb-export'
+      fullPath: '/super-admin/esb-export'
+      preLoaderRoute: typeof SuperAdminEsbExportRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
     '/super-admin/error-log': {
       id: '/super-admin/error-log'
       path: '/error-log'
@@ -366,12 +399,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RRestaurantIdTTableNumberRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/super-admin/qr-export/$restaurantId/$format': {
+      id: '/api/super-admin/qr-export/$restaurantId/$format'
+      path: '/api/super-admin/qr-export/$restaurantId/$format'
+      fullPath: '/api/super-admin/qr-export/$restaurantId/$format'
+      preLoaderRoute: typeof ApiSuperAdminQrExportRestaurantIdFormatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 interface SuperAdminRouteRouteChildren {
   SuperAdminAudioRoute: typeof SuperAdminAudioRoute
   SuperAdminErrorLogRoute: typeof SuperAdminErrorLogRoute
+  SuperAdminEsbExportRoute: typeof SuperAdminEsbExportRoute
   SuperAdminHistoryRoute: typeof SuperAdminHistoryRoute
   SuperAdminIndexRoute: typeof SuperAdminIndexRoute
   SuperAdminRestaurantsIdRoute: typeof SuperAdminRestaurantsIdRoute
@@ -381,6 +422,7 @@ interface SuperAdminRouteRouteChildren {
 const SuperAdminRouteRouteChildren: SuperAdminRouteRouteChildren = {
   SuperAdminAudioRoute: SuperAdminAudioRoute,
   SuperAdminErrorLogRoute: SuperAdminErrorLogRoute,
+  SuperAdminEsbExportRoute: SuperAdminEsbExportRoute,
   SuperAdminHistoryRoute: SuperAdminHistoryRoute,
   SuperAdminIndexRoute: SuperAdminIndexRoute,
   SuperAdminRestaurantsIdRoute: SuperAdminRestaurantsIdRoute,
@@ -403,6 +445,8 @@ const rootRouteChildren: RootRouteChildren = {
   TermsOfUseRoute: TermsOfUseRoute,
   ApiAudioAudioIdRoute: ApiAudioAudioIdRoute,
   RRestaurantIdTTableNumberRoute: RRestaurantIdTTableNumberRoute,
+  ApiSuperAdminQrExportRestaurantIdFormatRoute:
+    ApiSuperAdminQrExportRestaurantIdFormatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
