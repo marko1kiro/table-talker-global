@@ -17,7 +17,6 @@ it("replaces remote audio route with protected owner shell routes", () => {
     "/super-admin/audio",
     "/super-admin/history",
     "/super-admin/error-log",
-    "/super-admin/broadcast",
   ]) {
     expect(shell).toContain(route);
   }

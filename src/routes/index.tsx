@@ -16,10 +16,7 @@ import {
 import { createCachedAudioUrlPool } from "@/lib/audio-sync";
 import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
 import { SyncDialog } from "@/components/SyncDialog";
-import { CrewMessageOverlay } from "@/components/CrewMessageOverlay";
-import { useRemoteCrew } from "@/hooks/use-remote-crew";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
-import { useCrewMessage } from "@/hooks/use-crew-message";
 import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
 import { announcementPlaybackId, announcementPlaybackStatus } from "@/lib/announcement-playback";
 import {
@@ -92,14 +89,6 @@ function SoundboardPage() {
   const crewIdentityRef = useRef<CrewIdentity | null>(null);
   crewIdentityRef.current = crewIdentity;
 
-  const onCrewSessionId = useCallback((crewSessionId: string, crewSessionToken: string) => {
-    const identity = crewIdentityRef.current;
-    if (!identity) return;
-    const nextIdentity = { ...identity, crewSessionId, crewSessionToken };
-    writeCrewSessionIdentity(browserSessionStorage(), nextIdentity);
-    setCrewIdentity(nextIdentity);
-  }, []);
-
   const deviceIdRef = useRef(generateDeviceId());
 
   const flushToServer = useCallback(async (events: PlaybackEvent[]) => {
@@ -125,7 +114,6 @@ function SoundboardPage() {
   }, []);
 
   useScreenWakeLock(identityHydrated);
-  const crewMessage = useCrewMessage(identityHydrated);
 
   const getAudioUrlPool = useCallback(() => {
     audioUrlPoolRef.current ??= createCachedAudioUrlPool();
@@ -227,43 +215,6 @@ function SoundboardPage() {
 
     accessValidationPromiseRef.current = validation;
   }, [invalidateCrewSession]);
-
-  const playRemoteAudio = useCallback(
-    async (audioId: AudioId) => {
-      if (!audioSynced) throw new Error("Audio belum selesai disinkronkan.");
-      validateCrewAccessInBackground();
-      const restaurantId = crewIdentityRef.current?.restaurantId;
-      const url = restaurantId ? await getAudioUrlPool().get(restaurantId, audioId) : null;
-      if (!url) throw new Error("Audio tidak tersedia.");
-      stop();
-      const { controller } = getAudioController();
-      const token = playbackGenerationRef.current.next();
-      activeAudioIdRef.current = audioId;
-      setLoading(audioId);
-      try {
-        await controller.play(url, token);
-        if (playbackGenerationRef.current.isCurrent(token)) {
-          setLoading(null);
-          setPlaying(audioId);
-        }
-      } catch (error) {
-        if (
-          playbackGenerationRef.current.isCurrent(token) &&
-          (error as Error).name !== "AbortError"
-        )
-          stop();
-        throw error;
-      }
-    },
-    [audioSynced, getAudioController, getAudioUrlPool, stop, validateCrewAccessInBackground],
-  );
-
-  useRemoteCrew({
-    registration: identityHydrated ? crewIdentity : null,
-    playRemoteAudio,
-    onCrewSessionId,
-    onSessionInvalid: invalidateCrewSession,
-  });
 
   const play = useCallback(
     async (id: number | AudioId) => {
@@ -458,13 +409,11 @@ function SoundboardPage() {
 
         <SoundboardGrid
           availableAudioIds={availableAudioIds}
-          drawerDisabled={crewMessage.message !== null}
+          drawerDisabled={false}
           announcementTriggerElevated={activeAudioId !== null}
-          tableDisabled={() => crewMessage.message !== null || activeAudioId !== null}
+          tableDisabled={() => activeAudioId !== null}
           announcementDisabled={(audioId) =>
-            crewMessage.message !== null ||
-            loading !== null ||
-            (activeAudioId !== null && activeAudioId !== audioId)
+            loading !== null || (activeAudioId !== null && activeAudioId !== audioId)
           }
           tableStatus={(tableNumber) => {
             if (playing === tableNumber) return "playing";
@@ -513,10 +462,6 @@ function SoundboardPage() {
             Stop {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioLabel}
           </button>
         </div>
-      )}
-
-      {crewMessage.message && (
-        <CrewMessageOverlay message={crewMessage.message} onClose={crewMessage.dismiss} />
       )}
     </div>
   );

@@ -9,7 +9,6 @@ describe("owner dashboard snapshot core", () => {
       rpc: async () => ({
         total_restaurants: 1,
         active_restaurants: 1,
-        active_crew_devices: 1,
         plays_today: 1,
         sync_failures: 0,
         unresolved_errors: 0,
@@ -35,7 +34,6 @@ describe("owner dashboard snapshot core", () => {
         return {
           total_restaurants: 1,
           active_restaurants: 1,
-          active_crew_devices: 1,
           plays_today: 1,
           sync_failures: 0,
           unresolved_errors: 0,

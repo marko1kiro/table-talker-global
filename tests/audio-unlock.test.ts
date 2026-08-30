@@ -115,15 +115,12 @@ it("hydrates a same-tab crew after mount without persisting audio readiness", ()
   expect(route).toContain("removeCrewSessionIdentity(browserSessionStorage())");
 });
 
-it("gates the crew dialog and remote registration until identity hydration completes", () => {
+it("gates the crew dialog until identity hydration completes", () => {
   const route = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8").replace(
     /\r\n/g,
     "\n",
   );
 
-  expect(route).toContain(
-    "useRemoteCrew({\n    registration: identityHydrated ? crewIdentity : null,",
-  );
   expect(route).toContain(
     "{identityHydrated && (\n        <CrewIdentityDialog\n          open={!crewIdentity}",
   );

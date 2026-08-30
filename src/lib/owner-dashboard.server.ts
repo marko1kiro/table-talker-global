@@ -8,7 +8,6 @@ import { getServiceClient } from "./remote-audio.server";
 export type OwnerDashboardAggregates = {
   total_restaurants: number;
   active_restaurants: number;
-  active_crew_devices: number;
   plays_today: number;
   sync_failures: number;
   unresolved_errors: number;

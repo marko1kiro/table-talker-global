@@ -41,12 +41,6 @@ function RestaurantDetail() {
     );
   const data = detail.data.detail as {
     restaurant: { id: string; display_name: string; is_active: boolean; catalog_version: number };
-    devices: Array<{
-      id: string;
-      display_name: string;
-      connection_state: string;
-      last_seen: string;
-    }>;
     catalog: {
       total: number;
       items: Array<{
@@ -122,14 +116,6 @@ function RestaurantDetail() {
           </AlertDialogContent>
         </AlertDialog>
       )}
-      <Section title="Perangkat">
-        <List
-          values={data.devices.map(
-            (device) => `${device.display_name} · ${device.connection_state} · ${device.last_seen}`,
-          )}
-          empty="Belum ada perangkat."
-        />
-      </Section>
       <Section title="Katalog">
         <p>{data.catalog.total} item</p>
         <List

@@ -21,11 +21,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
 import { Route as SuperAdminHistoryRouteImport } from './routes/super-admin/history'
 import { Route as SuperAdminErrorLogRouteImport } from './routes/super-admin/error-log'
-import { Route as SuperAdminBroadcastRouteImport } from './routes/super-admin/broadcast'
 import { Route as SuperAdminAudioRouteImport } from './routes/super-admin/audio'
 import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
 import { Route as ApiAudioAudioIdRouteImport } from './routes/api/audio/$audioId'
+import { Route as RRestaurantIdTTableNumberRouteImport } from './routes/r/$restaurantId/t/$tableNumber'
 
 const TermsOfUseRoute = TermsOfUseRouteImport.update({
   id: '/terms-of-use',
@@ -87,11 +87,6 @@ const SuperAdminErrorLogRoute = SuperAdminErrorLogRouteImport.update({
   path: '/error-log',
   getParentRoute: () => SuperAdminRouteRoute,
 } as any)
-const SuperAdminBroadcastRoute = SuperAdminBroadcastRouteImport.update({
-  id: '/broadcast',
-  path: '/broadcast',
-  getParentRoute: () => SuperAdminRouteRoute,
-} as any)
 const SuperAdminAudioRoute = SuperAdminAudioRouteImport.update({
   id: '/audio',
   path: '/audio',
@@ -113,6 +108,12 @@ const ApiAudioAudioIdRoute = ApiAudioAudioIdRouteImport.update({
   path: '/api/audio/$audioId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RRestaurantIdTTableNumberRoute =
+  RRestaurantIdTTableNumberRouteImport.update({
+    id: '/r/$restaurantId/t/$tableNumber',
+    path: '/r/$restaurantId/t/$tableNumber',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -125,13 +126,13 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
-  '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
+  '/r/$restaurantId/t/$tableNumber': typeof RRestaurantIdTTableNumberRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -143,13 +144,13 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
-  '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants': typeof SuperAdminRestaurantsIndexRoute
+  '/r/$restaurantId/t/$tableNumber': typeof RRestaurantIdTTableNumberRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -163,13 +164,13 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
-  '/super-admin/broadcast': typeof SuperAdminBroadcastRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
+  '/r/$restaurantId/t/$tableNumber': typeof RRestaurantIdTTableNumberRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -184,13 +185,13 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms-of-use'
     | '/super-admin/audio'
-    | '/super-admin/broadcast'
     | '/super-admin/error-log'
     | '/super-admin/history'
     | '/super-admin/'
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants/'
+    | '/r/$restaurantId/t/$tableNumber'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -202,13 +203,13 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms-of-use'
     | '/super-admin/audio'
-    | '/super-admin/broadcast'
     | '/super-admin/error-log'
     | '/super-admin/history'
     | '/super-admin'
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants'
+    | '/r/$restaurantId/t/$tableNumber'
   id:
     | '__root__'
     | '/'
@@ -221,13 +222,13 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms-of-use'
     | '/super-admin/audio'
-    | '/super-admin/broadcast'
     | '/super-admin/error-log'
     | '/super-admin/history'
     | '/super-admin/'
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants/'
+    | '/r/$restaurantId/t/$tableNumber'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -241,6 +242,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsOfUseRoute: typeof TermsOfUseRoute
   ApiAudioAudioIdRoute: typeof ApiAudioAudioIdRoute
+  RRestaurantIdTTableNumberRoute: typeof RRestaurantIdTTableNumberRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -329,13 +331,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminErrorLogRouteImport
       parentRoute: typeof SuperAdminRouteRoute
     }
-    '/super-admin/broadcast': {
-      id: '/super-admin/broadcast'
-      path: '/broadcast'
-      fullPath: '/super-admin/broadcast'
-      preLoaderRoute: typeof SuperAdminBroadcastRouteImport
-      parentRoute: typeof SuperAdminRouteRoute
-    }
     '/super-admin/audio': {
       id: '/super-admin/audio'
       path: '/audio'
@@ -364,12 +359,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAudioAudioIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/r/$restaurantId/t/$tableNumber': {
+      id: '/r/$restaurantId/t/$tableNumber'
+      path: '/r/$restaurantId/t/$tableNumber'
+      fullPath: '/r/$restaurantId/t/$tableNumber'
+      preLoaderRoute: typeof RRestaurantIdTTableNumberRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 interface SuperAdminRouteRouteChildren {
   SuperAdminAudioRoute: typeof SuperAdminAudioRoute
-  SuperAdminBroadcastRoute: typeof SuperAdminBroadcastRoute
   SuperAdminErrorLogRoute: typeof SuperAdminErrorLogRoute
   SuperAdminHistoryRoute: typeof SuperAdminHistoryRoute
   SuperAdminIndexRoute: typeof SuperAdminIndexRoute
@@ -379,7 +380,6 @@ interface SuperAdminRouteRouteChildren {
 
 const SuperAdminRouteRouteChildren: SuperAdminRouteRouteChildren = {
   SuperAdminAudioRoute: SuperAdminAudioRoute,
-  SuperAdminBroadcastRoute: SuperAdminBroadcastRoute,
   SuperAdminErrorLogRoute: SuperAdminErrorLogRoute,
   SuperAdminHistoryRoute: SuperAdminHistoryRoute,
   SuperAdminIndexRoute: SuperAdminIndexRoute,
@@ -402,6 +402,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsOfUseRoute: TermsOfUseRoute,
   ApiAudioAudioIdRoute: ApiAudioAudioIdRoute,
+  RRestaurantIdTTableNumberRoute: RRestaurantIdTTableNumberRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

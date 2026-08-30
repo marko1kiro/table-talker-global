@@ -9,7 +9,6 @@ import {
   History,
   LogOut,
   Menu,
-  Megaphone,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
@@ -24,7 +23,6 @@ const nav = [
   { label: "Audio", to: "/super-admin/audio", icon: AudioLines, exact: false },
   { label: "Riwayat", to: "/super-admin/history", icon: History, exact: false },
   { label: "Error Log", to: "/super-admin/error-log", icon: TriangleAlert, exact: false },
-  { label: "Broadcast", to: "/super-admin/broadcast", icon: Megaphone, exact: false },
 ] as const;
 
 export const Route = createFileRoute("/super-admin")({
