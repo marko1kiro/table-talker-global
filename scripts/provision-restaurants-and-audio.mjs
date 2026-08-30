@@ -251,7 +251,9 @@ async function ensureRestaurant(entry) {
   }
 
   if (entry.action === "replace") {
-    console.log(`[replace] ${entry.displayName} -> ${entry.restaurantId} (audio only, code untouched)`);
+    console.log(
+      `[replace] ${entry.displayName} -> ${entry.restaurantId} (audio only, code untouched)`,
+    );
     return entry.restaurantId;
   }
 
@@ -295,7 +297,11 @@ async function main() {
 
     // Idempotent resume: if this restaurant already has the full expected manifest
     // count from a previous (possibly interrupted) run, skip it entirely.
-    const expectedCount = 1 /* seating */ + (entry.hasJamBuka ? 1 : 0) + 4 /* per-resto announcements */ + 100 /* tables */;
+    const expectedCount =
+      1 /* seating */ +
+      (entry.hasJamBuka ? 1 : 0) +
+      4 /* per-resto announcements */ +
+      100; /* tables */
     const { count: existingCount } = await supabase
       .from("audio_manifests")
       .select("*", { count: "exact", head: true })
@@ -392,7 +398,9 @@ async function main() {
       await upsertManifestRow(restaurantId, `table:${i}`, `Meja ${i}`, "BASE", i, asset);
       tablesUploaded++;
     }
-    console.log(`  [ok] table:1..100 (uploaded ${tablesUploaded}, skipped ${tablesSkipped} already-done)`);
+    console.log(
+      `  [ok] table:1..100 (uploaded ${tablesUploaded}, skipped ${tablesSkipped} already-done)`,
+    );
   }
 
   console.log("\nDone.");
