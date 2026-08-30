@@ -25,6 +25,7 @@ import { Route as SuperAdminAudioRouteImport } from './routes/super-admin/audio'
 import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
 import { Route as ApiAudioAudioIdRouteImport } from './routes/api/audio/$audioId'
+import { Route as RRestaurantIdTTableNumberRouteImport } from './routes/r/$restaurantId/t/$tableNumber'
 
 const TermsOfUseRoute = TermsOfUseRouteImport.update({
   id: '/terms-of-use',
@@ -107,6 +108,12 @@ const ApiAudioAudioIdRoute = ApiAudioAudioIdRouteImport.update({
   path: '/api/audio/$audioId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RRestaurantIdTTableNumberRoute =
+  RRestaurantIdTTableNumberRouteImport.update({
+    id: '/r/$restaurantId/t/$tableNumber',
+    path: '/r/$restaurantId/t/$tableNumber',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -125,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
+  '/r/$restaurantId/t/$tableNumber': typeof RRestaurantIdTTableNumberRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -142,6 +150,7 @@ export interface FileRoutesByTo {
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants': typeof SuperAdminRestaurantsIndexRoute
+  '/r/$restaurantId/t/$tableNumber': typeof RRestaurantIdTTableNumberRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -161,6 +170,7 @@ export interface FileRoutesById {
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
   '/super-admin/restaurants/': typeof SuperAdminRestaurantsIndexRoute
+  '/r/$restaurantId/t/$tableNumber': typeof RRestaurantIdTTableNumberRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -181,6 +191,7 @@ export interface FileRouteTypes {
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants/'
+    | '/r/$restaurantId/t/$tableNumber'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -198,6 +209,7 @@ export interface FileRouteTypes {
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants'
+    | '/r/$restaurantId/t/$tableNumber'
   id:
     | '__root__'
     | '/'
@@ -216,6 +228,7 @@ export interface FileRouteTypes {
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
     | '/super-admin/restaurants/'
+    | '/r/$restaurantId/t/$tableNumber'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -229,6 +242,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsOfUseRoute: typeof TermsOfUseRoute
   ApiAudioAudioIdRoute: typeof ApiAudioAudioIdRoute
+  RRestaurantIdTTableNumberRoute: typeof RRestaurantIdTTableNumberRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -345,6 +359,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAudioAudioIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/r/$restaurantId/t/$tableNumber': {
+      id: '/r/$restaurantId/t/$tableNumber'
+      path: '/r/$restaurantId/t/$tableNumber'
+      fullPath: '/r/$restaurantId/t/$tableNumber'
+      preLoaderRoute: typeof RRestaurantIdTTableNumberRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -381,6 +402,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsOfUseRoute: TermsOfUseRoute,
   ApiAudioAudioIdRoute: ApiAudioAudioIdRoute,
+  RRestaurantIdTTableNumberRoute: RRestaurantIdTTableNumberRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -640,27 +640,38 @@ grant execute on function public.set_table_occupied_kasir(uuid, integer, text) t
 
 **Files:**
 - Create: `src/lib/qr-interceptor.server.ts`
-- Create: `src/routes/api/qr/$restaurantSlug/$tableNumber.ts` (exact route
-  shape TBD — TanStack Start file-route params, finalize path format
-  against the confirmed `qr.xdirga.xyz/r/{restaurant}/t/{table}` shape from
-  the spec)
+- Create: `src/routes/r/$restaurantId/t/$tableNumber.ts` (route shape
+  finalized as `/r/{restaurantId}/t/{tableNumber}`, matching the spec's
+  confirmed `qr.xdirga.xyz/r/{restaurant}/t/{table}` shape one-to-one once
+  a domain is pointed at this deployment)
 - Create: `tests/qr-interceptor.test.ts`
 
-- [ ] **Step 1: Write failing tests** covering: (a) valid restaurant+table
+- [x] **Step 1: Write failing tests** covering: (a) valid restaurant+table
   → 302 to the correct ESB URL using `esb_app_id`; (b) unknown restaurant
   slug → safe fallback (decide: 404, or redirect to a generic "resto tidak
   ditemukan" page — never leak internal error detail); (c) logging failure
   (mocked DB error) still produces the 302 (fail-open contract); (d)
   repeated calls for an already-`terisi` table still redirect correctly and
-  do not throw.
+  do not throw. Implemented as 18 tests in `tests/qr-interceptor.test.ts`,
+  covering the above plus: inactive restaurant, missing `esb_app_id`,
+  malformed restaurant-id/table-number params, a bounded scan-timeout
+  case, and a source-contract check that this module reuses
+  `recordQrScanCore` and the service-role client (never the anon+Bearer
+  client from Task 6 Step 9's other five wrappers).
 
-- [ ] **Step 2: Implement `resolveEsbRedirectUrl(restaurantId, tableNumber)`**
+- [x] **Step 2: Implement `resolveEsbRedirectUrl(restaurantId, tableNumber)`**
   — looks up `restaurants.esb_app_id`, builds
   `https://esborder.qs.esb.co.id/APP/{esb_app_id}/order?mode=dinein&tableNumber={tableNumber}`.
   Returns `null`/error variant if `esb_app_id` is missing or restaurant
-  inactive — caller decides fallback behavior (Step 1b).
+  inactive — caller decides fallback behavior (Step 1b). Implemented as a
+  pure, dependency-injected core function taking a `RestaurantEsbLookup`
+  callback (mirrors the Core-fn pattern from `owner-dashboard.server.ts`),
+  with three distinct failure codes (`RESTAURANT_NOT_FOUND`,
+  `RESTAURANT_INACTIVE`, `MISSING_ESB_APP_ID`) so the caller can decide
+  fallback behavior per case; any lookup exception is folded into
+  `RESTAURANT_NOT_FOUND` so no raw error ever surfaces.
 
-- [ ] **Step 3: Implement `recordQrScan(restaurantId, tableNumber)`** —
+- [x] **Step 3: Implement `recordQrScan(restaurantId, tableNumber)`** —
   calls `record_qr_scan` RPC via service-role client with a bounded
   timeout (e.g. `Promise.race` against a short timer); any rejection is
   caught and swallowed (logged to `operational_errors` if feasible without
@@ -669,21 +680,61 @@ grant execute on function public.set_table_occupied_kasir(uuid, integer, text) t
   (built in Task 6) — reuse it directly rather than re-implementing the
   RPC call here; it is the one Task 6 wrapper genuinely built on the plain
   service-role client, since `record_qr_scan` alone is `grant execute ...
-  to service_role` in the migration.
+  to service_role` in the migration. **Implementation note:** reuses
+  `recordQrScanCore` (the pure core, not the `createServerFn`-wrapped
+  `recordQrScan`) directly against a locally-constructed service-role
+  client, wrapped in `defaultRecordQrScan` and awaited via
+  `Promise.race` against a 1500ms timer in `recordScanBestEffort` — any
+  rejection or timeout is swallowed, the 302 always proceeds.
 
-- [ ] **Step 4: Implement the route handler** — resolve params → resolve
+- [x] **Step 4: Implement the route handler** — resolve params → resolve
   redirect URL → fire `recordQrScan` without `await`-blocking the response
   beyond its bounded budget → issue `302` via TanStack Start's server
   response API. Confirm with the TanStack Start routing docs/existing
   `src/routes/api/audio/$audioId.ts` pattern for how this codebase already
-  implements a raw API route, and follow the same convention.
+  implements a raw API route, and follow the same convention. Implemented
+  at `src/routes/r/$restaurantId/t/$tableNumber.ts` following that exact
+  `createFileRoute(...).server.handlers.GET` convention. **Judgment call
+  flagged:** the plan's original file path used `$restaurantSlug`, but no
+  `slug` column exists anywhere in the `restaurants` schema (only `id`,
+  `code_hash`/`code_encrypted` — explicitly "never a public slug, URL
+  identifier" per `docs/superpowers/specs/2026-08-23-restaurant-code-login-design.md`
+  — `display_name`, `esb_app_id`, etc.). The route param is the
+  restaurant's UUID `id` instead; physical QR codes must encode that UUID.
+  This should be confirmed with the user/ops before printing real QR
+  codes.
 
-- [ ] **Step 5: Decide and document final domain/hosting** — resolves Open
+- [x] **Step 5: Decide and document final domain/hosting** — resolves Open
   Decision 2 from the spec (temporary `qr.xdirga.xyz` vs. final domain).
   Not blocking for building the route itself; the route works under any
-  domain pointed at this deployment.
+  domain pointed at this deployment. **Left open, not decided in this
+  session** — flagged back to the user per the plan's own "not blocking"
+  guidance; the route itself is domain-agnostic and ready for either
+  `qr.xdirga.xyz` or a final domain once chosen.
 
-- [ ] **Step 6: Run tests — must pass (green).**
+- [x] **Step 6: Run tests — must pass (green).** 18/18 new tests green;
+  full suite 408/408 green (69 test files); `tsc --noEmit` clean; `eslint`
+  clean on all new/modified files (pre-existing unrelated debt in
+  `scripts/provision-restaurants-and-audio.mjs` untouched); `vite build`
+  succeeded, new route confirmed registered in `src/routeTree.gen.ts` as
+  `/r/$restaurantId/t/$tableNumber` and bundled into the SSR output.
+  `check:edge` still fails with `deno: not found` — expected sandbox
+  limitation, unrelated to this change.
+
+**Open items carried forward (not resolved in this session, flagged to
+the user):**
+- `esb_app_id` real values per restaurant — still not populated for any
+  of the 9 restaurants; the route and tests both work correctly with a
+  placeholder/missing value (surfacing `MISSING_ESB_APP_ID` → safe 404),
+  but real customer redirects need this operational data supplied by ops.
+- Final QR Interceptor production domain (Open Decision 2) — still
+  undecided; not blocking, the route works under any domain pointed at
+  this deployment.
+- Restaurant identifier in the QR URL is the raw UUID `id`, not a
+  human-friendly slug (no such column exists in the schema) — flagged
+  above in Step 4; worth confirming with the user before QR codes are
+  physically printed, since a 36-character UUID in every table's QR code
+  is functionally fine but not especially pretty/short.
 
 ## Task 8: Revised Login Flow (all 4 roles)
 
