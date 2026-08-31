@@ -80,6 +80,11 @@ describe("Clear Up route: live data via snapshot + realtime, filtered to the occ
     );
   });
 
+  it("uses realtime-first refresh with no route-level polling interval", () => {
+    const text = source();
+    expect(text).not.toContain("refetchInterval");
+  });
+
   it("builds the queue via the pure sortedOccupiedTables helper rather than duplicating the filter/sort logic inline", () => {
     const text = source();
     expect(text).toContain('from "@/lib/clear-up-queue"');

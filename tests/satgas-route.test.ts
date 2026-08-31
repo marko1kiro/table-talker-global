@@ -75,6 +75,11 @@ describe("Satgas route: live data via snapshot + realtime", () => {
     );
   });
 
+  it("uses realtime-first refresh with no route-level polling interval", () => {
+    const text = source();
+    expect(text).not.toContain("refetchInterval");
+  });
+
   it("defaults any table missing from the snapshot to kosong rather than looking broken", () => {
     const text = source();
     expect(text).toMatch(/\?\?\s*"kosong"/);

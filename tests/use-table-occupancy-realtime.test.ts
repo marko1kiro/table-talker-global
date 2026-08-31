@@ -46,6 +46,29 @@ function fakeClient() {
   return { client, channels, removeChannel };
 }
 
+function fakeVisibility(initiallyVisible = true) {
+  let visible = initiallyVisible;
+  let callback: (() => void) | null = null;
+  const unsubscribe = vi.fn(() => {
+    callback = null;
+  });
+  const visibility = {
+    isVisible: () => visible,
+    subscribe: vi.fn((next: () => void) => {
+      callback = next;
+      return unsubscribe;
+    }),
+  };
+  return {
+    visibility,
+    unsubscribe,
+    setVisible(next: boolean) {
+      visible = next;
+      callback?.();
+    },
+  };
+}
+
 describe("tableOccupancyChannelName", () => {
   it("uses the table-occupancy:{restaurantId} channel name shape", () => {
     expect(tableOccupancyChannelName(RESTAURANT_ID)).toBe(`table-occupancy:${RESTAURANT_ID}`);
@@ -94,7 +117,7 @@ describe("createTableOccupancyRealtimeController", () => {
     expect(refetch).toHaveBeenCalledTimes(2); // exactly at the boundary, allowed
   });
 
-  it("falls back to interval polling when the channel status is terminal", () => {
+  it("falls back to interval polling whenever the channel is not SUBSCRIBED", () => {
     vi.useFakeTimers();
     try {
       const { client, channels } = fakeClient();
@@ -146,6 +169,62 @@ describe("createTableOccupancyRealtimeController", () => {
       });
 
       expect(onStatusChange).toHaveBeenCalledWith("CHANNEL_ERROR");
+      vi.advanceTimersByTime(POLL_FALLBACK_MS);
+      expect(refetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("pauses fallback polling while hidden and resumes it when visible", () => {
+    vi.useFakeTimers();
+    try {
+      const { client, channels } = fakeClient();
+      const { visibility, setVisible } = fakeVisibility(true);
+      const refetch = vi.fn();
+      createTableOccupancyRealtimeController({
+        client,
+        restaurantId: RESTAURANT_ID,
+        refetch,
+        visibility,
+      });
+      const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
+
+      entry.emitStatus("CHANNEL_ERROR");
+      vi.advanceTimersByTime(POLL_FALLBACK_MS);
+      expect(refetch).toHaveBeenCalledTimes(1);
+
+      setVisible(false);
+      vi.advanceTimersByTime(POLL_FALLBACK_MS * 3);
+      expect(refetch).toHaveBeenCalledTimes(1);
+
+      setVisible(true);
+      vi.advanceTimersByTime(POLL_FALLBACK_MS);
+      expect(refetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not start fallback polling until a hidden page becomes visible", () => {
+    vi.useFakeTimers();
+    try {
+      const { client, channels } = fakeClient();
+      const { visibility, setVisible } = fakeVisibility(false);
+      const refetch = vi.fn();
+      createTableOccupancyRealtimeController({
+        client,
+        restaurantId: RESTAURANT_ID,
+        refetch,
+        visibility,
+      });
+      const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
+
+      entry.emitStatus("TIMED_OUT");
+      vi.advanceTimersByTime(POLL_FALLBACK_MS * 2);
+      expect(refetch).not.toHaveBeenCalled();
+
+      setVisible(true);
       vi.advanceTimersByTime(POLL_FALLBACK_MS);
       expect(refetch).toHaveBeenCalledTimes(1);
     } finally {
@@ -230,8 +309,11 @@ describe("no-heartbeat architectural invariant", () => {
     expect(hookSource).not.toMatch(/heartbeat/i);
     expect(hookSource).not.toContain("claim_crew_session");
     expect(hookSource).not.toContain("HEARTBEAT_MS");
-    expect(hookSource).not.toContain("visibilitychange");
+    // Task 16 allows visibilitychange solely to pause/resume the documented
+    // fallback poll. It must never be used to reconnect or call an RPC.
+    expect(hookSource).toContain("visibilitychange");
     expect(hookSource).not.toContain("pagehide");
+    expect(hookSource).not.toMatch(/\.subscribe\([^)]*visibility/i);
   });
 
   it("uses broadcast/invalidate events, not postgres_changes", () => {
@@ -240,12 +322,12 @@ describe("no-heartbeat architectural invariant", () => {
     expect(hookSource).not.toContain("postgres_changes");
   });
 
-  it("uses setInterval only for the documented polling fallback, guarded by terminal status", () => {
+  it("uses setInterval only for the documented polling fallback, guarded by realtime health", () => {
     const intervalCount = (hookSource.match(/setInterval\(/g) ?? []).length;
     // Exactly one direct setInterval call: the default setIntervalFn used
     // by the injectable polling fallback. No second, unconditional timer.
     expect(intervalCount).toBe(1);
-    expect(hookSource).toContain("TERMINAL_STATUSES");
+    expect(hookSource).toContain('currentStatus !== "SUBSCRIBED"');
   });
 });
 

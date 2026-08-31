@@ -80,6 +80,10 @@ function KasirRoute() {
   }, [navigate]);
 
   const restaurantId = identity?.restaurantId ?? "";
+  useTableOccupancyRealtime(restaurantId, () => {
+    void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
+  });
+
   const snapshot = useQuery({
     queryKey: snapshotQueryKey(restaurantId),
     queryFn: async () =>
@@ -91,12 +95,8 @@ function KasirRoute() {
         },
       }),
     enabled: Boolean(identity),
-    refetchInterval: 30_000,
+    // Realtime is primary; the hook owns the visible-only 12-second fallback.
     refetchOnWindowFocus: true,
-  });
-
-  const realtimeStatus = useTableOccupancyRealtime(restaurantId, () => {
-    void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
   });
 
   const markOccupied = useMutation({
