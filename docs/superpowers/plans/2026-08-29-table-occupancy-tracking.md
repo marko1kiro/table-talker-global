@@ -984,17 +984,22 @@ the user):**
 
 **Files:** none created; verification-only task.
 
-- [ ] **Step 1:** Confirm, by writing a throwaway read-only query (not
+- [x] **Step 1:** Confirm, by writing a throwaway read-only query (not
   committed) against staging, that `table_occupancy_state` and
   `crew_role_sessions` alone are sufficient to compute: live Kosong/Terisi
   counts per restaurant, and a shift audit list (Name + `checked_in_at`)
   filtered to a single `restaurant_id`. If any gap is found, raise it
   before Phase 2 planning rather than after building Kasir/Satgas/CU
   against an incomplete schema.
-- [ ] **Step 2:** Document the confirmed queries (or gaps) as a short note
+  — Done: both confirmed sufficient, no schema gap. See Open Decision 4 in
+  the design spec and `docs/breakdown-task13-manager-dashboard-verification.md`
+  for the queries and results.
+- [x] **Step 2:** Document the confirmed queries (or gaps) as a short note
   appended to the design spec's Open Decisions section, closing Open
   Decision 4. No route, no manager-login code, no `restaurant_managers`
   table is created in this task — Phase 2 remains untouched.
+  — Done: Open Decision 4 closed with the verified queries and the
+  access-path (RLS/RPC) implication for the future Phase 2 RPC.
 
 ## Task 14: Final Regression, Full-Repo Sweep, Integration Commit
 

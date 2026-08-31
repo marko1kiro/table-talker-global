@@ -552,6 +552,44 @@ had a deliberate destructive cleanup phase.
 4. **Manager Dashboard implementation timing** — confirmed Phase 2, no
    further action needed now beyond the schema-compatibility guarantees
    already built into `table_occupancy_state` and `crew_role_sessions`.
+   **CLOSED (Task 13, verified live against `kjzxtmxdbcanvkgqqdow`):** both
+   guarantees hold, with one implementation detail to carry into the
+   Phase 2 RPC (not a schema gap — no migration needed):
+   - **Live Kosong/Terisi counts per restaurant**: `table_occupancy_state`
+     only ever holds a row for a `(restaurant_id, table_number)` that has
+     had at least one transition — confirmed live (a sample restaurant had
+     3 rows, all `status = 'kosong'`, leftover from earlier
+     terisi→kosong cycles; rows persist, they are never deleted on
+     Clear Up). A naive `group by status` on this table alone therefore
+     *undercounts* `kosong` (untouched tables have no row at all). The
+     correct query is the same `generate_series(1, 100)` LEFT JOIN
+     pattern already live in `get_table_occupancy_snapshot` (Task 6) —
+     confirmed identical and reusable, not a new pattern to invent:
+     ```sql
+     select coalesce(tos.status, 'kosong') as status, count(*)
+     from generate_series(1, 100) as gs(table_number)
+     left join table_occupancy_state tos
+       on tos.restaurant_id = $1 and tos.table_number = gs.table_number
+     group by 1;
+     ```
+   - **Shift audit list (Name + `checked_in_at`) per restaurant**:
+     `claim_role_session` (Task 6) is insert-only — one new
+     `crew_role_sessions` row per login, never updated/overwritten —
+     confirmed live (a sample restaurant showed 4 distinct rows across
+     3 roles/logins). `select display_name, role, checked_in_at from
+     crew_role_sessions where restaurant_id = $1 order by checked_in_at
+     desc` is sufficient as-is. No gap.
+   - **Access path**: both tables have RLS enabled with zero policies
+     defined (confirmed live via `pg_policies`) — i.e. service-role only,
+     same posture as every other table in this feature. Direct
+     client-side `select`s will always return zero rows for
+     anon/authenticated callers by design. This confirms (does not
+     change) the "Manager auth tier" contract above: Phase 2 must read
+     both counts and the audit list through a new `SECURITY DEFINER` RPC
+     that validates the manager's session is scoped to the requested
+     `restaurant_id`, mirroring `get_table_occupancy_snapshot`'s existing
+     role/tenant check — never a raw table select.
+   Full verification queries and results: `docs/breakdown-task13-manager-dashboard-verification.md`.
 
 ## Self-Review
 
