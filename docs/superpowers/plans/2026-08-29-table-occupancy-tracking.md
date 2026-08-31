@@ -911,7 +911,7 @@ the user):**
 - Create: `src/routes/satgas/index.tsx`
 - Create: `tests/satgas-route.test.ts`
 
-- [ ] **Step 1: Write failing tests**: read-only live grid of all 100
+- [x] **Step 1: Write failing tests**: read-only live grid of all 100
   tables; an "Escort" action per KOSONG table that calls
   `createEscortIntent`; after 30 minutes with no state change, the UI
   surfaces a "Konfirmasi" prompt scoped only to the Satgas session that
@@ -920,14 +920,25 @@ the user):**
   else's pending intent); confirming calls `confirmEscortIntent`; an intent
   resolved by an incoming QR scan before 30 minutes simply disappears with
   no prompt (no cancel button needed, matches spec).
-- [ ] **Step 2: Build the page** — read-only grid + escort action button +
+  **Correction (2026-08-31):** `get_table_occupancy_snapshot` (Task 6,
+  already shipped) never actually returns escort-intent data, so this
+  step's original assumption that intents "can be included in the same
+  snapshot RPC response" does not hold without a new migration touching an
+  already-tested RPC contract. Implemented instead as a client-only
+  waitlist (`src/lib/satgas-escort-waitlist.ts`) storing each intent's id/
+  table/expiry under a storage key scoped by `roleSessionId` — this meets
+  the session-isolation requirement directly (a different `role_session_id`
+  reads a different key) without touching the RPC. Covered by
+  `tests/satgas-escort-waitlist.test.ts` (22 tests, pure logic) and
+  `tests/satgas-route.test.ts` (25 tests, route wiring).
+- [x] **Step 2: Build the page** — read-only grid + escort action button +
   polling/derived check for expired unresolved intents belonging to the
   current session (client-side timer comparing `expires_at` to
   `Date.now()`, consistent with the spec's "client-side-only" cost
   philosophy — no extra server polling beyond the existing occupancy
-  snapshot/realtime feed, since escort intents can be included in the same
-  snapshot RPC response for the caller's own session).
-- [ ] **Step 3: Run tests — must pass (green).**
+  snapshot/realtime feed). Built as `src/routes/satgas/index.tsx`.
+- [x] **Step 3: Run tests — must pass (green).** 568/568 tests pass
+  (existing 521 + 47 new), tsc clean, lint clean, build clean.
 
 ## Task 12: Clear Up Route
 
