@@ -67,9 +67,10 @@ describe("Satgas route: live data via snapshot + realtime", () => {
     ).toBe(3);
   });
 
-  it("subscribes via useTableOccupancyRealtime and invalidates the snapshot query on invalidate events", () => {
+  it("captures the realtime status used by the connection notice and invalidates the snapshot on events", () => {
     const text = source();
-    expect(text).toContain("useTableOccupancyRealtime(restaurantId,");
+    expect(text).toContain("const realtimeStatus = useTableOccupancyRealtime(restaurantId,");
+    expect(text).toContain('realtimeStatus !== "SUBSCRIBED"');
     expect(text).toContain(
       "queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) })",
     );

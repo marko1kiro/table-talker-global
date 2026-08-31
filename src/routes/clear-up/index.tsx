@@ -91,7 +91,7 @@ function ClearUpRoute() {
   }, []);
 
   const restaurantId = identity?.restaurantId ?? "";
-  useTableOccupancyRealtime(restaurantId, () => {
+  const realtimeStatus = useTableOccupancyRealtime(restaurantId, () => {
     void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
   });
 

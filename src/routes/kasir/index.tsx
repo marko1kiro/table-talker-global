@@ -80,7 +80,7 @@ function KasirRoute() {
   }, [navigate]);
 
   const restaurantId = identity?.restaurantId ?? "";
-  useTableOccupancyRealtime(restaurantId, () => {
+  const realtimeStatus = useTableOccupancyRealtime(restaurantId, () => {
     void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
   });
 
