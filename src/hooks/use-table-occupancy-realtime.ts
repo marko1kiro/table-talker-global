@@ -20,11 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase-browser";
 
 export type TableOccupancyRealtimeStatus =
-  | "SUBSCRIBING"
-  | "SUBSCRIBED"
-  | "TIMED_OUT"
-  | "CHANNEL_ERROR"
-  | "CLOSED";
+  "SUBSCRIBING" | "SUBSCRIBED" | "TIMED_OUT" | "CHANNEL_ERROR" | "CLOSED";
 
 // Statuses the Supabase Realtime client reports when the broadcast
 // channel is no longer delivering events, so the polling fallback must

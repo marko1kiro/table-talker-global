@@ -170,7 +170,7 @@ to disappear.
 **Files:**
 - Create: `tests/removal-contract.test.ts`
 
-- [ ] **Step 1: Write failing "must not exist" contract tests**
+- [x] **Step 1: Write failing "must not exist" contract tests**
 
 ```ts
 import { existsSync } from "node:fs";
@@ -208,7 +208,7 @@ it("no remaining source references removed RPCs/tables", () => {
 });
 ```
 
-- [ ] **Step 2: Run red test** — `npm test -- tests/removal-contract.test.ts`.
+- [x] **Step 2: Run red test** — `npm test -- tests/removal-contract.test.ts`.
   Expected: FAIL (files still exist, tokens still referenced).
 
 ### Task 2: Database Removal Migration
@@ -216,7 +216,7 @@ it("no remaining source references removed RPCs/tables", () => {
 **Files:**
 - Create: `supabase/migrations/20260829000000_remove_remote_command_heartbeat.sql`
 
-- [ ] **Step 1: Write the destructive migration**
+- [x] **Step 1: Write the destructive migration**
 
 ```sql
 -- Drop dependent RPCs first (order matters for FK/dependency safety).
@@ -280,7 +280,7 @@ grant execute on function public.claim_crew_session(uuid, text, text, text) to a
 -- this replacement to avoid dropping unrelated aggregates).
 ```
 
-- [ ] **Step 2: Verify the unique-name-while-online index is gone or
+- [x] **Step 2: Verify the unique-name-while-online index is gone or
   reinterpreted.** `crew_sessions_online_name_key` was a partial index on
   `connection_state in ('connecting','connected')`; that column no longer
   exists. Decide and implement one of: (a) drop the partial uniqueness
@@ -291,9 +291,9 @@ grant execute on function public.claim_crew_session(uuid, text, text, text) to a
   restaurant is still wanted. Confirm with user before choosing (default
   to (a) — drop it — unless told otherwise, since the spec never asked for
   persistent name-uniqueness outside the presence context).
-- [ ] **Step 3: Run migration locally/staging**: `npx supabase db push`
+- [x] **Step 3: Run migration locally/staging**: `npx supabase db push`
   (or project's established migration command) and confirm no errors.
-- [ ] **Step 4: Write `tests/removal-migration.test.ts`** asserting (via
+- [x] **Step 4: Write `tests/removal-migration.test.ts`** asserting (via
   reading the migration file's SQL text, matching the style of
   `tests/restaurant-code-migration.test.ts`) that it drops the listed
   tables/functions/columns and does not touch unrelated tables
@@ -303,9 +303,9 @@ grant execute on function public.claim_crew_session(uuid, text, text, text) to a
 
 **Files:** all "Removed" entries in File Map above.
 
-- [ ] **Step 1: Delete hook/component/route/server-lib files** listed in
+- [x] **Step 1: Delete hook/component/route/server-lib files** listed in
   the File Map's Removed section.
-- [ ] **Step 2: Update `src/routes/index.tsx`** — remove
+- [x] **Step 2: Update `src/routes/index.tsx`** — remove
   `useRemoteCrew`/`useCrewMessage` imports and usage, the
   `CrewMessageOverlay` render, `onCrewSessionId` remote-triggered playback
   path. Keep `playRemoteAudio`'s *local* announcement/table playback intact
@@ -313,35 +313,35 @@ grant execute on function public.claim_crew_session(uuid, text, text, text) to a
   remains after removing the remote path (this file's remote-specific
   branches are the only thing removed; local cache-based playback via
   `play()` is untouched).
-- [ ] **Step 3: Update `src/routes/super-admin/route.tsx`** — remove the
+- [x] **Step 3: Update `src/routes/super-admin/route.tsx`** — remove the
   Broadcast nav link.
-- [ ] **Step 4: Update `src/routes/super-admin/index.tsx`** — remove the
+- [x] **Step 4: Update `src/routes/super-admin/index.tsx`** — remove the
   "Crew Online" metric card from the `metrics` array; dashboard grid goes
   from 6 to 5 items (verify the responsive `xl:grid-cols-3 2xl:grid-cols-6`
   className still reads well at 5 items, adjust if needed).
-- [ ] **Step 5: Update `src/lib/owner-dashboard.server.ts` /
+- [x] **Step 5: Update `src/lib/owner-dashboard.server.ts` /
   `owner-dashboard-domain.ts`** — drop `active_crew_devices` from
   `OwnerDashboardAggregates` type and its RPC call site.
-- [ ] **Step 6: Update `src/routes/super-admin/restaurants/$id.tsx`** —
+- [x] **Step 6: Update `src/routes/super-admin/restaurants/$id.tsx`** —
   remove the presence/online-device display block; verify the rest of the
   detail page (catalog mappings, tenant buttons, history) is unaffected.
-- [ ] **Step 7: Delete the ~9 obsolete test files** listed in File Map.
-- [ ] **Step 8: Run `tests/removal-contract.test.ts`** from Task 1 — must
+- [x] **Step 7: Delete the ~9 obsolete test files** listed in File Map.
+- [x] **Step 8: Run `tests/removal-contract.test.ts`** from Task 1 — must
   now pass (green).
-- [ ] **Step 9: Run full suite** `npm test`, `npm run typecheck`,
+- [x] **Step 9: Run full suite** `npm test`, `npm run typecheck`,
   `npm run lint` — fix any fallout (unused imports, dangling types) before
   proceeding. Do not leave broken builds between removal and addition.
 
 ### Task 4: Removal Verification Checkpoint
 
-- [ ] **Step 1:** `npm run verify` passes fully with the subsystem gone and
+- [x] **Step 1:** `npm run verify` passes fully with the subsystem gone and
   nothing else regressed. This is a hard gate — additive work (Task 5+)
   must not start on a red baseline.
-- [ ] **Step 2:** Manually confirm (via a quick local run or code read) that
+- [x] **Step 2:** Manually confirm (via a quick local run or code read) that
   SS login → soundboard → play table audio → play announcement all still
   work using only local Cache Storage playback, with zero calls to any
   removed RPC.
-- [ ] **Step 3:** Commit removal as one focused commit/PR increment before
+- [x] **Step 3:** Commit removal as one focused commit/PR increment before
   starting additive schema work (keeps the destructive change reviewable
   in isolation).
 
@@ -353,14 +353,14 @@ grant execute on function public.claim_crew_session(uuid, text, text, text) to a
 - Create: `supabase/migrations/20260829010000_table_occupancy_schema.sql`
 - Create: `tests/table-occupancy-migration.test.ts`
 
-- [ ] **Step 1: Write failing schema-contract test** (style of
+- [x] **Step 1: Write failing schema-contract test** (style of
   `tests/restaurant-code-migration.test.ts`) asserting the migration file
   creates `table_occupancy_state`, `qr_scan_events`, `table_escort_intents`,
   `crew_role_sessions`, `role_session_tokens`, each `restaurant_id`-scoped,
   RLS-enabled, and `revoke all ... from public, anon, authenticated` at
   table level (no direct client access, mutations only via RPC — Task 6).
 
-- [ ] **Step 2: Write the migration**
+- [x] **Step 2: Write the migration**
 
 ```sql
 create table public.table_occupancy_state (
@@ -443,14 +443,14 @@ $$;
 revoke all on function public.cleanup_table_escort_intents() from public, anon, authenticated;
 ```
 
-- [ ] **Step 3: Add `esb_app_id` column** (Open Decision 3 resolved — confirm
+- [x] **Step 3: Add `esb_app_id` column** (Open Decision 3 resolved — confirm
   exact format with user/ops before writing; default nullable text):
 
 ```sql
 alter table public.restaurants add column if not exists esb_app_id text;
 ```
 
-- [ ] **Step 4: Run migration, run schema-contract test — must pass (green).**
+- [x] **Step 4: Run migration, run schema-contract test — must pass (green).**
 
 ## Task 6: RPC Surface
 
@@ -460,14 +460,14 @@ alter table public.restaurants add column if not exists esb_app_id text;
 - Create: `src/lib/role-session.server.ts`
 - Create: `tests/table-occupancy-rpc-contract.test.ts`
 
-- [ ] **Step 1: Write failing RPC-contract tests** (schema-text assertions
+- [x] **Step 1: Write failing RPC-contract tests** (schema-text assertions
   per existing migration-test convention) asserting every RPC below exists,
   is `security definer`, `set search_path = public`, and revokes execute
   from `public`/`anon` while granting only to the appropriate role
   (`authenticated` for client-callable RPCs, no grant at all for
   `record_qr_scan` which is service-role-only).
 
-- [ ] **Step 2: Write `claim_role_session` RPC**
+- [x] **Step 2: Write `claim_role_session` RPC**
 
 ```sql
 create or replace function public.claim_role_session(
@@ -505,7 +505,7 @@ grant execute on function public.claim_role_session(uuid, text, text, text, time
   for confirmation, default to matching a typical shift length rather than
   copying SS's 1-hour value verbatim.
 
-- [ ] **Step 3: Write `set_table_occupied_kasir`**
+- [x] **Step 3: Write `set_table_occupied_kasir`**
 
 ```sql
 create or replace function public.set_table_occupied_kasir(
@@ -534,16 +534,16 @@ grant execute on function public.set_table_occupied_kasir(uuid, integer, text) t
   second Kasir tap on an already-`terisi` table is a silent no-op, matching
   the spec's idempotency requirement generalized beyond just QR scans).
 
-- [ ] **Step 4: Write `set_table_empty_cleanup`** — mirrors Step 3 but
+- [x] **Step 4: Write `set_table_empty_cleanup`** — mirrors Step 3 but
   role-checks `'clear_up'`, transitions `terisi → kosong`, clears
   `occupied_at`/`occupied_source`, guarded by `where status = 'terisi'`.
 
-- [ ] **Step 5: Write `create_escort_intent`** — role-checks `'satgas'`,
+- [x] **Step 5: Write `create_escort_intent`** — role-checks `'satgas'`,
   inserts into `table_escort_intents` with `expires_at = now() + interval
   '30 minutes'`, `actor_session_id` bound to the caller's verified role
   session id (never client-supplied).
 
-- [ ] **Step 6: Write `confirm_escort_intent`** — role-checks `'satgas'`,
+- [x] **Step 6: Write `confirm_escort_intent`** — role-checks `'satgas'`,
   verifies `actor_session_id` in the target intent row matches the caller's
   session id, verifies `expires_at <= now()` (only confirmable after
   expiry, per spec) and `resolved = false`, verifies the target table is
@@ -552,7 +552,7 @@ grant execute on function public.set_table_occupied_kasir(uuid, integer, text) t
   transitions the table to `terisi` with `occupied_source = 'satgas_escort'`
   and marks the intent `resolved = true`.
 
-- [ ] **Step 7: Write `record_qr_scan`** — **no `authenticated` grant at
+- [x] **Step 7: Write `record_qr_scan`** — **no `authenticated` grant at
   all**; callable only via service-role client from the interceptor server
   code (Task 7). Idempotent no-op if already `terisi`; always inserts a
   `qr_scan_events` row regardless (the append-only log records every scan,
@@ -563,7 +563,7 @@ grant execute on function public.set_table_occupied_kasir(uuid, integer, text) t
   wraps this RPC call so failures never block the redirect, while the RPC
   itself still raises real exceptions for genuinely invalid input.
 
-- [ ] **Step 8: Write `get_table_occupancy_snapshot`** — read RPC (or plain
+- [x] **Step 8: Write `get_table_occupancy_snapshot`** — read RPC (or plain
   `select` through a narrow view) returning all 100 rows for a restaurant
   (defaulting missing table numbers to `kosong` — either backfilled at
   restaurant-provisioning time or computed via a `generate_series(1,100)`
@@ -852,15 +852,15 @@ the user):**
 - Create: `tests/use-layout-preference.test.ts`,
   `tests/use-table-occupancy-realtime.test.ts`
 
-- [ ] **Step 1: Write failing tests** for `useLayoutPreference(role)`:
+- [x] **Step 1: Write failing tests** for `useLayoutPreference(role)`:
   defaults to `"grid"` when `localStorage` is empty, persists a change,
   reads back the persisted value on next mount, is scoped per role (Kasir's
   choice doesn't affect Satgas's).
 
-- [ ] **Step 2: Implement `useLayoutPreference`** — thin `localStorage`
+- [x] **Step 2: Implement `useLayoutPreference`** — thin `localStorage`
   wrapper, key shape `table-talker.layout.{role}`.
 
-- [ ] **Step 3: Write failing tests** for
+- [x] **Step 3: Write failing tests** for
   `useTableOccupancyRealtime(restaurantId)`: subscribes to
   `table-occupancy:{restaurantId}` broadcast channel, invokes a provided
   refetch callback on `invalidate` event, rate-limits to at most once/sec,
@@ -871,12 +871,12 @@ the user):**
   heartbeat RPC) — this test exists specifically to prevent regressing
   back toward the removed pattern.
 
-- [ ] **Step 4: Implement the hook**, modeled on the *shape* of
+- [x] **Step 4: Implement the hook**, modeled on the *shape* of
   `use-remote-crew.ts`'s channel-subscribe/cleanup lifecycle but stripped
   of everything presence/heartbeat-related — i.e., borrow the
   subscribe/unsubscribe/cleanup skeleton, not the heartbeat timer.
 
-- [ ] **Step 5: Run tests — must pass (green).**
+- [x] **Step 5: Run tests — must pass (green).**
 
 ## Task 10: Kasir Route
 
