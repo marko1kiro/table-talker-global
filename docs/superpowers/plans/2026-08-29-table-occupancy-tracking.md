@@ -745,7 +745,7 @@ the user):**
 - Delete/retire: `src/components/CrewIdentityDialog.tsx` (superseded)
 - Create: `tests/role-login-flow.test.ts`
 
-- [ ] **Step 1: Write failing tests** for the full sequence per the spec:
+- [x] **Step 1: Write failing tests** for the full sequence per the spec:
   code field renders as plain text (no `type="password"`), submitting
   valid code shows the identity-confirmation dialog with the exact
   restaurant display name, "TIDAK" returns to code entry and clears state,
@@ -755,7 +755,7 @@ the user):**
   submitting calls `claim_role_session` with the manually entered values
   unmodified.
 
-- [ ] **Step 2: Build `RoleLoginFlow`** as a step-state-machine component
+- [x] **Step 2: Build `RoleLoginFlow`** as a step-state-machine component
   (`"code" | "confirm" | "role" | "identity"`), reusing
   `validateRestaurantCode` and `loginToRestaurant` unchanged for step 1,
   `claimRoleSession` (Task 6, Step 9) for the final step. For role `"ss"`,
@@ -781,7 +781,37 @@ the user):**
   scope; store the token alongside the existing `CrewSessionIdentity`-style
   storage so it survives a page reload without re-prompting sign-in.
 
-- [ ] **Step 3: Wire `src/routes/index.tsx`** to render `RoleLoginFlow`
+  **⚠️ Correction to this step's original wording, resolved during actual
+  implementation (2026-08-30):** the paragraph above (and Open Decision 1
+  in the design spec) assumed SS's login would *also* call the legacy
+  `claim_crew_session` RPC so `crew_sessions`/`crew_session_tokens` kept
+  working unmodified. During implementation the user made a final,
+  overriding call — **"Option B"**: SS's session continues exactly as it
+  was *before* Task 8, with `crewIdentity.crewSessionId` /
+  `crewSessionToken` always stored as empty strings, and the historical
+  `claim_crew_session` RPC / heartbeat mechanism **never called again,
+  anywhere, by anyone**. `RoleLoginFlow.tsx` documents this explicitly at
+  its top (`// Option B (user decision, 2026-08-30): ...`) and
+  `tests/role-login-flow.test.ts` has an explicit assertion that
+  `claim_crew_session` is never invoked. This is the actual, live,
+  implemented behavior — treat this note as superseding the "SS gets both
+  a `crew_sessions` row... and a `crew_role_sessions` row" sentence above
+  and Open Decision 1 in
+  `specs/2026-08-29-table-occupancy-tracking-design.md`. Do not resurrect
+  the `claim_crew_session` call in any later task.
+
+  **⚠️ Build-safety fix discovered while implementing this step
+  (2026-08-30):** `role-session.server.ts`'s `verifyRoleSessionToken` had
+  a static top-level `import` of `node:crypto`, which leaked the Node
+  built-in into the client bundle once `RoleLoginFlow.tsx` imported
+  `claimRoleSession` from the same file (caught by
+  `tests/restaurant-login-build.test.ts`). Fixed by switching to a
+  dynamic `import("node:crypto")` inside the function body, matching the
+  existing split pattern already used in `restaurant-code.server.ts`. No
+  scope change, just a build-correctness fix worth knowing about before
+  touching this file again.
+
+- [x] **Step 3: Wire `src/routes/index.tsx`** to render `RoleLoginFlow`
   instead of `CrewIdentityDialog` when no crew identity is hydrated; on
   completion for role `"ss"`, populate the same `CrewIdentity` shape the
   rest of the page already expects (audio-unlock call stays here, since
@@ -790,10 +820,29 @@ the user):**
   navigation) to that role's route (`/kasir`, `/satgas`, `/clear-up`)
   instead of rendering the soundboard.
 
-- [ ] **Step 4: Delete `src/components/CrewIdentityDialog.tsx`** once
+- [x] **Step 4: Delete `src/components/CrewIdentityDialog.tsx`** once
   nothing imports it.
 
-- [ ] **Step 5: Run tests — must pass (green).**
+- [x] **Step 5: Run tests — must pass (green).**
+
+  **Task 8 closure note (2026-08-30):** implemented as commit `9cd2a7d`
+  (`feat(auth): implement Task 8 revised login flow (SS/Kasir/Satgas/Clear
+  Up)`) — added `role-session-domain.ts` (client-safe role metadata),
+  `RoleLoginFlow.tsx`, `ensureAnonAccessToken` in `supabase-browser.ts`,
+  the `RoleSessionIdentity` localStorage shape in
+  `crew-session-identity.ts`, and 25 new tests
+  (`role-session-domain.test.ts` + `role-login-flow.test.ts`). A follow-up
+  commit `d91537d` fixed 5 pre-existing-style prettier/eslint formatting
+  issues introduced by this task's new files (whitespace-only,
+  `eslint --fix`) plus one test assertion that had over-fitted an exact
+  single-line import string (relaxed to a tolerant regex). Final state at
+  closure: **75/75 test files, 465/465 tests green**; `tsc --noEmit`,
+  `deno check`, `eslint`, and `vite build` all clean (`npm run verify`
+  full green). Both commits pushed to `origin/genspark_ai_developer`. No
+  new PR opened yet for this task — still pending per the standing
+  "never merge to `main` without fresh explicit permission" rule; a PR
+  covering Task 8 (and likely folded together with Tasks 9-14 at Task
+  14's integration-commit step) is still outstanding.
 
 ## Task 9: Shared Role-UI Infrastructure
 
@@ -954,11 +1003,29 @@ the user):**
   posture is invented.
 - SS's login flow gains the new manual Nama+JamMasuk step (Task 8) while
   its underlying `crew_sessions`/`crew_session_tokens`/access-validation
-  machinery is preserved unchanged apart from the Task 1 column narrowing,
-  matching the approved Open Decision 1 resolution.
+  machinery is preserved unchanged apart from the Task 1 column narrowing.
+  **⚠️ Correction (2026-08-30):** this no longer matches Open Decision 1's
+  original recommendation (SS also gaining a `crew_role_sessions` row via
+  the new RPC) — the user's actual, final, implemented decision is
+  **Option B** (see the Task 8 Step 2 correction note above): SS's session
+  stays exactly as it was pre-Task-8, `claim_crew_session`/heartbeat is
+  never called by anyone again. Treat this bullet's "matching the approved
+  Open Decision 1 resolution" as superseded by Option B.
 - Manager Dashboard remains Phase 2 in every task — Task 13 only verifies
   the schema will support it later, ships no code.
 - Every task ends in a runnable, testable state (`npm run verify` gate at
   Task 4 and Task 14) rather than leaving the app broken mid-plan.
-- This document is a plan only — no source file listed here has been
-  created or modified yet; execution starts only on explicit go-ahead.
+
+**Status as of 2026-08-30 (updated — this line was stale until now):**
+Tasks 1 through 8 are complete, verified (`npm run verify` full green,
+465/465 tests / 75/75 files), committed, and pushed to
+`origin/genspark_ai_developer` (latest: `d91537d`). **Tasks 9 through 14
+below have zero code written for them yet** — that is the actual, current,
+accurate starting point for whoever picks this plan up next. The original
+closing sentence here ("no source file listed here has been created or
+modified yet; execution starts only on explicit go-ahead") described this
+plan's state at the moment it was first written and is no longer true —
+kept below, struck through, for historical context only:
+
+~~This document is a plan only — no source file listed here has been
+created or modified yet; execution starts only on explicit go-ahead.~~

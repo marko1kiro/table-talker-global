@@ -88,27 +88,45 @@ katalog R2 restoran yang sudah disinkronkan.
 Untuk sinkronisasi crew, konfigurasi Supabase dan kredensial Cloudflare R2
 server-only pada deployment. Browser tidak mengakses hostname publik R2 secara langsung.
 
-### Super Admin remote audio
+### Super Admin
 
-`/super-admin` memakai `SUPER_ADMIN_PASSWORD` terpisah dari dashboard. Pilih crew
-yang siap dan audio, lalu kirim perintah. Aplikasi tetap fail-open: bila Supabase
-atau Realtime tidak dikonfigurasi, dashboard dan soundboard normal tetap berjalan
-dengan audio dari katalog R2 restoran; crew menampilkan remote tidak tersedia,
-sedangkan `/super-admin` menampilkan `Realtime offline` dan tidak dapat mengirim
-perintah.
+> **⚠️ Catatan (2026-08-30):** subsistem remote-command/heartbeat yang
+> dulunya dijelaskan di bagian ini (Super Admin mengirim perintah "putar
+> audio dari jarak jauh" ke device crew tertentu, heartbeat foreground
+> 10 detik, kelayakan device 30 detik, TTL perintah 5 detik) **telah
+> dihapus sepenuhnya** sebagai bagian dari Major Update "Table Occupancy
+> Tracking" (lihat
+> `docs/superpowers/specs/2026-08-29-table-occupancy-tracking-design.md`
+> bagian "Removal Scope" dan Task 1-4 di
+> `docs/superpowers/plans/2026-08-29-table-occupancy-tracking.md`).
+> Digantikan oleh pelacakan status meja (KOSONG/TERISI) berbasis QR
+> Interceptor + role Kasir/Satgas/Clear Up. Paragraf lama di bawah ini
+> **tidak lagi berlaku** dan disimpan sebagai riwayat saja sampai
+> dokumentasi ini ditulis ulang penuh setelah Task 9-14 selesai.
 
-Crew memasukkan nama lalu menekan `LANJUT!!`. Gesture ini memutar sumber audio
-bisu (silent) singkat dalam keadaan muted agar browser mengizinkan pemutaran
-remote. Hanya crew audio-ready, tab terlihat, dan koneksi aktif yang mengirim heartbeat
-foreground setiap 10 detik yang dapat dipilih; kelayakannya berakhir setelah 30
-detik tanpa heartbeat. Perintah berlaku 5 detik, diproses sekali tanpa replay saat
-duplikat, reconnect, tab tersembunyi, atau perangkat kembali aktif. Audit perintah
-disimpan tujuh hari.
+`/super-admin` memakai `SUPER_ADMIN_PASSWORD` terpisah dari dashboard.
+Fitur yang masih aktif saat ini: kelola katalog audio per restoran
+(upload/ganti MP3), kelola kredensial "Kode Resto" (lihat/ganti kode),
+riwayat pemutaran audio (`Riwayat`), log error operasional
+(`Error Log`), dan (baru, 2026-08-30) panel ESB App ID + export link QR
+per restoran (`src/routes/super-admin/esb-export.tsx`). Aplikasi tetap
+fail-open: bila Supabase tidak dikonfigurasi, dashboard dan soundboard
+normal tetap berjalan dengan audio dari katalog R2 restoran.
+
+~~Crew memasukkan nama lalu menekan `LANJUT!!`. Gesture ini memutar sumber
+audio bisu (silent) singkat dalam keadaan muted agar browser mengizinkan
+pemutaran remote. Hanya crew audio-ready, tab terlihat, dan koneksi aktif
+yang mengirim heartbeat foreground setiap 10 detik yang dapat dipilih;
+kelayakannya berakhir setelah 30 detik tanpa heartbeat. Perintah berlaku 5
+detik, diproses sekali tanpa replay saat duplikat, reconnect, tab
+tersembunyi, atau perangkat kembali aktif. Audit perintah disimpan tujuh
+hari.~~ *(dihapus di Task 1-4 Major Update — tidak lagi relevan)*
 
 Android Chrome dan iOS Safari membatasi autoplay serta dapat menangguhkan tab,
 layar terkunci, atau audio di latar belakang. Jangan menjanjikan pemutaran pada
 kondisi tersebut: buka crew di foreground, tekan `LANJUT!!`, lalu gunakan pemulihan
-`Aktifkan Suara` bila browser menolak audio.
+`Aktifkan Suara` bila browser menolak audio. (Ini masih berlaku — terkait unlock
+audio gesture SS, bukan bagian dari subsistem remote-command yang dihapus.)
 
 #### Setup Supabase
 
@@ -137,16 +155,25 @@ kondisi tersebut: buka crew di foreground, tekan `LANJUT!!`, lalu gunakan pemuli
    Ambil `YOUR_PROJECT_REF` dari Supabase Dashboard. Jangan commit access token CLI,
    password, atau nilai kredensial apa pun.
 
-   Migrasi mengaktifkan RLS deny-by-default, memberi crew hanya akses session dan
-   perintah miliknya melalui RPC, serta menambahkan `crew_sessions` dan
-   `remote_commands` ke Realtime publication. Jangan membuat policy tabel longgar
-   atau memberi service-role key ke client.
+   Migrasi mengaktifkan RLS deny-by-default, memberi crew hanya akses session
+   miliknya melalui RPC. ~~serta menambahkan `crew_sessions` dan
+   `remote_commands` ke Realtime publication~~ *(`remote_commands` sudah
+   dihapus di Task 1-4 Major Update, 2026-08-30; `crew_sessions` dipertahankan
+   tapi dipersempit ke kolom identitas saja — lihat catatan di atas)*. Jangan
+   membuat policy tabel longgar atau memberi service-role key ke client.
 
-`pg_cron` menjadwalkan expiry per menit dan pembersihan audit remote harian bila
-tersedia. Bila paket/izin cron tidak tersedia, pakai Supabase Dashboard Scheduled
-Function untuk memanggil `expire_remote_commands` dan `cleanup_remote_commands`
-dengan `SUPABASE_URL` serta `SUPABASE_SERVICE_ROLE_KEY`; ini fallback opsional dan
-tidak mempengaruhi delivery real-time. Ini bukan scheduler owner retention. Lihat
+~~`pg_cron` menjadwalkan expiry per menit dan pembersihan audit remote harian
+bila tersedia. Bila paket/izin cron tidak tersedia, pakai Supabase Dashboard
+Scheduled Function untuk memanggil `expire_remote_commands` dan
+`cleanup_remote_commands` dengan `SUPABASE_URL` serta
+`SUPABASE_SERVICE_ROLE_KEY`; ini fallback opsional dan tidak mempengaruhi
+delivery real-time.~~ *(`expire_remote_commands`/`cleanup_remote_commands`
+sudah dihapus di Task 1-4 Major Update, 2026-08-30 — tidak ada lagi
+scheduler remote-command. Table occupancy tracking punya scheduler
+retensinya sendiri: `cleanup_qr_scan_events` (30 hari) dan
+`cleanup_table_escort_intents` (90 hari), keduanya via `pg_cron` — lihat
+migrasi `20260829010000_table_occupancy_schema.sql`.)* Ini bukan scheduler
+owner retention. Lihat
 [Owner retention runbook](docs/supabase-super-admin-remote-audio.md#owner-retention)
 untuk mode scheduler owner `pg_cron` dan `edge_required`.
 
