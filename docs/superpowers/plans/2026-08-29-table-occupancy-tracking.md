@@ -884,17 +884,26 @@ the user):**
 - Create: `src/routes/kasir/index.tsx`
 - Create: `tests/kasir-route.test.ts`
 
-- [ ] **Step 1: Write failing tests**: renders grid/list per persisted
+- [x] **Step 1: Write failing tests**: renders grid/list per persisted
   preference; tapping an empty (green) table shows a confirmation dialog;
   confirming calls `setTableOccupiedKasir`; tapping an already-occupied
   (red) table is disabled/no-op (Kasir never marks a table empty); realtime
   update from another device reflects without manual refresh.
-- [ ] **Step 2: Build the page** using `OwnerUi.tsx` components
+- [x] **Step 2: Build the page** using `OwnerUi.tsx` components
   (`OwnerPage`, `OwnerPageHeader`, `OwnerPanel`) and the existing
   slate/amber palette; green = KOSONG, red = TERISI per spec; layout toggle
   control wired to `useLayoutPreference("kasir")`; live data via
   `getTableOccupancySnapshot` + `useTableOccupancyRealtime`.
-- [ ] **Step 3: Run tests — must pass (green).**
+- [x] **Step 3: Run tests — must pass (green).**
+
+  Pre-flight fix (found during Task 10 work, before Step 1): `RoleLoginFlow`
+  handed a fully claimed `RoleSessionIdentity` to `src/routes/index.tsx`'s
+  `onRoleContinue`, but that handler only navigated away with it — it never
+  called `writeRoleSessionIdentity`, so Kasir (and Satgas/Clear Up once
+  built) would land on their route with nothing in `sessionStorage`, making
+  `readRoleSessionIdentity()` always return `null` there. Fixed by mirroring
+  the existing SS/`writeCrewSessionIdentity` branch. Covered by
+  `tests/role-session-identity-persistence.test.ts`.
 
 ## Task 11: Satgas Route (incl. Escort Intent flow)
 

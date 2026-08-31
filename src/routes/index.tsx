@@ -24,6 +24,7 @@ import {
   readCrewSessionIdentity,
   removeCrewSessionIdentity,
   writeCrewSessionIdentity,
+  writeRoleSessionIdentity,
   type CrewIdentity,
   type RoleSessionIdentity,
 } from "@/lib/crew-session-identity";
@@ -381,6 +382,13 @@ function SoundboardPage() {
             setCrewIdentity({ ...(saved ?? identity), audioReady });
           }}
           onRoleContinue={(identity) => {
+            // Bug found ahead of Task 10: without this, the role session
+            // claimed by RoleLoginFlow was discarded on navigation, so
+            // Kasir/Satgas/Clear Up could never read who is logged in once
+            // they land on their own route (readRoleSessionIdentity would
+            // always return null). Persist it first, mirroring the SS
+            // (crew identity) branch above.
+            writeRoleSessionIdentity(browserSessionStorage(), identity);
             void navigate({ to: ROLE_ROUTE_PATH[identity.role] });
           }}
         />
