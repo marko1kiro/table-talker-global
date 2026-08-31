@@ -17,7 +17,23 @@ import type { CrewRole } from "./role-session-domain";
 export type LayoutPreference = "grid" | "list";
 
 const LAYOUT_PREFERENCES: readonly LayoutPreference[] = ["grid", "list"];
-const DEFAULT_LAYOUT_PREFERENCE: LayoutPreference = "grid";
+
+// Task 12 correction note (2026-09-01): the Task 12 plan text calls for
+// "list is the natural default" for Clear Up specifically, unlike
+// Kasir/Satgas which both rely on this module's original single global
+// default of "grid". Rather than hardcode that choice inside the new
+// Clear Up route (which would silently diverge from how every other role
+// resolves its default, and wouldn't survive a first write), the default
+// is made role-aware here, in the one place that already owns "what does
+// this role see before it has ever chosen" for every role. Kasir/Satgas
+// behavior is unchanged (still "grid") -- see
+// tests/use-layout-preference.test.ts for coverage proving that.
+const ROLE_DEFAULT_LAYOUT_PREFERENCE: Record<CrewRole, LayoutPreference> = {
+  ss: "grid",
+  kasir: "grid",
+  satgas: "grid",
+  clear_up: "list",
+};
 
 type StorageLike = {
   getItem?: (key: string) => string | null;
@@ -32,15 +48,16 @@ export function readLayoutPreference(
   role: CrewRole,
   storage: StorageLike | null,
 ): LayoutPreference {
-  if (!storage) return DEFAULT_LAYOUT_PREFERENCE;
+  const roleDefault = ROLE_DEFAULT_LAYOUT_PREFERENCE[role];
+  if (!storage) return roleDefault;
   try {
     const raw = storage.getItem?.(layoutPreferenceKey(role)) ?? null;
     if (raw && (LAYOUT_PREFERENCES as readonly string[]).includes(raw)) {
       return raw as LayoutPreference;
     }
-    return DEFAULT_LAYOUT_PREFERENCE;
+    return roleDefault;
   } catch {
-    return DEFAULT_LAYOUT_PREFERENCE;
+    return roleDefault;
   }
 }
 

@@ -28,6 +28,20 @@ describe("readLayoutPreference", () => {
     expect(readLayoutPreference("kasir", storage())).toBe("grid");
   });
 
+  // Task 12 (Clear Up): per the plan, list is the natural default for
+  // this role specifically -- Clear Up only ever cares about the
+  // currently-TERISI subset of tables, which reads more naturally as a
+  // sorted list than a mostly-empty grid. Kasir/Satgas are unaffected
+  // (still default to grid, asserted above/below).
+  it('defaults to "list" for clear_up specifically, when localStorage is empty', () => {
+    expect(readLayoutPreference("clear_up", storage())).toBe("list");
+  });
+
+  it("still lets an explicit stored 'grid' choice override clear_up's list default", () => {
+    const session = storage({ "table-talker.layout.clear_up": "grid" });
+    expect(readLayoutPreference("clear_up", session)).toBe("grid");
+  });
+
   it("reads back a persisted value", () => {
     const session = storage({ "table-talker.layout.kasir": "list" });
     expect(readLayoutPreference("kasir", session)).toBe("list");
@@ -36,6 +50,11 @@ describe("readLayoutPreference", () => {
   it("falls back to grid for malformed/unknown stored values", () => {
     const session = storage({ "table-talker.layout.kasir": "garbage" });
     expect(readLayoutPreference("kasir", session)).toBe("grid");
+  });
+
+  it("falls back to clear_up's own default (list) for malformed/unknown stored values, not grid", () => {
+    const session = storage({ "table-talker.layout.clear_up": "garbage" });
+    expect(readLayoutPreference("clear_up", session)).toBe("list");
   });
 
   it("returns grid without throwing when storage is null", () => {

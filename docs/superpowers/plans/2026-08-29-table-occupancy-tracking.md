@@ -945,18 +945,40 @@ the user):**
 **Files:**
 - Create: `src/routes/clear-up/index.tsx`
 - Create: `tests/clear-up-route.test.ts`
+- Create: `src/lib/clear-up-queue.ts` (pure filter/sort/duration-format
+  logic, extracted so it's unit-testable without a browser environment —
+  same split as `satgas-escort-waitlist.ts`)
+- Create: `tests/clear-up-queue.test.ts`
+- Modify: `src/lib/use-layout-preference.ts` (role-aware default; see
+  correction note below) and its test file
+- See `docs/breakdown-task12-clear-up.md` for the full pre-coding audit.
 
-- [ ] **Step 1: Write failing tests**: list view (list is the natural
+- [x] **Step 1: Write failing tests**: list view (list is the natural
   default here, grid still available per preference) of currently-`TERISI`
   tables, sorted descending by occupied duration computed purely from
   `occupied_at` via `Date.now() - occupied_at` on a client `setInterval`
   (assert no additional server call is made merely to render/update the
   duration); tapping a table calls `setTableEmptyCleanup`; a table that was
   never `TERISI` never appears in this list.
-- [ ] **Step 2: Build the page** — list/grid toggle via
+- [x] **Step 2: Build the page** — list/grid toggle via
   `useLayoutPreference("clear_up")`, duration badge component using the
   client-only timer, `OwnerUi.tsx` styling.
-- [ ] **Step 3: Run tests — must pass (green).**
+- [x] **Step 3: Run tests — must pass (green).** 600/600 tests pass (568
+  existing + 32 new), tsc clean, lint clean, build clean.
+
+  **Correction (2026-09-01):** the "list is the natural default here"
+  requirement above cannot be satisfied by the new route alone —
+  `use-layout-preference.ts`'s `readLayoutPreference`/`useLayoutPreference`
+  had a single hardcoded global default (`"grid"`), shared by every role
+  and already relied upon (and tested) by Kasir/Satgas. Rather than
+  special-case the default inside the Clear Up route (which would diverge
+  from how every other role resolves "no stored preference yet" and add a
+  second source of truth for defaults), `use-layout-preference.ts` was
+  made role-aware via a small `ROLE_DEFAULT_LAYOUT_PREFERENCE` map, with
+  Clear Up mapped to `"list"` and Kasir/Satgas/SS unchanged at `"grid"`.
+  Covered by new cases in `tests/use-layout-preference.test.ts` proving
+  Kasir/Satgas are unaffected. Full reasoning: see
+  `docs/breakdown-task12-clear-up.md`.
 
 ## Task 13: Manager Dashboard Data-Contract Verification (no UI)
 
