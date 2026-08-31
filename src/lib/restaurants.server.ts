@@ -1,9 +1,7 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { validateRestaurantCode } from "./restaurant-domain";
 import { getServiceClient } from "./remote-audio.server";
-import { getLoginRateLimitBuckets } from "./login-request-ip.server";
 
 export type ManifestItem = {
   audioId: string;
@@ -28,34 +26,19 @@ const serverCredentialModules = createServerOnlyFn(async () => ({
 }));
 
 export const loginToRestaurant = createServerFn({ method: "POST" })
-  .validator(z.object({ code: z.string(), clientKey: z.string().min(16).max(200) }))
+  .validator(z.object({ code: z.string() }))
   .handler(async ({ data }) => {
     const client = getServiceClient();
     if (!client) return { error: CODE_ERROR };
 
     try {
-      const {
-        hashRestaurantCode,
-        parseRestaurantCodeEncryptionKey,
-        createOpaqueRestaurantToken,
-        hashOpaqueRestaurantToken,
-      } = await serverCredentialModules();
-      const key = parseRestaurantCodeEncryptionKey(
-        process.env.RESTAURANT_CODE_ENCRYPTION_KEY ?? "",
-      );
+      const { createOpaqueRestaurantToken, hashOpaqueRestaurantToken } =
+        await serverCredentialModules();
       const validated = validateRestaurantCode(data.code);
       const valid = "code" in validated;
-      const codeHash = hashRestaurantCode(valid ? validated.code : "\n", key);
-      const { clientKeyHash, ipKeyHash } = getLoginRateLimitBuckets(
-        getRequest().headers,
-        data.clientKey,
-        hashOpaqueRestaurantToken,
-      );
       const tenantToken = createOpaqueRestaurantToken();
       const { data: restaurant, error } = await client.rpc("login_to_restaurant_atomic", {
-        p_lookup_hash: codeHash,
-        p_client_bucket_hash: clientKeyHash,
-        p_ip_bucket_hash: ipKeyHash,
+        p_code: valid ? validated.code : "\n",
         p_token_hash: hashOpaqueRestaurantToken(tenantToken),
         p_expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });

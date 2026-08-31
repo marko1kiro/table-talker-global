@@ -3,17 +3,13 @@
 //
 // Usage: node scripts/provision-restaurants-and-audio.mjs
 // Requires .env (gitignored) with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-// RESTAURANT_CODE_ENCRYPTION_KEY, CF_ACCOUNT_ID, CF_R2_ACCESS_KEY_ID,
-// CF_R2_SECRET_ACCESS_KEY, CF_R2_BUCKET, CF_R2_PUBLIC_URL.
+// CF_ACCOUNT_ID, CF_R2_ACCESS_KEY_ID, CF_R2_SECRET_ACCESS_KEY, CF_R2_BUCKET,
+// CF_R2_PUBLIC_URL. Kode Resto is plain text (user decision, 2026-08-31);
+// RESTAURANT_CODE_ENCRYPTION_KEY is no longer used or required.
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import {
-  hashRestaurantCode,
-  encryptRestaurantCode,
-  parseRestaurantCodeEncryptionKey,
-} from "../src/lib/restaurant-code.server.ts";
 import { validateRestaurantCode } from "../src/lib/restaurant-domain.ts";
 
 // ---- load .env ----
@@ -46,10 +42,6 @@ for (const [name, value] of Object.entries({
     process.exit(1);
   }
 }
-
-const encryptionKey = parseRestaurantCodeEncryptionKey(
-  process.env.RESTAURANT_CODE_ENCRYPTION_KEY ?? "",
-);
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -219,8 +211,7 @@ async function ensureRestaurant(entry) {
     if (!("code" in validated)) throw new Error(`INVALID_CODE:${entry.code}`);
     const { error } = await supabase.from("restaurants").insert({
       id,
-      code_hash: hashRestaurantCode(validated.code, encryptionKey),
-      code_encrypted: encryptRestaurantCode(validated.code, id, encryptionKey),
+      code: validated.code,
       code_version: 1,
       credential_rotated_at: new Date().toISOString(),
       display_name: entry.displayName,
@@ -241,8 +232,7 @@ async function ensureRestaurant(entry) {
     if (!("code" in validated)) throw new Error(`INVALID_CODE:${entry.code}`);
     const { error } = await supabase.rpc("rotate_restaurant_credentials", {
       p_restaurant_id: restaurant.id,
-      p_code_hash: hashRestaurantCode(validated.code, encryptionKey),
-      p_code_encrypted: encryptRestaurantCode(validated.code, restaurant.id, encryptionKey),
+      p_code: validated.code,
       p_next_code_version: restaurant.code_version + 1,
     });
     if (error) throw new Error(`ROTATE_FAILED:${entry.displayName}:${error.message}`);

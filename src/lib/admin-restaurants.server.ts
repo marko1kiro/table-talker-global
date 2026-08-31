@@ -19,8 +19,6 @@ export const createRestaurant = createServerFn({ method: "POST" })
 
     try {
       const { randomUUID } = await import("node:crypto");
-      const { encryptRestaurantCode, hashRestaurantCode, parseRestaurantCodeEncryptionKey } =
-        await import("./restaurant-code.server");
       const { writeRestaurantCredentialAudit } = await import("./restaurant-audit.server");
       const validated = validateRestaurantCode(data.restaurantCode);
       if ("error" in validated) return { error: "Kode Resto tidak dapat disimpan." };
@@ -28,14 +26,10 @@ export const createRestaurant = createServerFn({ method: "POST" })
       if (!displayName || displayName.length > 80)
         return { error: "Nama resto 1\u201380 karakter." };
       const id = randomUUID();
-      const key = parseRestaurantCodeEncryptionKey(
-        process.env.RESTAURANT_CODE_ENCRYPTION_KEY ?? "",
-      );
 
       const { error } = await client.from("restaurants").insert({
         id,
-        code_hash: hashRestaurantCode(validated.code, key),
-        code_encrypted: encryptRestaurantCode(validated.code, id, key),
+        code: validated.code,
         code_version: 1,
         credential_rotated_at: new Date().toISOString(),
         display_name: displayName,
@@ -62,26 +56,19 @@ export const viewRestaurantCode = createServerFn({ method: "POST" })
     const client = getServiceClient();
     if (!client) return { error: "Kode Resto tidak dapat ditampilkan." };
     try {
-      const { decryptRestaurantCode, parseRestaurantCodeEncryptionKey } =
-        await import("./restaurant-code.server");
       const { writeRestaurantCredentialAudit } = await import("./restaurant-audit.server");
       const { data: restaurant, error } = await client
         .from("restaurants")
-        .select("id, code_encrypted")
+        .select("id, code")
         .eq("id", data.restaurantId)
         .single();
-      if (error || !restaurant?.code_encrypted) throw new Error("UNAVAILABLE");
-      const code = decryptRestaurantCode(
-        restaurant.code_encrypted,
-        restaurant.id,
-        parseRestaurantCodeEncryptionKey(process.env.RESTAURANT_CODE_ENCRYPTION_KEY ?? ""),
-      );
+      if (error || !restaurant?.code) throw new Error("UNAVAILABLE");
       await writeRestaurantCredentialAudit(client, {
         restaurantId: data.restaurantId,
         operation: "viewed",
         success: true,
       });
-      return { ok: true as const, code };
+      return { ok: true as const, code: restaurant.code };
     } catch {
       const { writeRestaurantCredentialAudit } = await import("./restaurant-audit.server");
       await writeRestaurantCredentialAudit(client, {
@@ -111,8 +98,6 @@ export const changeRestaurantCode = createServerFn({ method: "POST" })
     const client = getServiceClient();
     if (!client) return { error: "Kode Resto tidak dapat disimpan." };
     try {
-      const { encryptRestaurantCode, hashRestaurantCode, parseRestaurantCodeEncryptionKey } =
-        await import("./restaurant-code.server");
       const { writeRestaurantCredentialAudit } = await import("./restaurant-audit.server");
       const validated = validateRestaurantCode(data.restaurantCode);
       if (!("code" in validated) || data.restaurantCode !== data.codeConfirmation)
@@ -124,13 +109,9 @@ export const changeRestaurantCode = createServerFn({ method: "POST" })
         .single();
       if (error || !restaurant || restaurant.display_name !== data.displayNameConfirmation)
         throw new Error("INVALID");
-      const key = parseRestaurantCodeEncryptionKey(
-        process.env.RESTAURANT_CODE_ENCRYPTION_KEY ?? "",
-      );
       const { error: rotateError } = await client.rpc("rotate_restaurant_credentials", {
         p_restaurant_id: restaurant.id,
-        p_code_hash: hashRestaurantCode(validated.code, key),
-        p_code_encrypted: encryptRestaurantCode(validated.code, restaurant.id, key),
+        p_code: validated.code,
         p_next_code_version: restaurant.code_version + 1,
       });
       if (rotateError) throw new Error("UNAVAILABLE");
