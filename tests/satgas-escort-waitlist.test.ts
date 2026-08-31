@@ -23,8 +23,8 @@ const SESSION_A = "role-session-aaaa";
 const SESSION_B = "role-session-bbbb";
 
 describe("ESCORT_INTENT_WINDOW_MS", () => {
-  it("is exactly 30 minutes, matching the create_escort_intent RPC's server-side expiry", () => {
-    expect(ESCORT_INTENT_WINDOW_MS).toBe(30 * 60 * 1000);
+  it("is exactly 10 minutes, matching the create_escort_intent RPC's server-side expiry", () => {
+    expect(ESCORT_INTENT_WINDOW_MS).toBe(10 * 60 * 1000);
   });
 });
 

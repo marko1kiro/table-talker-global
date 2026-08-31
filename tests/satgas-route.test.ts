@@ -125,7 +125,7 @@ describe("Satgas route: Escort action creates an escort intent, it never marks a
   });
 });
 
-describe("Satgas route: 30-minute confirm prompt, scoped to this session's own intents", () => {
+describe("Satgas route: 10-minute confirm prompt, scoped to this session's own intents", () => {
   it("hydrates the waitlist from storage scoped to this session's roleSessionId, not any other session's", () => {
     const text = source();
     expect(text).toContain("readEscortWaitlist(browserSessionStorage(), stored.roleSessionId)");
@@ -167,7 +167,7 @@ describe("Satgas route: 30-minute confirm prompt, scoped to this session's own i
   });
 });
 
-describe("Satgas route: an intent resolved by an incoming QR scan before 30 minutes disappears without a prompt", () => {
+describe("Satgas route: an intent resolved by an incoming QR scan before 10 minutes disappears without a prompt", () => {
   it("clears waitlist entries whose table already became terisi via the live snapshot, without a dedicated cancel action", () => {
     const text = source();
     expect(text).toContain("snapshot.data");
@@ -189,5 +189,35 @@ describe("Satgas route: theme", () => {
     const text = source();
     expect(text).toContain("emerald");
     expect(text).toMatch(/red-(50|300|700)/);
+  });
+
+  it("colors a KOSONG table that has been escorted (pending confirm) amber/kuning instead of green", () => {
+    const text = source();
+    expect(text).toMatch(/amber-(50|100|300|700|800)/);
+    expect(text).toContain("escortedTableNumbers");
+  });
+});
+
+describe("Satgas route: escorted-table highlight", () => {
+  it("derives escortedTableNumbers from the waitlist partition's stillWaiting and readyToConfirm buckets", () => {
+    const text = source();
+    expect(text).toContain("partition.stillWaiting");
+    expect(text).toContain("partition.readyToConfirm");
+    expect(text).toMatch(/escortedTableNumbers\s*=\s*useMemo/);
+  });
+
+  it("only treats a table as escorted while it is not already occupied", () => {
+    const text = source();
+    expect(text).toContain("!occupied && escortedTableNumbers.has(tableNumber)");
+  });
+
+  it("passes escortedTableNumbers to both TableGrid and TableList", () => {
+    const text = source();
+    expect(text).toMatch(
+      /<TableGrid\s+tables={tables}\s+escortedTableNumbers={escortedTableNumbers}/,
+    );
+    expect(text).toMatch(
+      /<TableList\s+tables={tables}\s+escortedTableNumbers={escortedTableNumbers}/,
+    );
   });
 });

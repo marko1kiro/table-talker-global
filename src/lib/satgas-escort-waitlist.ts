@@ -1,5 +1,5 @@
 // Task 11: pure, framework-free helpers backing the Satgas Escort Intent
-// flow's client-side 30-minute confirm prompt. Kept separate from
+// flow's client-side 10-minute confirm prompt. Kept separate from
 // src/routes/satgas/index.tsx (mirroring the crew-session-identity.ts /
 // use-layout-preference.ts split elsewhere in this codebase) so the
 // storage scoping and expiry logic can be unit-tested without a React
@@ -21,7 +21,7 @@ export type EscortWaitEntry = {
   intentId: string;
   tableNumber: number;
   // Client-estimated epoch ms mirroring the create_escort_intent RPC's
-  // server-side 30-minute expiry -- used only to decide *when to show* the
+  // server-side 10-minute expiry -- used only to decide *when to show* the
   // confirm prompt on this device. confirm_escort_intent's own
   // INTENT_NOT_FOUND response (checked server-side, against the server's
   // clock) remains the sole authority on whether the intent has actually
@@ -29,9 +29,10 @@ export type EscortWaitEntry = {
   expiresAt: number;
 };
 
-// The RPC (supabase/migrations/20260829020000_table_occupancy_rpcs.sql,
-// create_escort_intent) sets `expires_at = now() + interval '30 minutes'`.
-export const ESCORT_INTENT_WINDOW_MS = 30 * 60 * 1000;
+// The RPC (originally supabase/migrations/20260829020000_table_occupancy_rpcs.sql,
+// shortened by supabase/migrations/20260902000000_escort_intent_10_minute_window.sql,
+// create_escort_intent) sets `expires_at = now() + interval '10 minutes'`.
+export const ESCORT_INTENT_WINDOW_MS = 10 * 60 * 1000;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 

@@ -19,6 +19,9 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as SuperAdminRouteRouteImport } from './routes/super-admin/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
+import { Route as SatgasIndexRouteImport } from './routes/satgas/index'
+import { Route as KasirIndexRouteImport } from './routes/kasir/index'
+import { Route as ClearUpIndexRouteImport } from './routes/clear-up/index'
 import { Route as SuperAdminHistoryRouteImport } from './routes/super-admin/history'
 import { Route as SuperAdminEsbExportRouteImport } from './routes/super-admin/esb-export'
 import { Route as SuperAdminErrorLogRouteImport } from './routes/super-admin/error-log'
@@ -78,6 +81,21 @@ const SuperAdminIndexRoute = SuperAdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => SuperAdminRouteRoute,
+} as any)
+const SatgasIndexRoute = SatgasIndexRouteImport.update({
+  id: '/satgas/',
+  path: '/satgas/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KasirIndexRoute = KasirIndexRouteImport.update({
+  id: '/kasir/',
+  path: '/kasir/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClearUpIndexRoute = ClearUpIndexRouteImport.update({
+  id: '/clear-up/',
+  path: '/clear-up/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const SuperAdminHistoryRoute = SuperAdminHistoryRouteImport.update({
   id: '/history',
@@ -142,6 +160,9 @@ export interface FileRoutesByFullPath {
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
+  '/clear-up/': typeof ClearUpIndexRoute
+  '/kasir/': typeof KasirIndexRoute
+  '/satgas/': typeof SatgasIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
@@ -162,6 +183,9 @@ export interface FileRoutesByTo {
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
+  '/clear-up': typeof ClearUpIndexRoute
+  '/kasir': typeof KasirIndexRoute
+  '/satgas': typeof SatgasIndexRoute
   '/super-admin': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
@@ -184,6 +208,9 @@ export interface FileRoutesById {
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
+  '/clear-up/': typeof ClearUpIndexRoute
+  '/kasir/': typeof KasirIndexRoute
+  '/satgas/': typeof SatgasIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
   '/super-admin/restaurants/$id': typeof SuperAdminRestaurantsIdRoute
@@ -207,6 +234,9 @@ export interface FileRouteTypes {
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
     | '/super-admin/history'
+    | '/clear-up/'
+    | '/kasir/'
+    | '/satgas/'
     | '/super-admin/'
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
@@ -227,6 +257,9 @@ export interface FileRouteTypes {
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
     | '/super-admin/history'
+    | '/clear-up'
+    | '/kasir'
+    | '/satgas'
     | '/super-admin'
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
@@ -248,6 +281,9 @@ export interface FileRouteTypes {
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
     | '/super-admin/history'
+    | '/clear-up/'
+    | '/kasir/'
+    | '/satgas/'
     | '/super-admin/'
     | '/api/audio/$audioId'
     | '/super-admin/restaurants/$id'
@@ -266,6 +302,9 @@ export interface RootRouteChildren {
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsOfUseRoute: typeof TermsOfUseRoute
+  ClearUpIndexRoute: typeof ClearUpIndexRoute
+  KasirIndexRoute: typeof KasirIndexRoute
+  SatgasIndexRoute: typeof SatgasIndexRoute
   ApiAudioAudioIdRoute: typeof ApiAudioAudioIdRoute
   RRestaurantIdTTableNumberRoute: typeof RRestaurantIdTTableNumberRoute
   ApiSuperAdminQrExportRestaurantIdFormatRoute: typeof ApiSuperAdminQrExportRestaurantIdFormatRoute
@@ -342,6 +381,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/super-admin/'
       preLoaderRoute: typeof SuperAdminIndexRouteImport
       parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/satgas/': {
+      id: '/satgas/'
+      path: '/satgas'
+      fullPath: '/satgas/'
+      preLoaderRoute: typeof SatgasIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kasir/': {
+      id: '/kasir/'
+      path: '/kasir'
+      fullPath: '/kasir/'
+      preLoaderRoute: typeof KasirIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clear-up/': {
+      id: '/clear-up/'
+      path: '/clear-up'
+      fullPath: '/clear-up/'
+      preLoaderRoute: typeof ClearUpIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/super-admin/history': {
       id: '/super-admin/history'
@@ -443,6 +503,9 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyPolicyRoute: PrivacyPolicyRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsOfUseRoute: TermsOfUseRoute,
+  ClearUpIndexRoute: ClearUpIndexRoute,
+  KasirIndexRoute: KasirIndexRoute,
+  SatgasIndexRoute: SatgasIndexRoute,
   ApiAudioAudioIdRoute: ApiAudioAudioIdRoute,
   RRestaurantIdTTableNumberRoute: RRestaurantIdTTableNumberRoute,
   ApiSuperAdminQrExportRestaurantIdFormatRoute:
