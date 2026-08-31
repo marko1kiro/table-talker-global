@@ -4,9 +4,9 @@ import { expect, it } from "vitest";
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-it("provisions derived credentials through service-role RPC without printing code values", () => {
+it("provisions a plain-text code through service-role RPC without printing it", () => {
   const script = source("scripts/provision-restaurant-code.mjs");
-  expect(script).toContain("RESTAURANT_CODE_ENCRYPTION_KEY");
+  expect(script).not.toContain("RESTAURANT_CODE_ENCRYPTION_KEY");
   expect(script).toContain("--restaurant-id");
   expect(script).toContain("RESTAURANT_CODE_FILE");
   expect(script).not.toContain('option("--code")');
@@ -18,16 +18,16 @@ it("provisions derived credentials through service-role RPC without printing cod
   expect(script).toContain('"/getowner"');
   expect(script).toContain("process.env.USERNAME");
   expect(script).toContain("INSECURE_CODE_FILE");
-  expect(script).toContain("hashRestaurantCode");
-  expect(script).toContain("encryptRestaurantCode");
+  expect(script).not.toContain("hashRestaurantCode");
+  expect(script).not.toContain("encryptRestaurantCode");
+  expect(script).not.toContain("decryptRestaurantCode");
   expect(script).toContain('rpc("rotate_restaurant_credentials"');
-  expect(script).toContain('select("id, code_hash, code_encrypted")');
-  expect(script).toContain("decryptRestaurantCode");
+  expect(script).toContain('select("id, code")');
   expect(script).not.toMatch(/console\.(log|error).*\b(code|hash|ciphertext|encrypted)\b/i);
 });
 
 it("accepts one piped code line without printing it", () => {
-  const code = "PILOT7";
+  const code = "PILOT77";
   const result = spawnSync(
     process.execPath,
     [
@@ -40,20 +40,16 @@ it("accepts one piped code line without printing it", () => {
   );
 
   expect(result.status).toBe(1);
-  expect(result.stderr).toContain("INVALID_KEY");
+  expect(result.stderr).toContain("MISSING_SERVER_CONFIGURATION");
   expect(`${result.stdout}\n${result.stderr}`).not.toContain(code);
 });
 
-it("documents server-only key rules and staged rollout without credential values", () => {
+it("documents plain-text rollout without any encryption-key material", () => {
   const env = source(".env.example");
   const readme = source("README.md");
-  expect(env).toContain("RESTAURANT_CODE_ENCRYPTION_KEY=");
-  expect(env).toContain("base64url");
-  expect(env).not.toContain("VITE_RESTAURANT_CODE_ENCRYPTION_KEY");
+  expect(env).not.toContain("RESTAURANT_CODE_ENCRYPTION_KEY");
+  expect(readme).not.toContain("RESTAURANT_CODE_ENCRYPTION_KEY");
   expect(readme).toContain("provision-restaurant-code.mjs");
-  expect(readme).toContain("20260823120000_remove_legacy_restaurant_code.sql");
-  expect(readme).toContain("Pilot sudah direprovisioning");
-  expect(readme).not.toContain("legacy HKDF purposes");
-  expect(readme).not.toContain("login remains compatible until reprovision");
+  expect(readme).toContain("plain text");
   expect(`${env}\n${readme}`).not.toContain("KAMPUNG-BULU");
 });

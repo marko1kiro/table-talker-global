@@ -188,20 +188,19 @@ untuk mode scheduler owner `pg_cron` dan `edge_required`.
 
 ## Restaurant credential rollout
 
-`RESTAURANT_CODE_ENCRYPTION_KEY` is server-only 32-byte base64url key. Generate once
-in approved secret manager. Do not expose through `VITE_`, Git, SQL, CI output, logs,
-or browser. Key loss requires credential reset. Key compromise requires rotate each
-credential after replacing key.
+Kode Resto (restaurant login code) is stored as **plain text** in `public.restaurants.code`
+(user decision, 2026-08-31 — reverted from the 23-Aug hash+AES-encrypted design after a
+production incident where a stale master encryption key orphaned one restaurant's
+credential). There is no encryption key to configure or rotate; `code` is matched by
+direct, case-sensitive equality against the strict-uppercase format enforced by
+`validateRestaurantCode` (`^[A-Z0-9-]{6,32}$`).
 
-Run staged release. Do not apply cleanup before every active restaurant has derived
-credential fields.
+To provision or rotate a restaurant's code:
 
-1. Deploy compatibility release with restaurant-code feature flag off.
-2. `npx supabase login`
-3. `npx supabase link --project-ref YOUR_PROJECT_REF`
-4. Run `npx supabase db push --include-all`. Expected: additive and provisioning migrations apply, then cleanup stops with `UNPROVISIONED_RESTAURANT_CREDENTIALS`. Confirm migrations `20260823110000_restaurant_code_credentials_additive.sql` and `20260823111500_provision_restaurant_credentials.sql` exist remotely; do not bypass guard.
-5. Configure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `RESTAURANT_CODE_ENCRYPTION_KEY` only in protected runtime environment.
-6. Reprovision each row using exact UUID only. Do not pass a code by argv or environment. Preferred Windows flow keeps code out of argv, environment, and files. The command rotates code version and immediately revokes existing restaurant and crew sessions:
+1. `npx supabase login`
+2. `npx supabase link --project-ref YOUR_PROJECT_REF`
+3. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` only in protected runtime environment.
+4. Reprovision each row using its exact UUID. Do not pass a code by argv or environment. Preferred Windows flow keeps code out of argv, environment, and files. The command rotates code version and immediately revokes existing restaurant and crew sessions:
 
    ```powershell
    $code = Read-Host -AsSecureString
@@ -223,10 +222,10 @@ credential fields.
    icacls "$env:TEMP\restaurant-code"
    ```
 
-   `RESTAURANT_CODE_FILE` is only a file path, never credential content. Script rejects insecure files and never prints code, hash, or ciphertext.
+   `RESTAURANT_CODE_FILE` is only a file path, never credential content. Script rejects insecure files and never prints the code value.
 
-7. Reprovision every active restaurant credential after deploying this release. Pilot sudah direprovisioning. Fallback HKDF legacy sudah dihapus, jadi semua kredensial wajib reprovisioning sebelum login. Do not add credential value to files, shell history, SQL, fixtures, logs, or CI.
-8. Enable feature flag after monitoring provisioning audit records. Apply cleanup only then: `npx supabase db push --include-all`. Migration `20260823120000_remove_legacy_restaurant_code.sql` aborts if any restaurant lacks derived credentials.
+Do not add credential value to files, shell history, SQL, fixtures, logs, or CI.
 
-The reprovision script prints restaurant display name and UUID only. It computes hash and ciphertext in memory, then calls service-role-only `rotate_restaurant_credentials` RPC. It never prints credential material.
-ints credential material.
+The reprovision script prints restaurant display name and UUID only. It calls the
+service-role-only `rotate_restaurant_credentials` RPC directly with the plain code. It
+never prints credential material.

@@ -123,11 +123,12 @@ describe("RoleLoginFlow: step 5 - claim session and hand off to caller", () => {
     expect(text).toContain("onRoleContinue");
   });
 
-  it("preserves the getClientKey() localStorage pattern used for login rate-limit bucketing", () => {
+  it("no longer uses the getClientKey() localStorage pattern (rate limiting was removed)", () => {
     const text = source();
-    expect(text).toContain("function getClientKey()");
-    expect(text).toContain("table-talker.login-client-key");
-    expect(text).toContain("const clientKey = getClientKey();");
+    expect(text).not.toContain("function getClientKey()");
+    expect(text).not.toContain("table-talker.login-client-key");
+    expect(text).not.toContain("const clientKey = getClientKey();");
+    expect(text).toContain("loginToRestaurant({ data: { code } })");
   });
 
   it("keeps the audio-unlock call site out of this component (stays in index.tsx per the plan)", () => {

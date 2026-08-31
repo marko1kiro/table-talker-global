@@ -128,19 +128,28 @@ it("defines legacy tenant rate-limit tables keyed by opaque lookup and client ha
   );
 });
 
-it("derives restaurant-login IP bucket server-side even when client keys rotate", () => {
+it("historically derived restaurant-login IP bucket server-side even when client keys rotate", () => {
+  // This historical migration (20260823132000) is immutable and still
+  // accurately documents the bucket_hash rename it performed at the time.
+  // The tenant/restaurant-code login rate-limiting subsystem it belonged to
+  // (including restaurants.server.ts's getLoginRateLimitBuckets call and its
+  // getRequest() import) was removed entirely in
+  // 20260831000000_plaintext_restaurant_code.sql (user decision, 2026-08-31:
+  // "Hilangkan Rate Limiting !"), so only the migration-text assertions are
+  // kept here; the now-obsolete live-code assertions are dropped.
   const migration = source("../supabase/migrations/20260823132000_server_ip_login_rate_limit.sql");
   expect(migration).toMatch(/tenant_login_rate_limits.*bucket_hash/is);
   expect(migration).toMatch(/p_lookup_hash text, p_bucket_hash text/i);
   expect(migration).toMatch(/rename column client_key_hash to bucket_hash/i);
 
-  const restaurants = source("../src/lib/restaurants.server.ts");
-  expect(restaurants).toContain('import { getRequest } from "@tanstack/react-start/server"');
   const requestIp = source("../src/lib/login-request-ip.server.ts");
   expect(requestIp).toContain('headers.get("x-vercel-forwarded-for")');
   expect(requestIp).toContain('headers.get("x-forwarded-for")?.split(",")[0]');
   expect(requestIp).toContain('headers.get("x-real-ip")');
-  expect(restaurants).toContain("getLoginRateLimitBuckets(");
+
+  const restaurants = source("../src/lib/restaurants.server.ts");
+  expect(restaurants).not.toContain("getLoginRateLimitBuckets");
+  expect(restaurants).not.toContain("import { getRequest }");
   expect(restaurants).not.toMatch(/validator\(z\.object\([^)]*ip:/s);
 });
 
@@ -171,11 +180,14 @@ it("validates tenant-bound crew access in the background without delaying local 
   expect(page).toContain("Audio diblokir karena sesi resto tidak valid.");
 });
 
-it("gets localStorage client key outside dialog render", () => {
+it("historically got localStorage client key outside dialog render (removed with rate limiting)", () => {
+  // NOTE: getClientKey()/the login-client-key localStorage pattern was removed
+  // when tenant/restaurant-code login rate limiting was eliminated in favor of
+  // plain-text restaurant codes (see 20260831000000_plaintext_restaurant_code.sql).
   const dialog = source("../src/components/RoleLoginFlow.tsx");
-  expect(dialog).toContain("function getClientKey()");
+  expect(dialog).not.toContain("function getClientKey()");
   expect(dialog).not.toContain('const clientKey = typeof window === "undefined"');
-  expect(dialog).toContain("const clientKey = getClientKey();");
+  expect(dialog).not.toContain("const clientKey = getClientKey();");
 });
 
 it("only writes bounded allowlisted operational errors with valid tenant session", () => {

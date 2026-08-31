@@ -41,14 +41,6 @@ export type RoleLoginFlowProps = {
   onRoleContinue: (identity: RoleSessionIdentity) => void;
 };
 
-function getClientKey() {
-  const key = window.localStorage.getItem("table-talker.login-client-key");
-  if (key) return key;
-  const next = crypto.randomUUID();
-  window.localStorage.setItem("table-talker.login-client-key", next);
-  return next;
-}
-
 export function RoleLoginFlow({ open, onSsContinue, onRoleContinue }: RoleLoginFlowProps) {
   const [step, setStep] = useState<Step>("code");
   const [code, setCode] = useState("");
@@ -77,8 +69,7 @@ export function RoleLoginFlow({ open, onSsContinue, onRoleContinue }: RoleLoginF
     setSubmittingCode(true);
     setCodeError("");
     try {
-      const clientKey = getClientKey();
-      const result = await loginToRestaurant({ data: { code, clientKey } });
+      const result = await loginToRestaurant({ data: { code } });
       if ("error" in result) {
         setCodeError(result.error as string);
         setSubmittingCode(false);
