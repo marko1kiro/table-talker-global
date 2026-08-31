@@ -44,6 +44,7 @@ import {
 } from "@/lib/crew-session-identity";
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
+import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   formatOccupiedDuration,
   sortedOccupiedTables,
@@ -92,12 +93,12 @@ function ClearUpRoute() {
   const restaurantId = identity?.restaurantId ?? "";
   const snapshot = useQuery({
     queryKey: snapshotQueryKey(restaurantId),
-    queryFn: () =>
+    queryFn: async () =>
       getTableOccupancySnapshot({
         data: {
           restaurantId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: identity!.accessToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
         },
       }),
     enabled: Boolean(identity),
@@ -115,13 +116,13 @@ function ClearUpRoute() {
   }, [snapshot.data, now]);
 
   const markEmpty = useMutation({
-    mutationFn: (tableNumber: number) =>
+    mutationFn: async (tableNumber: number) =>
       setTableEmptyCleanup({
         data: {
           restaurantId,
           tableNumber,
           sessionToken: identity!.roleSessionToken,
-          accessToken: identity!.accessToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
         },
       }),
     onSuccess: (result) => {

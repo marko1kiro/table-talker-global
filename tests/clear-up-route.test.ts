@@ -49,7 +49,27 @@ describe("Clear Up route: live data via snapshot + realtime, filtered to the occ
     const text = source();
     expect(text).toContain("getTableOccupancySnapshot(");
     expect(text).toContain("sessionToken: identity!.roleSessionToken");
-    expect(text).toContain("accessToken: identity!.accessToken");
+  });
+
+  // Task 14 bugfix: a stale accessToken captured once at login and reused
+  // for the rest of the shift starts failing every RPC call with a 401
+  // ("JWT expired") after the Supabase Auth access token's 1-hour TTL
+  // elapses -- confirmed via a real pilot test. Every authenticated call
+  // site must re-derive a live token via getLiveAccessToken immediately
+  // before the request instead of reading identity.accessToken directly.
+  it("re-derives a live access token via getLiveAccessToken instead of reusing the stale login-time snapshot", () => {
+    const text = source();
+    expect(text).toContain(
+      'import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser"',
+    );
+    expect(text).not.toContain("accessToken: identity!.accessToken");
+    expect(
+      (
+        text.match(
+          /accessToken: await getLiveAccessToken\(getSupabaseBrowserClient\(\), identity!\.accessToken\)/g,
+        ) ?? []
+      ).length,
+    ).toBe(2);
   });
 
   it("subscribes via useTableOccupancyRealtime and invalidates the snapshot query on invalidate events, without a manual refresh", () => {

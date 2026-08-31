@@ -38,3 +38,29 @@ export async function ensureAnonAccessToken(client: SupabaseClient | null): Prom
     return null;
   }
 }
+
+// Task 14 bugfix: RoleSessionIdentity.accessToken (Kasir/Satgas/Clear Up)
+// is captured once via ensureAnonAccessToken at login time and persisted
+// verbatim in sessionStorage for the rest of that role session, which can
+// span an entire shift. A Supabase Auth access token expires after a
+// fixed TTL (1 hour by default) -- confirmed via Supabase's own edge logs
+// during a real pilot test: every table-occupancy RPC call for a session
+// older than an hour returned 401 with PostgREST's PGRST303 ("JWT
+// expired"), surfacing to the crew as a generic, unrecoverable "Status
+// meja tidak dapat dimuat" error. `client.auth.getSession()` (called
+// inside ensureAnonAccessToken above) already transparently refreshes an
+// expiring access token via the persisted session's refresh token as long
+// as this same browser client instance is still around -- the bug was
+// that the 3 role routes never called it again after login, so they never
+// benefited from that refresh. Every authenticated call site in those
+// routes must call this immediately before building its request payload,
+// instead of reading `identity.accessToken` directly. Falls back to the
+// caller-supplied token (the original login-time snapshot) only when a
+// live one could not be obtained, so a momentary network hiccup degrades
+// to the previous best-effort behavior rather than blocking the call.
+export async function getLiveAccessToken(
+  client: SupabaseClient | null,
+  fallback: string,
+): Promise<string> {
+  return (await ensureAnonAccessToken(client)) ?? fallback;
+}

@@ -34,6 +34,7 @@ import {
 } from "@/lib/crew-session-identity";
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
+import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   getTableOccupancySnapshot,
   setTableOccupiedKasir,
@@ -81,12 +82,12 @@ function KasirRoute() {
   const restaurantId = identity?.restaurantId ?? "";
   const snapshot = useQuery({
     queryKey: snapshotQueryKey(restaurantId),
-    queryFn: () =>
+    queryFn: async () =>
       getTableOccupancySnapshot({
         data: {
           restaurantId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: identity!.accessToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
         },
       }),
     enabled: Boolean(identity),
@@ -99,13 +100,13 @@ function KasirRoute() {
   });
 
   const markOccupied = useMutation({
-    mutationFn: (tableNumber: number) =>
+    mutationFn: async (tableNumber: number) =>
       setTableOccupiedKasir({
         data: {
           restaurantId,
           tableNumber,
           sessionToken: identity!.roleSessionToken,
-          accessToken: identity!.accessToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
         },
       }),
     onSuccess: (result) => {

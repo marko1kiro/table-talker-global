@@ -38,6 +38,7 @@ import {
 } from "@/lib/crew-session-identity";
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
+import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   confirmEscortIntent,
   createEscortIntent,
@@ -110,12 +111,12 @@ function SatgasRoute() {
   const restaurantId = identity?.restaurantId ?? "";
   const snapshot = useQuery({
     queryKey: snapshotQueryKey(restaurantId),
-    queryFn: () =>
+    queryFn: async () =>
       getTableOccupancySnapshot({
         data: {
           restaurantId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: identity!.accessToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
         },
       }),
     enabled: Boolean(identity),
@@ -158,15 +159,17 @@ function SatgasRoute() {
   );
 
   const escortMutation = useMutation({
-    mutationFn: (tableNumber: number) =>
-      createEscortIntent({
+    mutationFn: async (tableNumber: number) => {
+      const result = await createEscortIntent({
         data: {
           restaurantId,
           tableNumber,
           sessionToken: identity!.roleSessionToken,
-          accessToken: identity!.accessToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
         },
-      }).then((result) => ({ result, tableNumber })),
+      });
+      return { result, tableNumber };
+    },
     onSuccess: ({ result, tableNumber }) => {
       if (!result.ok) {
         setActionError(result.message);
@@ -185,14 +188,16 @@ function SatgasRoute() {
   });
 
   const confirmMutation = useMutation({
-    mutationFn: (entry: EscortWaitEntry) =>
-      confirmEscortIntent({
+    mutationFn: async (entry: EscortWaitEntry) => {
+      const result = await confirmEscortIntent({
         data: {
           intentId: entry.intentId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: identity!.accessToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
         },
-      }).then((result) => ({ result, entry })),
+      });
+      return { result, entry };
+    },
     onSuccess: ({ result, entry }) => {
       if (result.ok || result.code === "ALREADY_OCCUPIED") {
         // Either genuinely confirmed here, or another role/scan beat us
