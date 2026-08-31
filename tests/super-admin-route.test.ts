@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 
 it("never shows remote unavailable copy in the crew UI", () => {
   const dialog = readFileSync(
-    new URL("../src/components/CrewIdentityDialog.tsx", import.meta.url),
+    new URL("../src/components/RoleLoginFlow.tsx", import.meta.url),
     "utf8",
   );
   const route = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");

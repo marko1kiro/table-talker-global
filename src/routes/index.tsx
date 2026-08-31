@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Square } from "lucide-react";
 
 import { Header } from "@/components/Header";
@@ -14,7 +14,7 @@ import {
   unlockBundledAudio,
 } from "@/lib/audio";
 import { createCachedAudioUrlPool } from "@/lib/audio-sync";
-import { CrewIdentityDialog, type CrewIdentity } from "@/components/CrewIdentityDialog";
+import { RoleLoginFlow } from "@/components/RoleLoginFlow";
 import { SyncDialog } from "@/components/SyncDialog";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
 import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
@@ -24,6 +24,8 @@ import {
   readCrewSessionIdentity,
   removeCrewSessionIdentity,
   writeCrewSessionIdentity,
+  type CrewIdentity,
+  type RoleSessionIdentity,
 } from "@/lib/crew-session-identity";
 import { useEventFlush } from "@/lib/event-flush";
 import {
@@ -66,11 +68,22 @@ function announcementAudioId(announcementId: string): AudioId {
 
 const ACCESS_VALIDATION_INTERVAL_MS = 30_000;
 
+// Task 8: where the other 3 roles land after RoleLoginFlow's
+// claim_role_session succeeds. Their pages don't exist until Tasks 10-12;
+// this route only needs to navigate to the path string.
+const ROLE_ROUTE_PATH: Record<RoleSessionIdentity["role"], string> = {
+  ss: "/",
+  kasir: "/kasir",
+  satgas: "/satgas",
+  clear_up: "/clear-up",
+};
+
 function crewAccessKey(identity: CrewIdentity) {
   return `${identity.restaurantId}:${identity.crewSessionId}:${identity.crewSessionToken}`;
 }
 
 function SoundboardPage() {
+  const navigate = useNavigate();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioControllerRef = useRef<ReturnType<typeof createAudioPlaybackController> | null>(null);
   const activeAudioIdRef = useRef<number | AudioId | null>(null);
@@ -356,16 +369,19 @@ function SoundboardPage() {
   return (
     <div className="brutal-bg-lines relative min-h-screen pb-24">
       {identityHydrated && (
-        <CrewIdentityDialog
+        <RoleLoginFlow
           open={!crewIdentity}
-          unlockAudio={unlockAudio}
-          onContinue={(identity) => {
+          onSsContinue={async (identity) => {
             audioUrlPoolRef.current?.clear();
             audioUrlPoolRef.current = null;
             validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
             setAudioSynced(false);
+            const audioReady = await unlockAudio();
             const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
-            setCrewIdentity({ ...(saved ?? identity), audioReady: identity.audioReady });
+            setCrewIdentity({ ...(saved ?? identity), audioReady });
+          }}
+          onRoleContinue={(identity) => {
+            void navigate({ to: ROLE_ROUTE_PATH[identity.role] });
           }}
         />
       )}

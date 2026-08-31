@@ -122,6 +122,6 @@ it("gates the crew dialog until identity hydration completes", () => {
   );
 
   expect(route).toContain(
-    "{identityHydrated && (\n        <CrewIdentityDialog\n          open={!crewIdentity}",
+    "{identityHydrated && (\n        <RoleLoginFlow\n          open={!crewIdentity}",
   );
 });
