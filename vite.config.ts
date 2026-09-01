@@ -6,8 +6,16 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+// The wrapper forwards Nitro options at runtime, while its intentionally narrow
+// public type omits plugins. Keeping this value separate preserves type safety
+// without a cast and lets the outer runtime validate configuration at startup.
+const nitro = {
+  preset: "vercel",
+  plugins: ["./src/plugins/auth-startup.ts"],
+};
+
 export default defineConfig({
-  nitro: { preset: "vercel" },
+  nitro,
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

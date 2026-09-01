@@ -1,5 +1,6 @@
 import "./lib/error-capture";
 
+import { getAuthSecret } from "./lib/auth.server";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { ingestPlaybackEventBatch, playbackEventBatchSchema } from "./lib/playback-events.server";
@@ -49,10 +50,21 @@ export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       if (new URL(request.url).pathname === "/api/health" && request.method === "GET") {
-        return Response.json(
-          { ok: true },
-          { headers: { "cache-control": "no-store", "content-type": "application/json" } },
-        );
+        try {
+          getAuthSecret();
+          return Response.json(
+            { ok: true },
+            { headers: { "cache-control": "no-store", "content-type": "application/json" } },
+          );
+        } catch {
+          return Response.json(
+            { ok: false, error: "SERVER_MISCONFIGURED" },
+            {
+              status: 503,
+              headers: { "cache-control": "no-store", "content-type": "application/json" },
+            },
+          );
+        }
       }
       if (new URL(request.url).pathname === "/api/telemetry" && request.method === "POST") {
         try {
