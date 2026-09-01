@@ -45,33 +45,20 @@
 alter table public.restaurants add column code text;
 
 -- ---------------------------------------------------------------------------
--- Step 2: backfill every currently known restaurant's plain code, keyed by
--- UUID (authoritative list confirmed live against production, project
--- kjzxtmxdbcanvkgqqdow, 2026-08-31) and cross-referenced against the user's
--- supplied code list. Any restaurant created after this migration must
--- supply `code` directly through createRestaurant (see admin-restaurants.
--- server.ts), so this backfill is a one-time, closed list.
+-- Step 2 (H-03, 2026-09-02): the one-time backfill of the 9 known
+-- restaurants' plain codes by fixed UUID used to live here, inline in this
+-- versioned migration. That's exactly the "seed/production-data mixed into
+-- the migration chain" pattern the audit flagged as H-03: a fresh/CI
+-- database replaying every migration from empty would carry that backfill
+-- forward as if it were schema, and any future migration that guards on
+-- "every restaurant row must have X populated" (see
+-- 20260823120000_remove_legacy_restaurant_code.sql's
+-- UNPROVISIONED_RESTAURANT_CREDENTIALS guard) becomes replay-order-fragile
+-- around it. The backfill data itself has moved, unchanged, to
+-- `supabase/seed.sql` (run via `supabase db reset`, never via `db push`
+-- against a linked project), so this migration is now schema-only and safe
+-- to replay against an empty database with zero rows in `restaurants`.
 -- ---------------------------------------------------------------------------
-update public.restaurants set code = 'BKSBAN' where id = 'b519a58f-1ecb-4131-9c69-4fa2a1bae18a'; -- Bantar Gebang Sétu
-update public.restaurants set code = 'BKSMUT' where id = '08da5334-4244-4db7-9f63-74a0d675529c'; -- Cut Mutia
-update public.restaurants set code = 'CKRTHA' where id = '19b17c7c-8847-466e-a2f7-215787d361c6'; -- M.H. Thamrin
-update public.restaurants set code = 'CKRTAR' where id = '09828e0e-77f1-432c-81bc-3f5b82bf7ba3'; -- Tarum Barat
-update public.restaurants set code = 'CKRMAR' where id = '51a23c85-7e72-4395-ba88-710cfbc200e8'; -- R.E. Martadinata
-update public.restaurants set code = 'CKRCIK' where id = '10587808-9ab2-42b2-a190-e2205c25c2a2'; -- Cikoronjo Cibarusah
-update public.restaurants set code = 'CKRBUL' where id = '33916a05-7e95-42fa-bc3c-050bed2402c5'; -- Kampung Bulu
-update public.restaurants set code = 'BKSGOL' where id = '98aa2a5c-560c-42e3-ace6-e8561cb40f62'; -- Golden City
-update public.restaurants set code = 'CKRBOS' where id = 'fa2dea0f-8c68-4c2f-bb72-17c34825c61e'; -- Bosih Raya
-
--- Fail loudly (instead of silently leaving rows unloginable) if any
--- restaurant is not covered by the fixed backfill list above -- mirrors the
--- fail-closed convention of 20260823120000_remove_legacy_restaurant_code.sql.
-do $$
-begin
-  if exists (select 1 from public.restaurants where code is null) then
-    raise exception 'UNPROVISIONED_RESTAURANT_PLAINTEXT_CODE';
-  end if;
-end;
-$$;
 
 alter table public.restaurants alter column code set not null;
 alter table public.restaurants add constraint restaurants_code_format

@@ -42,6 +42,8 @@ const CLAIM_ROLE_SESSION_ERRORS = new Set([
   "INVALID_TENANT_SESSION",
   "INVALID_NAME",
   "INVALID_CHECKED_IN_AT",
+  "INVALID_PIN",
+  "PIN_RATE_LIMITED",
 ]);
 
 export type ClaimRoleSessionErrorCode =
@@ -50,6 +52,8 @@ export type ClaimRoleSessionErrorCode =
   | "INVALID_TENANT_SESSION"
   | "INVALID_NAME"
   | "INVALID_CHECKED_IN_AT"
+  | "INVALID_PIN"
+  | "PIN_RATE_LIMITED"
   | "UNAVAILABLE";
 
 export type ClaimRoleSessionResult =
@@ -74,6 +78,15 @@ export const claimRoleSessionInputSchema = z.object({
   role: z.enum(CREW_ROLES),
   displayName: z.string().min(1).max(40),
   checkedInAt: z.string().min(1),
+  // C-01 remediation (Fase 1, 2026-09-02): the PIN is now verified inside
+  // claim_role_session itself (supabase/migrations/
+  // 20260902020000_pin_hash_and_role_session_hardening.sql), which is the
+  // only real authorization boundary for role login -- verifyRestaurantPin
+  // in restaurants.server.ts remains UI-only fast-feedback and is no longer
+  // (and was never) sufficient on its own. Never persisted anywhere; kept
+  // in memory on the client and forwarded here for exactly this one RPC
+  // call.
+  pin: z.string().regex(/^[0-9]{4}$/, "PIN harus 4 digit angka."),
   accessToken: z.string().min(1),
 });
 
@@ -93,6 +106,7 @@ export async function claimRoleSessionCore(
       p_role: data.role,
       p_display_name: data.displayName,
       p_checked_in_at: data.checkedInAt,
+      p_pin: data.pin,
     });
     if (error) {
       const code = CLAIM_ROLE_SESSION_ERRORS.has(error.message)

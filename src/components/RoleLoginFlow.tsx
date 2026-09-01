@@ -222,6 +222,12 @@ export function RoleLoginFlow({
           role,
           displayName: normalized.displayName,
           checkedInAt: iso,
+          // C-01 remediation (Fase 1, 2026-09-02): claim_role_session is
+          // now the authoritative PIN check, so the PIN entered at the
+          // earlier "pin" step must be forwarded here too, not only to
+          // verifyRestaurantPin. Held only in this component's state,
+          // never written to storage.
+          pin,
           accessToken,
         },
       });

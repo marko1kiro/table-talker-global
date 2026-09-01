@@ -134,15 +134,25 @@ audio gesture SS, bukan bagian dari subsistem remote-command yang dihapus.)
 2. Isi lima variabel fitur remote di `.env` lokal serta environment variables
    Vercel: `SUPER_ADMIN_PASSWORD` dan empat variabel Supabase.
 3. Gunakan Supabase CLI melalui `npx`; tidak perlu dan jangan menambah dependency
-   CLI ke proyek ini. Fresh clone ini sudah memiliki `supabase/migrations/`, tetapi
-   belum memiliki `supabase/config.toml`. Hanya bila file config belum ada, jalankan:
+   CLI ke proyek ini. Repo sudah menyediakan `supabase/migrations/`,
+   `supabase/config.toml`, dan `supabase/seed.sql` (H-03, 2026-09-02 —
+   sebelumnya `config.toml` tidak ada dan disarankan dibuat via `npx supabase
+   init`; itu tidak lagi berlaku, **jangan** jalankan `init` lagi karena akan
+   menimpa config yang sudah dikurasi untuk CI).
+
+   Untuk menguji migration secara lokal dari database kosong (persis seperti
+   job CI di `.github/workflows/db-migrations.yml`):
 
    ```bash
-   npx supabase init
+   npx supabase start
+   npx supabase db reset
    ```
 
-   Periksa config yang dibuat sebelum commit; `init` tidak diperlukan untuk tugas
-   dokumentasi ini dan tidak boleh mengganti migration yang sudah ada.
+   `db reset` mereplay seluruh `supabase/migrations/` lalu menerapkan
+   `supabase/seed.sql` — data 9 restoran dev dengan PIN dummy `9001`-`9009`
+   (bukan data produksi, bukan PIN resto asli). Alur ini sepenuhnya terpisah
+   dari `db push` di langkah 4 di bawah, yang menyentuh proyek Supabase asli
+   yang sudah di-link.
 
 4. Login, hubungkan proyek, lalu terapkan migrasi:
 

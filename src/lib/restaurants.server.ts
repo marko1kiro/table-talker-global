@@ -60,10 +60,23 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
 // Second factor after Kode Resto: an admin-issued 4-digit PIN unique per
 // restaurant ("ID Resto"), added so a crew member who only knows/guesses a
 // Kode Resto (which is not treated as a secret -- see restaurant-code.server.ts)
-// cannot get into another restaurant's dashboard. Checked server-side against
-// restaurants.pin, scoped to the restaurant already resolved by tenantToken
-// (verifyActiveTenantSession), so this can never be used to probe other
-// restaurants' PINs by supplying a different restaurantId.
+// cannot get into another restaurant's dashboard.
+//
+// C-01 remediation (Fase 1, 2026-09-02): this function is UX-only -- fast
+// inline feedback at the PIN entry step -- and is NOT the authorization
+// boundary. The one and only authoritative PIN check now lives inside the
+// claim_role_session RPC itself (supabase/migrations/
+// 20260902020000_pin_hash_and_role_session_hardening.sql), which verifies
+// the PIN in the same transaction as issuing the role session token. Before
+// this change, verifyRestaurantPin was the *only* place the PIN was ever
+// checked, and claim_role_session accepted no PIN at all -- so calling
+// claim_role_session directly with a valid tenant token, skipping this
+// serverFn entirely, bypassed the PIN completely. Compares against
+// restaurants.pin_hash (sha256 hex), scoped to the restaurant already
+// resolved by tenantToken (verifyActiveTenantSession), so this can never be
+// used to probe other restaurants' PINs by supplying a different
+// restaurantId. Rate limiting for repeated wrong PINs lives in the RPC, not
+// here, since this endpoint is not the security boundary.
 export const verifyRestaurantPin = createServerFn({ method: "POST" })
   .validator(z.object({ tenantToken: z.string(), pin: z.string() }))
   .handler(async ({ data }) => {
@@ -72,16 +85,18 @@ export const verifyRestaurantPin = createServerFn({ method: "POST" })
     if (!PIN_PATTERN.test(data.pin)) return { error: PIN_ERROR };
 
     try {
-      const { verifyActiveTenantSession } = await serverCredentialModules();
+      const { verifyActiveTenantSession, hashOpaqueRestaurantToken } =
+        await serverCredentialModules();
       const tenant = await verifyActiveTenantSession(client, data.tenantToken);
       if (!tenant) return { error: "Sesi resto tidak valid. Ulangi dari Kode Resto." };
 
       const { data: restaurant, error } = await client
         .from("restaurants")
-        .select("pin")
+        .select("pin_hash")
         .eq("id", tenant.restaurantId)
         .single();
-      if (error || !restaurant || restaurant.pin !== data.pin) return { error: PIN_ERROR };
+      if (error || !restaurant || restaurant.pin_hash !== hashOpaqueRestaurantToken(data.pin))
+        return { error: PIN_ERROR };
       return { ok: true as const };
     } catch {
       return { error: PIN_ERROR };

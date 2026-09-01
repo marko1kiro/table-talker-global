@@ -11,9 +11,16 @@ create table public.restaurants (
 
 create unique index restaurants_code_key on public.restaurants (lower(code));
 
-insert into public.restaurants (code, display_name)
-values ('KAMPUNG-BULU', 'Mie Gacoan Kampung Bulu')
-on conflict (lower(code)) do nothing;
+-- H-03 (2026-09-02): a demo seed row used to be inserted right here. That
+-- broke replaying this migration chain against an empty database: by the
+-- time execution reached 20260823120000_remove_legacy_restaurant_code.sql,
+-- its `UNPROVISIONED_RESTAURANT_CREDENTIALS` guard found this seeded row
+-- with no code_hash/code_encrypted/credential_rotated_at populated and
+-- raised on every fresh replay (CI, new environments, `supabase db reset`).
+-- Demo/dev data now lives exclusively in `supabase/seed.sql`, applied only
+-- via `supabase db reset` after every migration (including this one) has
+-- already run against the final schema -- never inline in a versioned
+-- migration.
 
 alter table public.restaurants enable row level security;
 revoke all on public.restaurants from anon, authenticated;

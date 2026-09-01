@@ -1,0 +1,36 @@
+# Minimal Supabase CLI project config, added for the H-03 CI replay check
+# (.github/workflows/db-migrations.yml). This only needs to be enough for
+# `supabase start` + `supabase db reset` to boot a local stack and replay
+# supabase/migrations/ + supabase/seed.sql -- it is never used to link to
+# or push against the production project. See README.md's "Setup Supabase"
+# section for the separate `npx supabase init`/`link` flow used when
+# working against the real hosted project.
+
+project_id = "table-talker-global"
+
+[db]
+port = 54322
+major_version = 17
+
+[api]
+enabled = true
+port = 54321
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+
+[realtime]
+enabled = true
+
+[storage]
+enabled = false
+
+[studio]
+enabled = false
+
+[inbucket]
+enabled = false
+
+[analytics]
+enabled = false
