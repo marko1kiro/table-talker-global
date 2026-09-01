@@ -72,3 +72,38 @@ it("prestages event in memory before awaiting IndexedDB", () => {
   const body = recordEvent?.[0] ?? "";
   expect(body.indexOf("mirrorEvents")).toBeLessThan(body.indexOf("await enqueueEvent"));
 });
+
+// H-05 remediation (Fase 2, 2026-09-02): a failed batch must no longer
+// abort the entire flush -- it must skip that tenant and keep trying
+// other queued tenants/groups in the same pass.
+it("does not abort the whole flush when a batch fails (H-05)", () => {
+  const source = eventFlush();
+  const flushBody = source.match(/const flush = useCallback\(async \(\) => \{[\s\S]*?\n {2}\}, \[flushToServer\]\);/);
+  expect(flushBody).not.toBeNull();
+  const body = flushBody?.[0] ?? "";
+  expect(body).toContain("failedTenants");
+  expect(body).toContain("pickNextTenantBatch");
+  // The old bug: `if (!result.ok) return;` unconditionally exited the
+  // whole flush. It must now `continue` to the next loop iteration
+  // instead, after recording the tenant as failed for this pass.
+  expect(body).not.toMatch(/if \(!result\.ok\)\s*return;/);
+  const failureBranch = body.match(/if \(!result\.ok\) \{[\s\S]*?\n {8}\}/);
+  expect(failureBranch).not.toBeNull();
+  expect(failureBranch?.[0]).toContain("failedTenants.add");
+  expect(failureBranch?.[0]).toContain("markFlushAttempts");
+  expect(failureBranch?.[0]).toContain("continue");
+});
+
+it("drops dead-letter events instead of retrying them forever (H-05)", () => {
+  const source = eventFlush();
+  expect(source).toContain("isDeadLetterEvent");
+  expect(source).toContain("removeEvents(deadIds)");
+  expect(source).toMatch(/console\.warn\(/);
+});
+
+it("imports the new H-05 event-queue helpers", () => {
+  const source = eventFlush();
+  expect(source).toContain("isDeadLetterEvent");
+  expect(source).toContain("markFlushAttempts");
+  expect(source).toContain("pickNextTenantBatch");
+});

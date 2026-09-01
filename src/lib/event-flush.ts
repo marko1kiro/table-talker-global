@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef } from "react";
-import { enqueueEvent, getQueuedEvents, removeEvents, type PlaybackEvent } from "./event-queue";
+import {
+  enqueueEvent,
+  getQueuedEvents,
+  isDeadLetterEvent,
+  markFlushAttempts,
+  pickNextTenantBatch,
+  removeEvents,
+  type PlaybackEvent,
+} from "./event-queue";
 
 const BATCH_SIZE = 10;
 const MAX_BATCHES_PER_FLUSH = 5;
@@ -29,20 +37,49 @@ export function useEventFlush(flushToServer: FlushFn, getCrewSessionToken: () =>
     flushingRef.current = true;
 
     try {
+      // H-05 remediation (Fase 2, 2026-09-02): previously a failed batch
+      // caused this whole function to `return` immediately, so one
+      // tenant/token that could never succeed (e.g. revoked session)
+      // starved every other tenant's queued events -- since
+      // getQueuedEvents() is sorted oldest-first, the next flush call
+      // would just pick that same stuck tenant's events again and bail
+      // out again, forever. `failedTenants` tracks who has already failed
+      // *this* flush call so the loop can skip past them and keep making
+      // progress on other tenants/groups in the same pass.
+      const failedTenants = new Set<string>();
+
       for (let batchIndex = 0; batchIndex < MAX_BATCHES_PER_FLUSH; batchIndex++) {
         const events = await getQueuedEvents();
         if (events.length === 0) return;
-        const batch = events
-          .filter((event) => event.tenantToken === events[0].tenantToken)
-          .slice(0, BATCH_SIZE);
+
+        // Dead-letter: drop events that have exhausted their retry/TTL
+        // budget (see isDeadLetterEvent) so a permanently-broken batch
+        // doesn't accumulate in the queue forever.
+        const now = Date.now();
+        const deadIds = events.filter((event) => isDeadLetterEvent(event, now)).map((e) => e.id);
+        if (deadIds.length > 0) {
+          console.warn(
+            `[event-flush] dropping ${deadIds.length} event(s) that exceeded the retry/TTL budget (dead-letter)`,
+          );
+          await removeEvents(deadIds);
+        }
+        const alive = deadIds.length > 0 ? events.filter((e) => !deadIds.includes(e.id)) : events;
+
+        const batch = pickNextTenantBatch(alive, failedTenants, BATCH_SIZE);
+        if (batch.length === 0) return; // everything left this pass belongs to an already-failed tenant
+
         const result = await flushToServer(batch);
-        if (!result.ok) return;
+        if (!result.ok) {
+          failedTenants.add(batch[0].tenantToken);
+          await markFlushAttempts(batch.map((event) => event.id));
+          continue; // keep going -- try another tenant/group instead of aborting the whole flush
+        }
+
         await removeEvents(result.ids);
         const removed = new Set(result.ids);
         pagehideEventsRef.current = pagehideEventsRef.current.filter(
           (event) => !removed.has(event.id),
         );
-        if (batch.length < BATCH_SIZE) return;
       }
     } catch {
       // Will retry on next flush
