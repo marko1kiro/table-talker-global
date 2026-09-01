@@ -66,6 +66,49 @@ export function pickNextTenantBatch(
   return events.filter((event) => event.tenantToken === next.tenantToken).slice(0, batchSize);
 }
 
+// M-04/M-05 remediation (Fase 3, 2026-09-02): the IndexedDB store above is
+// shared by every tab/session open on the same browser origin -- there is
+// no per-tab isolation. `clearQueuedEvents()` used to take no arguments
+// and call `.clear()` on the whole object store, so logging out one
+// tab/session (or even an unrelated info page via useCrewLogout) silently
+// wiped every *other* tab/session's still-queued, not-yet-flushed
+// telemetry too (M-04).
+//
+// Each PlaybackEvent already carries its own `tenantToken` and
+// `crewSessionId`, so a session's own events can be identified without
+// adding a new field: `sessionScopeKey` combines the two into the
+// partition key used below.
+export function sessionScopeKey(tenantToken: string, crewSessionId: string): string {
+  return `${tenantToken}:${crewSessionId}`;
+}
+
+// M-05: `recordEvent`'s `enqueueEvent` and a logout's `clearQueuedEvents`
+// open independent IndexedDB transactions. Because both are async and
+// resolve through their own `await openDB()` before creating a
+// transaction, an enqueue already in flight when a clear fires is not
+// guaranteed to lose the race -- its `put()` transaction could still be
+// created and commit *after* the clear's `.clear()` already ran, quietly
+// reviving a stale event right after logout.
+//
+// `sessionGenerations` is a synchronous, in-memory fence per scope.
+// `clearQueuedEvents` bumps it *before* any await, so any `enqueueEvent`
+// call for the same scope that hasn't yet reached its post-`openDB()`
+// check will observe the bump and drop its write instead of resurrecting
+// a stale event. It intentionally lives only in memory (not persisted):
+// it only needs to win a race against work already in flight in this
+// same page's lifetime, not survive reloads.
+const sessionGenerations = new Map<string, number>();
+
+function currentSessionGeneration(scope: string): number {
+  return sessionGenerations.get(scope) ?? 0;
+}
+
+export function bumpSessionGeneration(scope: string): number {
+  const next = currentSessionGeneration(scope) + 1;
+  sessionGenerations.set(scope, next);
+  return next;
+}
+
 function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return Promise.resolve(dbPromise);
 
@@ -94,8 +137,17 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 export async function enqueueEvent(event: PlaybackEvent): Promise<void> {
+  // M-05 fencing: captured synchronously, before the first await, so it
+  // reflects the generation in effect at the moment this call started.
+  const scope = sessionScopeKey(event.tenantToken, event.crewSessionId);
+  const generationAtCall = currentSessionGeneration(scope);
   try {
     const db = await openDB();
+    // Re-check right before writing: if this scope's generation moved on
+    // while we were opening the DB, a clearQueuedEvents() for this same
+    // session ran concurrently. Drop this write instead of reviving a
+    // stale event after that clear.
+    if (currentSessionGeneration(scope) !== generationAtCall) return;
     const stamped: PlaybackEvent = {
       ...event,
       enqueuedAt: event.enqueuedAt ?? new Date().toISOString(),
@@ -176,17 +228,45 @@ export async function markFlushAttempts(ids: string[]): Promise<void> {
   }
 }
 
-export async function clearQueuedEvents(): Promise<void> {
+// M-04: scoped to a single session (tenantToken + crewSessionId) instead
+// of the old no-arg `.clear()` that wiped every tab/session sharing this
+// origin's IndexedDB store. M-05: bumps the session's generation fence
+// synchronously, before any await, so a same-scope `enqueueEvent` already
+// in flight drops its write instead of reappearing after this resolves.
+// Callers must `await` this (not `void`) so the deletion has actually
+// committed before they proceed (e.g. navigate away).
+export async function clearQueuedEvents(tenantToken: string, crewSessionId: string): Promise<void> {
+  const scope = sessionScopeKey(tenantToken, crewSessionId);
+  bumpSessionGeneration(scope);
+  try {
+    const events = await getQueuedEvents();
+    const ids = events
+      .filter((event) => sessionScopeKey(event.tenantToken, event.crewSessionId) === scope)
+      .map((event) => event.id);
+    await removeEvents(ids);
+  } catch {
+    // IndexedDB unavailable
+  }
+}
+
+// Test-only: clears all rows from the store and resets the in-memory
+// generation fences, so each test in tests/event-queue.test.ts starts
+// from a clean slate. Keeps the same DB connection open across tests
+// (rather than deleting/recreating the database) to avoid flaky
+// open/delete races in fake-indexeddb between tests. Never called from
+// application code.
+export async function __resetEventQueueForTests(): Promise<void> {
+  sessionGenerations.clear();
   try {
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
       tx.objectStore(STORE_NAME).clear();
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
   } catch {
-    // IndexedDB unavailable
+    // IndexedDB unavailable in this environment — nothing to reset.
   }
 }
 

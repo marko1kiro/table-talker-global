@@ -3,6 +3,7 @@ import { useCallback } from "react";
 
 import {
   browserSessionStorage,
+  readCrewSessionIdentity,
   removeCrewSessionIdentity,
   removeRoleSessionIdentity,
 } from "@/lib/crew-session-identity";
@@ -27,13 +28,22 @@ import { clearQueuedEvents } from "@/lib/event-queue";
 // soundboard controller, clearing the URL pool, resetting playback
 // generation, etc.) that only the SS station route owns and that these
 // info pages never create in the first place.
-export function useCrewLogout(): () => void {
+export function useCrewLogout(): () => Promise<void> {
   const navigate = useNavigate();
-  return useCallback(() => {
+  return useCallback(async () => {
     const storage = browserSessionStorage();
+    // M-04/M-05: read the crew identity (if any) *before* wiping it, so
+    // the telemetry queue clear below can be scoped to this session only
+    // instead of wiping every tab/session sharing this origin's
+    // IndexedDB store. Only a CrewSessionIdentity (Station SS) ever
+    // enqueues playback events; a RoleSessionIdentity (Kasir/Satgas/Clear
+    // Up) never does, so there is nothing to clear in that case.
+    const crewIdentity = readCrewSessionIdentity(storage);
     removeCrewSessionIdentity(storage);
     removeRoleSessionIdentity(storage);
-    void clearQueuedEvents();
-    void navigate({ to: "/" });
+    if (crewIdentity) {
+      await clearQueuedEvents(crewIdentity.tenantToken, crewIdentity.crewSessionId);
+    }
+    await navigate({ to: "/" });
   }, [navigate]);
 }

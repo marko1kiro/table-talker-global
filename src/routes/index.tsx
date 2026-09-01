@@ -171,7 +171,14 @@ function SoundboardPage() {
     return unlockBundledAudio(audio, getUnlockAudioUrl());
   }, [getAudioController]);
 
-  const invalidateCrewSession = useCallback(() => {
+  const invalidateCrewSession = useCallback(async () => {
+    // M-04/M-05: capture the identity being invalidated *before*
+    // removeCrewSessionIdentity wipes it, so the telemetry clear below
+    // can be scoped to this session only -- not every tab/session
+    // sharing this origin's IndexedDB store -- and properly awaited
+    // instead of fired-and-forgotten (which used to race an in-flight
+    // recordEvent()'s own enqueue).
+    const identity = crewIdentityRef.current;
     playbackGenerationRef.current.next();
     audioControllerRef.current?.stop();
     audioUrlPoolRef.current?.clear();
@@ -180,7 +187,9 @@ function SoundboardPage() {
     accessValidationPromiseRef.current = null;
     activeAudioIdRef.current = null;
     removeCrewSessionIdentity(browserSessionStorage());
-    void clearQueuedEvents();
+    if (identity) {
+      await clearQueuedEvents(identity.tenantToken, identity.crewSessionId);
+    }
     setCrewIdentity(null);
     setAudioSynced(false);
     setAvailableAudioIds(new Set());
@@ -193,7 +202,11 @@ function SoundboardPage() {
   // Manual sign-out, distinct from invalidateCrewSession above: no error
   // banner, just a clean return to RoleLoginFlow, mirroring the logout
   // Kasir/Satgas/Clear Up already have.
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // M-04/M-05: same reasoning as invalidateCrewSession above -- capture
+    // the identity before it's wiped, scope the telemetry clear to it,
+    // and await it instead of firing it unawaited.
+    const identity = crewIdentityRef.current;
     playbackGenerationRef.current.next();
     audioControllerRef.current?.stop();
     activeAudioIdRef.current = null;
@@ -205,7 +218,9 @@ function SoundboardPage() {
     validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
     accessValidationPromiseRef.current = null;
     removeCrewSessionIdentity(browserSessionStorage());
-    void clearQueuedEvents();
+    if (identity) {
+      await clearQueuedEvents(identity.tenantToken, identity.crewSessionId);
+    }
     setCrewIdentity(null);
     setAudioSynced(false);
     setAvailableAudioIds(new Set());

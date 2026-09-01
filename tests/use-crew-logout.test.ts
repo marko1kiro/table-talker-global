@@ -40,13 +40,40 @@ describe("useCrewLogout hook (src/hooks/use-crew-logout.ts)", () => {
     expect(hook).toContain('import { useNavigate } from "@tanstack/react-router"');
     expect(hook).toContain("removeCrewSessionIdentity(storage)");
     expect(hook).toContain("removeRoleSessionIdentity(storage)");
-    expect(hook).toContain("clearQueuedEvents()");
     expect(hook).toContain('navigate({ to: "/" })');
   });
 
-  it("is exported as a reusable hook, not inlined per-page", () => {
+  // M-04/M-05 (Fase 3, 2026-09-02): clearQueuedEvents() used to take no
+  // arguments and wipe the entire shared-origin IndexedDB store, deleting
+  // any other open tab/session's still-queued telemetry too. It's now
+  // partitioned per crew session (tenantToken + crewSessionId), so this
+  // hook must read the crew identity *before* removing it from storage in
+  // order to scope the clear correctly, and must actually await the
+  // clear (a bare `void clearQueuedEvents()` reintroduces the M-05 race
+  // between an in-flight enqueue and this clear).
+  it("reads the crew identity before removing it, to scope the telemetry clear to this session only", () => {
     const hook = source("../src/hooks/use-crew-logout.ts");
-    expect(hook).toContain("export function useCrewLogout(): () => void");
+    expect(hook).toContain("readCrewSessionIdentity(storage)");
+    const readIndex = hook.indexOf("readCrewSessionIdentity(storage)");
+    const removeIndex = hook.indexOf("removeCrewSessionIdentity(storage)");
+    expect(readIndex).toBeGreaterThan(-1);
+    expect(removeIndex).toBeGreaterThan(-1);
+    expect(readIndex).toBeLessThan(removeIndex);
+  });
+
+  it("awaits a session-scoped clearQueuedEvents call instead of firing it unawaited", () => {
+    const hook = source("../src/hooks/use-crew-logout.ts");
+    expect(hook).not.toContain("void clearQueuedEvents()");
+    expect(hook).not.toContain("clearQueuedEvents()");
+    expect(hook).toMatch(
+      /await clearQueuedEvents\(\s*[\w.?]+\.tenantToken,\s*[\w.?]+\.crewSessionId\s*\)/,
+    );
+  });
+
+  it("is exported as a reusable hook returning an async handler", () => {
+    const hook = source("../src/hooks/use-crew-logout.ts");
+    expect(hook).toContain("export function useCrewLogout(): () => Promise<void>");
+    expect(hook).toMatch(/useCallback\(async \(\)/);
   });
 });
 
