@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Square } from "lucide-react";
+import { Loader2, Square } from "lucide-react";
 
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -18,7 +18,10 @@ import { RoleLoginFlow } from "@/components/RoleLoginFlow";
 import { SyncDialog } from "@/components/SyncDialog";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
 import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
-import { announcementPlaybackId, announcementPlaybackStatus } from "@/lib/announcement-playback";
+import {
+  announcementPlaybackId,
+  announcementPlaybackStatus,
+} from "@/lib/announcement-playback";
 import {
   browserSessionStorage,
   readCrewSessionIdentity,
@@ -86,7 +89,9 @@ function crewAccessKey(identity: CrewIdentity) {
 function SoundboardPage() {
   const navigate = useNavigate();
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioControllerRef = useRef<ReturnType<typeof createAudioPlaybackController> | null>(null);
+  const audioControllerRef = useRef<ReturnType<
+    typeof createAudioPlaybackController
+  > | null>(null);
   const activeAudioIdRef = useRef<number | AudioId | null>(null);
   const playbackGenerationRef = useRef(createPlaybackGeneration());
   const [playing, setPlaying] = useState<number | AudioId | null>(null);
@@ -95,9 +100,13 @@ function SoundboardPage() {
   const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(null);
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [audioSynced, setAudioSynced] = useState(false);
-  const [availableAudioIds, setAvailableAudioIds] = useState<ReadonlySet<AudioId>>(new Set());
+  const [availableAudioIds, setAvailableAudioIds] = useState<
+    ReadonlySet<AudioId>
+  >(new Set());
   const [accessError, setAccessError] = useState("");
-  const audioUrlPoolRef = useRef<ReturnType<typeof createCachedAudioUrlPool> | null>(null);
+  const audioUrlPoolRef = useRef<ReturnType<
+    typeof createCachedAudioUrlPool
+  > | null>(null);
   const validatedAccessRef = useRef({ identityKey: "", validatedAt: 0 });
   const accessValidationPromiseRef = useRef<Promise<void> | null>(null);
   const crewIdentityRef = useRef<CrewIdentity | null>(null);
@@ -156,13 +165,16 @@ function SoundboardPage() {
   const getAudioController = useCallback(() => {
     const audio = audioRef.current ?? new Audio();
     audioRef.current = audio;
-    audioControllerRef.current ??= createAudioPlaybackController(audio, (token) => {
-      if (!playbackGenerationRef.current.isCurrent(token)) return;
-      activeAudioIdRef.current = null;
-      setPlaying(null);
-      setPaused(null);
-      setLoading(null);
-    });
+    audioControllerRef.current ??= createAudioPlaybackController(
+      audio,
+      (token) => {
+        if (!playbackGenerationRef.current.isCurrent(token)) return;
+        activeAudioIdRef.current = null;
+        setPlaying(null);
+        setPaused(null);
+        setLoading(null);
+      },
+    );
     return { audio, controller: audioControllerRef.current };
   }, []);
 
@@ -233,7 +245,8 @@ function SoundboardPage() {
     })
       .then((result) => {
         const currentIdentity = crewIdentityRef.current;
-        if (!currentIdentity || crewAccessKey(currentIdentity) !== identityKey) return;
+        if (!currentIdentity || crewAccessKey(currentIdentity) !== identityKey)
+          return;
         if (!result.ok) {
           invalidateCrewSession();
           return;
@@ -384,22 +397,43 @@ function SoundboardPage() {
   const activeAudioId = playing ?? loading ?? paused;
   const activeAnnouncement =
     typeof activeAudioId === "string"
-      ? ANNOUNCEMENT_CATALOG.find(({ id }) => announcementPlaybackId(id) === activeAudioId)
+      ? ANNOUNCEMENT_CATALOG.find(
+          ({ id }) => announcementPlaybackId(id) === activeAudioId,
+        )
       : undefined;
   const activeAudioLabel = activeAnnouncement?.label ?? activeAudioId;
 
   return (
-    <div className="brutal-bg-lines relative min-h-screen pb-24">
-      {identityHydrated && (
+    <>
+      {accessError && (
+        <p
+          role="alert"
+          className="fixed inset-x-0 top-0 z-[60] bg-red-50 px-3 py-2 text-center text-sm font-semibold text-red-600 shadow-sm"
+        >
+          {accessError}
+        </p>
+      )}
+
+      {!identityHydrated && (
+        <div className="flex min-h-screen items-center justify-center bg-white">
+          <Loader2 className="size-6 animate-spin text-slate-300" />
+        </div>
+      )}
+
+      {identityHydrated && !crewIdentity && (
+        // No dashboard is mounted behind this: the login screen owns the
+        // whole viewport until an identity is established below.
         <RoleLoginFlow
-          open={!crewIdentity}
           onSsContinue={async (identity) => {
             audioUrlPoolRef.current?.clear();
             audioUrlPoolRef.current = null;
             validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
             setAudioSynced(false);
             const audioReady = await unlockAudio();
-            const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
+            const saved = writeCrewSessionIdentity(
+              browserSessionStorage(),
+              identity,
+            );
             setCrewIdentity({ ...(saved ?? identity), audioReady });
           }}
           onRoleContinue={(identity) => {
@@ -414,102 +448,112 @@ function SoundboardPage() {
           }}
         />
       )}
-      {accessError && (
-        <p
-          role="alert"
-          className="mx-auto max-w-6xl px-3 pt-3 text-center text-sm text-destructive"
-        >
-          {accessError}
-        </p>
-      )}
-      {crewIdentity?.restaurantId && !audioSynced && (
-        <SyncDialog
-          restaurantId={crewIdentity.restaurantId}
-          tenantToken={crewIdentity.tenantToken}
-          onSynced={(audioIds) => {
-            setAvailableAudioIds(new Set(audioIds as AudioId[]));
-            setAudioSynced(true);
-            void getAudioUrlPool().preload(crewIdentity.restaurantId, audioIds);
-          }}
-          onSessionInvalid={invalidateCrewSession}
-        />
-      )}
-      <Header
-        readyCount={availableAudioIds.size}
-        totalCount={TABLE_COUNT}
-        restaurantDisplayName={crewIdentity?.restaurantDisplayName}
-        userName={crewIdentity?.displayName}
-        onLogout={logout}
-      />
 
-      <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h1 className="font-display text-xl uppercase leading-tight sm:text-2xl">
-              Pilih Nomor Meja
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Tap tombol untuk memanggil pelanggan mengambil pesanan.
-            </p>
-          </div>
+      {identityHydrated && crewIdentity && (
+        <div className="brutal-bg-lines relative min-h-screen pb-24">
+          {crewIdentity?.restaurantId && !audioSynced && (
+            <SyncDialog
+              restaurantId={crewIdentity.restaurantId}
+              tenantToken={crewIdentity.tenantToken}
+              onSynced={(audioIds) => {
+                setAvailableAudioIds(new Set(audioIds as AudioId[]));
+                setAudioSynced(true);
+                void getAudioUrlPool().preload(
+                  crewIdentity.restaurantId,
+                  audioIds,
+                );
+              }}
+              onSessionInvalid={invalidateCrewSession}
+            />
+          )}
+          <Header
+            readyCount={availableAudioIds.size}
+            totalCount={TABLE_COUNT}
+            restaurantDisplayName={crewIdentity?.restaurantDisplayName}
+            userName={crewIdentity?.displayName}
+            onLogout={logout}
+          />
+
+          <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h1 className="font-display text-xl uppercase leading-tight sm:text-2xl">
+                  Pilih Nomor Meja
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  Tap tombol untuk memanggil pelanggan mengambil pesanan.
+                </p>
+              </div>
+            </div>
+
+            <SoundboardGrid
+              availableAudioIds={availableAudioIds}
+              drawerDisabled={false}
+              announcementTriggerElevated={activeAudioId !== null}
+              tableDisabled={() => activeAudioId !== null}
+              announcementDisabled={(audioId) =>
+                loading !== null ||
+                (activeAudioId !== null && activeAudioId !== audioId)
+              }
+              tableStatus={(tableNumber) => {
+                if (playing === tableNumber) return "playing";
+                if (loading === tableNumber) return "loading";
+                return availableAudioIds.has(tableAudioId(tableNumber))
+                  ? "ready"
+                  : "empty";
+              }}
+              announcementStatus={(announcementId) =>
+                announcementPlaybackStatus(
+                  announcementPlaybackId(announcementId),
+                  playing,
+                  loading,
+                  paused,
+                )
+              }
+              onSelect={(audioId) => {
+                if (audioId.startsWith("table:")) {
+                  void play(Number(audioId.slice("table:".length)));
+                  return;
+                }
+                const announcement = ANNOUNCEMENT_CATALOG.find(
+                  ({ id }) => announcementPlaybackId(id) === audioId,
+                );
+                if (announcement) toggleAnnouncement(audioId);
+              }}
+            />
+
+            {audioSynced && availableAudioIds.size === 0 && (
+              <div className="brutal-border brutal-shadow mt-6 bg-card p-6 text-center">
+                <p className="font-display uppercase">Belum ada audio</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Katalog audio restoran tidak tersedia. Hubungi admin restoran.
+                </p>
+              </div>
+            )}
+          </main>
+
+          <Footer />
+
+          {activeAudioId !== null && (
+            <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+              <button
+                onClick={stop}
+                className="brutal-border brutal-shadow-lg brutal-press flex items-center gap-2 bg-destructive px-5 py-3 font-display uppercase text-destructive-foreground"
+              >
+                <Square
+                  className="h-4 w-4"
+                  fill="currentColor"
+                  strokeWidth={3}
+                />
+                Stop{" "}
+                {typeof activeAudioId === "number"
+                  ? `Meja ${activeAudioId}`
+                  : activeAudioLabel}
+              </button>
+            </div>
+          )}
         </div>
-
-        <SoundboardGrid
-          availableAudioIds={availableAudioIds}
-          drawerDisabled={false}
-          announcementTriggerElevated={activeAudioId !== null}
-          tableDisabled={() => activeAudioId !== null}
-          announcementDisabled={(audioId) =>
-            loading !== null || (activeAudioId !== null && activeAudioId !== audioId)
-          }
-          tableStatus={(tableNumber) => {
-            if (playing === tableNumber) return "playing";
-            if (loading === tableNumber) return "loading";
-            return availableAudioIds.has(tableAudioId(tableNumber)) ? "ready" : "empty";
-          }}
-          announcementStatus={(announcementId) =>
-            announcementPlaybackStatus(
-              announcementPlaybackId(announcementId),
-              playing,
-              loading,
-              paused,
-            )
-          }
-          onSelect={(audioId) => {
-            if (audioId.startsWith("table:")) {
-              void play(Number(audioId.slice("table:".length)));
-              return;
-            }
-            const announcement = ANNOUNCEMENT_CATALOG.find(
-              ({ id }) => announcementPlaybackId(id) === audioId,
-            );
-            if (announcement) toggleAnnouncement(audioId);
-          }}
-        />
-
-        {audioSynced && availableAudioIds.size === 0 && (
-          <div className="brutal-border brutal-shadow mt-6 bg-card p-6 text-center">
-            <p className="font-display uppercase">Belum ada audio</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Katalog audio restoran tidak tersedia. Hubungi admin restoran.
-            </p>
-          </div>
-        )}
-      </main>
-
-      <Footer />
-
-      {activeAudioId !== null && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
-          <button
-            onClick={stop}
-            className="brutal-border brutal-shadow-lg brutal-press flex items-center gap-2 bg-destructive px-5 py-3 font-display uppercase text-destructive-foreground"
-          >
-            <Square className="h-4 w-4" fill="currentColor" strokeWidth={3} />
-            Stop {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioLabel}
-          </button>
-        </div>
       )}
-    </div>
+    </>
   );
 }
