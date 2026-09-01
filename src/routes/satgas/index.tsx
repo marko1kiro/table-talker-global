@@ -81,6 +81,14 @@ function SatgasRoute() {
   const [identity, setIdentity] = useState<RoleSessionIdentity | null>(null);
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [escortTable, setEscortTable] = useState<number | null>(null);
+  // Tracks the table whose escort action is in flight, independent of
+  // `escortTable`. The confirmation dialog is meant to close the instant
+  // its button is tapped (default AlertDialogAction behaviour), which
+  // clears `escortTable` right away -- so the "still processing" signal
+  // for the table grid/list has to live in its own piece of state,
+  // cleared once the escort intent has actually been created (the point
+  // at which the table visibly flips to "Sudah Di-escort" below).
+  const [processingTable, setProcessingTable] = useState<number | null>(null);
   const [waitlist, setWaitlist] = useState<EscortWaitEntry[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [actionError, setActionError] = useState("");
@@ -209,10 +217,10 @@ function SatgasRoute() {
     onSuccess: ({ result, tableNumber }) => {
       if (!result.ok) {
         setActionError(result.message);
+        setProcessingTable(null);
         return;
       }
       setActionError("");
-      setEscortTable(null);
       setWaitlist(
         addEscortWaitEntry(browserSessionStorage(), identity!.roleSessionId, {
           intentId: result.intentId,
@@ -220,6 +228,16 @@ function SatgasRoute() {
           expiresAt: Date.now() + ESCORT_INTENT_WINDOW_MS,
         }),
       );
+      // Unlike Kasir/Clear Up, escorting a table doesn't change its
+      // occupancy status on the server -- it only adds a local waitlist
+      // entry (handled just above), which is what flips this table to
+      // "Sudah Di-escort" below. That update is synchronous, so the
+      // banner can clear immediately rather than waiting on a refetch.
+      setProcessingTable(null);
+    },
+    onError: () => {
+      setActionError("Gagal mencatat escort. Coba lagi.");
+      setProcessingTable(null);
     },
   });
 
@@ -342,6 +360,15 @@ function SatgasRoute() {
           setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")
         }
       >
+        {processingTable !== null && (
+          <OwnerNotice role="status" tone="neutral">
+            <span className="flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin" />
+              Memproses escort Meja {processingTable}...
+            </span>
+          </OwnerNotice>
+        )}
+
         {snapshot.isLoading ? (
           <p className="text-sm text-slate-500">Memuat status meja...</p>
         ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
@@ -357,14 +384,14 @@ function SatgasRoute() {
           <TableGrid
             tables={tables}
             escortedTableNumbers={escortedTableNumbers}
-            pendingTable={escortMutation.isPending ? escortTable : null}
+            pendingTable={processingTable}
             onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
           />
         ) : (
           <TableList
             tables={tables}
             escortedTableNumbers={escortedTableNumbers}
-            pendingTable={escortMutation.isPending ? escortTable : null}
+            pendingTable={processingTable}
             onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
           />
         )}
@@ -373,7 +400,7 @@ function SatgasRoute() {
       <AlertDialog
         open={escortTable !== null}
         onOpenChange={(open) => {
-          if (!open && !escortMutation.isPending) setEscortTable(null);
+          if (!open) setEscortTable(null);
         }}
       >
         <AlertDialogContent>
@@ -385,36 +412,24 @@ function SatgasRoute() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel
-              disabled={escortMutation.isPending}
-              onClick={() => setEscortTable(null)}
-            >
+            <AlertDialogCancel onClick={() => setEscortTable(null)}>
               Batal
             </AlertDialogCancel>
             <AlertDialogAction
               className={ownerPrimaryButtonClass}
-              disabled={escortMutation.isPending}
-              onClick={(event) => {
+              onClick={() => {
                 // AlertDialogAction closes the dialog on click by default
-                // (Radix wraps it in a Dialog.Close). Without preventing
-                // that here, the dialog dismisses immediately -- before
-                // `escortMutation.isPending` has propagated to this
-                // render -- so the "Memproses..." spinner below, and the
-                // matching spinner on the table grid, never get a chance
-                // to show. Closing is instead handled explicitly in
-                // `onSuccess` once the mutation actually finishes.
-                event.preventDefault();
-                if (escortTable !== null) escortMutation.mutate(escortTable);
+                // (Radix wraps it in a Dialog.Close) -- that's exactly
+                // what we want here. The "sedang diproses" signal moves
+                // to the table grid/list instead, via `processingTable`,
+                // which is set here so it survives the dialog closing.
+                if (escortTable !== null) {
+                  setProcessingTable(escortTable);
+                  escortMutation.mutate(escortTable);
+                }
               }}
             >
-              {escortMutation.isPending ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="size-4 animate-spin" />
-                  Memproses...
-                </span>
-              ) : (
-                "Ya, Escort"
-              )}
+              Ya, Escort
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

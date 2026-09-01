@@ -67,6 +67,13 @@ function KasirRoute() {
   const [identity, setIdentity] = useState<RoleSessionIdentity | null>(null);
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [confirmTable, setConfirmTable] = useState<number | null>(null);
+  // Tracks the table whose status change is in flight, independent of
+  // `confirmTable`. The confirmation dialog is meant to close the instant
+  // its button is tapped (default AlertDialogAction behaviour), which
+  // clears `confirmTable` right away -- so the "still processing" signal
+  // for the table grid/list has to live in its own piece of state, kept
+  // alive until the snapshot query has actually refetched the new status.
+  const [processingTable, setProcessingTable] = useState<number | null>(null);
   const [actionError, setActionError] = useState("");
   const { layoutPreference, setLayoutPreference } =
     useLayoutPreference("kasir");
@@ -125,13 +132,21 @@ function KasirRoute() {
     onSuccess: (result) => {
       if (!result.ok) {
         setActionError(result.message);
+        setProcessingTable(null);
         return;
       }
       setActionError("");
-      setConfirmTable(null);
-      void queryClient.invalidateQueries({
-        queryKey: snapshotQueryKey(restaurantId),
-      });
+      // Keep the "sedang diproses" banner up until the snapshot has
+      // actually refetched, so it stays visible for the whole stretch
+      // between the dialog closing and the table's status truly
+      // flipping on screen -- not just for the mutation call itself.
+      void queryClient
+        .invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) })
+        .then(() => setProcessingTable(null));
+    },
+    onError: () => {
+      setActionError("Gagal mengubah status meja. Coba lagi.");
+      setProcessingTable(null);
     },
   });
 
@@ -178,6 +193,15 @@ function KasirRoute() {
           }
           desktopHint="Tap nomor meja untuk mengubah status dari KOSONG (Hijau) menjadi TERISI (Merah)."
         >
+          {processingTable !== null && (
+            <OwnerNotice role="status" tone="neutral">
+              <span className="flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                Memproses Meja {processingTable}...
+              </span>
+            </OwnerNotice>
+          )}
+
           {snapshot.isLoading ? (
             <p className="text-sm text-slate-500">Memuat status meja...</p>
           ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
@@ -192,13 +216,13 @@ function KasirRoute() {
           ) : layoutPreference === "grid" ? (
             <TableGrid
               tables={tables}
-              pendingTable={markOccupied.isPending ? confirmTable : null}
+              pendingTable={processingTable}
               onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
             />
           ) : (
             <TableList
               tables={tables}
-              pendingTable={markOccupied.isPending ? confirmTable : null}
+              pendingTable={processingTable}
               onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
             />
           )}
@@ -207,7 +231,7 @@ function KasirRoute() {
         <AlertDialog
           open={confirmTable !== null}
           onOpenChange={(open) => {
-            if (!open && !markOccupied.isPending) setConfirmTable(null);
+            if (!open) setConfirmTable(null);
           }}
         >
           <AlertDialogContent>
@@ -221,36 +245,24 @@ function KasirRoute() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel
-                disabled={markOccupied.isPending}
-                onClick={() => setConfirmTable(null)}
-              >
+              <AlertDialogCancel onClick={() => setConfirmTable(null)}>
                 Batal
               </AlertDialogCancel>
               <AlertDialogAction
                 className={ownerPrimaryButtonClass}
-                disabled={markOccupied.isPending}
-                onClick={(event) => {
+                onClick={() => {
                   // AlertDialogAction closes the dialog on click by default
-                  // (Radix wraps it in a Dialog.Close). Without preventing
-                  // that here, the dialog dismisses immediately -- before
-                  // `markOccupied.isPending` has propagated to this render
-                  // -- so the "Memproses..." spinner below, and the
-                  // matching spinner on the table grid, never get a chance
-                  // to show. Closing is instead handled explicitly in
-                  // `onSuccess` once the mutation actually finishes.
-                  event.preventDefault();
-                  if (confirmTable !== null) markOccupied.mutate(confirmTable);
+                  // (Radix wraps it in a Dialog.Close) -- that's exactly
+                  // what we want here. The "sedang diproses" signal moves
+                  // to the table grid/list instead, via `processingTable`,
+                  // which is set here so it survives the dialog closing.
+                  if (confirmTable !== null) {
+                    setProcessingTable(confirmTable);
+                    markOccupied.mutate(confirmTable);
+                  }
                 }}
               >
-                {markOccupied.isPending ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="size-4 animate-spin" />
-                    Memproses...
-                  </span>
-                ) : (
-                  "Ya, Tandai Terisi"
-                )}
+                Ya, Tandai Terisi
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
