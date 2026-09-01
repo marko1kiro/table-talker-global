@@ -113,7 +113,18 @@ export const setTableEmptyCleanup = createServerFn({ method: "POST" })
 // create_escort_intent
 // ---------------------------------------------------------------------------
 
-const CREATE_ESCORT_INTENT_ERRORS = ["INVALID_SESSION", "INVALID_TABLE_NUMBER"] as const;
+// H-04 remediation (Fase 2, 2026-09-02): create_escort_intent
+// (supabase/migrations/20260902040000_escort_intent_duplicate_guard.sql)
+// now rejects a second, different-actor escort attempt against a table
+// that already has an active (unresolved) intent -- ALREADY_ESCORTED is a
+// real, expected outcome (not a bug) whenever two Satgas devices tap the
+// same table, and must be mapped like every other known RPC error rather
+// than falling through to the generic UNAVAILABLE code.
+const CREATE_ESCORT_INTENT_ERRORS = [
+  "INVALID_SESSION",
+  "INVALID_TABLE_NUMBER",
+  "ALREADY_ESCORTED",
+] as const;
 export type CreateEscortIntentResult =
   | { ok: true; intentId: string }
   | {
@@ -220,6 +231,16 @@ export type TableOccupancyRow = {
   status: "kosong" | "terisi";
   occupiedAt: string | null;
   occupiedSource: string | null;
+  // H-04 remediation (Fase 2, 2026-09-02): get_table_occupancy_snapshot
+  // now surfaces each KOSONG table's active escort intent (added in
+  // supabase/migrations/20260902040000_escort_intent_duplicate_guard.sql)
+  // so every Satgas device -- not just the one that created it -- can see
+  // "this table is already being escorted". null/false for a table with
+  // no active intent (including every 'terisi' table, which never has
+  // one -- see that migration's get_table_occupancy_snapshot).
+  escortIntentId: string | null;
+  escortIntentExpiresAt: string | null;
+  escortIntentMine: boolean;
 };
 
 export type TableOccupancySnapshotResult =
@@ -244,6 +265,9 @@ export async function getTableOccupancySnapshotCore(
         status: r.status as "kosong" | "terisi",
         occupiedAt: (r.occupied_at as string | null) ?? null,
         occupiedSource: (r.occupied_source as string | null) ?? null,
+        escortIntentId: (r.escort_intent_id as string | null) ?? null,
+        escortIntentExpiresAt: (r.escort_intent_expires_at as string | null) ?? null,
+        escortIntentMine: Boolean(r.escort_intent_mine),
       };
     });
     return { ok: true, tables };

@@ -146,6 +146,18 @@ describe("createEscortIntentCore", () => {
       message: GENERIC_ERROR,
     });
   });
+
+  // H-04 remediation (Fase 2, 2026-09-02): a different Satgas session
+  // already holds an active intent for this table -- a real, expected
+  // outcome, not a bug, and must not fall through to UNAVAILABLE.
+  it("maps ALREADY_ESCORTED without leaking raw Postgres text", async () => {
+    const rpc = async () => ({ data: null, error: { message: "ALREADY_ESCORTED" } });
+    expect(await createEscortIntentCore(input, rpc)).toEqual({
+      ok: false,
+      code: "ALREADY_ESCORTED",
+      message: GENERIC_ERROR,
+    });
+  });
 });
 
 describe("confirmEscortIntentCore", () => {
@@ -207,12 +219,59 @@ describe("getTableOccupancySnapshotCore", () => {
     expect(result).toEqual({
       ok: true,
       tables: [
-        { tableNumber: 1, status: "kosong", occupiedAt: null, occupiedSource: null },
+        {
+          tableNumber: 1,
+          status: "kosong",
+          occupiedAt: null,
+          occupiedSource: null,
+          escortIntentId: null,
+          escortIntentExpiresAt: null,
+          escortIntentMine: false,
+        },
         {
           tableNumber: 2,
           status: "terisi",
           occupiedAt: "2026-08-30T09:00:00.000Z",
           occupiedSource: "kasir",
+          escortIntentId: null,
+          escortIntentExpiresAt: null,
+          escortIntentMine: false,
+        },
+      ],
+    });
+  });
+
+  // H-04 remediation (Fase 2, 2026-09-02): get_table_occupancy_snapshot
+  // (supabase/migrations/20260902040000_escort_intent_duplicate_guard.sql)
+  // now surfaces an active escort intent on a KOSONG row, including
+  // whether it belongs to the calling session.
+  it("normalizes a kosong row carrying an active escort intent", async () => {
+    const rpc = async () => ({
+      data: [
+        {
+          table_number: 5,
+          status: "kosong",
+          occupied_at: null,
+          occupied_source: null,
+          escort_intent_id: "intent-uuid-9",
+          escort_intent_expires_at: "2026-09-02T01:50:00.000Z",
+          escort_intent_mine: true,
+        },
+      ],
+      error: null,
+    });
+    const result = await getTableOccupancySnapshotCore(input, rpc);
+    expect(result).toEqual({
+      ok: true,
+      tables: [
+        {
+          tableNumber: 5,
+          status: "kosong",
+          occupiedAt: null,
+          occupiedSource: null,
+          escortIntentId: "intent-uuid-9",
+          escortIntentExpiresAt: "2026-09-02T01:50:00.000Z",
+          escortIntentMine: true,
         },
       ],
     });

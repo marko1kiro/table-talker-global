@@ -185,19 +185,26 @@ function SatgasRoute() {
 
   // Tables with a pending (not yet auto-cleared) escort intent render
   // KUNING instead of hijau, so Satgas can see at a glance which KOSONG
-  // tables it has already escorted. Sourced from the same waitlist/
-  // partition used for the confirm prompt -- a table leaves this set the
-  // instant it's autoCleared (became terisi) or its intent is confirmed/
-  // removed, never needing separate tracking.
-  const escortedTableNumbers = useMemo(
-    () =>
-      new Set(
-        [...partition.stillWaiting, ...partition.readyToConfirm].map(
-          (entry) => entry.tableNumber,
-        ),
-      ),
-    [partition],
-  );
+  // tables it has already escorted. Sourced from this session's own
+  // waitlist/partition (a table leaves that set the instant it's
+  // autoCleared -- became terisi -- or its intent is confirmed/removed,
+  // never needing separate tracking), *union*ed with the server-reported
+  // escort intents in `tables` (H-04 remediation, Fase 2, 2026-09-02: see
+  // supabase/migrations/20260902040000_escort_intent_duplicate_guard.sql
+  // and table-occupancy.server.ts's TableOccupancyRow.escortIntentId).
+  // That union is what makes a table another Satgas device is already
+  // escorting show up here too -- not just tables this session itself
+  // escorted -- closing the cross-device gap the sessionStorage-only
+  // version of this set had.
+  const escortedTableNumbers = useMemo(() => {
+    const fromThisSession = [...partition.stillWaiting, ...partition.readyToConfirm].map(
+      (entry) => entry.tableNumber,
+    );
+    const fromServer = tables
+      .filter((table) => table.escortIntentId !== null)
+      .map((table) => table.tableNumber);
+    return new Set([...fromThisSession, ...fromServer]);
+  }, [partition, tables]);
 
   const escortMutation = useMutation({
     mutationFn: async (tableNumber: number) => {
@@ -462,8 +469,13 @@ function TableGrid({
               key={tableNumber}
               type="button"
               aria-label={`Meja ${tableNumber}`}
-              aria-disabled={occupied || isPending}
-              disabled={occupied || isPending}
+              // H-04 remediation (Fase 2, 2026-09-02): an already-escorted
+              // table must also be a tap no-op -- previously only
+              // occupied/isPending disabled it, so tapping a KOSONG table
+              // another (or this) Satgas session had already escorted
+              // could create a duplicate escort intent client-side.
+              aria-disabled={occupied || isPending || escorted}
+              disabled={occupied || isPending || escorted}
               onClick={() => onSelectEmptyTable(tableNumber)}
               className={
                 occupied
@@ -512,8 +524,11 @@ function TableList({
               key={tableNumber}
               type="button"
               aria-label={`Meja ${tableNumber}`}
-              aria-disabled={occupied || isPending}
-              disabled={occupied || isPending}
+              // H-04 remediation (Fase 2, 2026-09-02): see the matching
+              // note in TableGrid above -- an already-escorted table must
+              // also be a tap no-op here.
+              aria-disabled={occupied || isPending || escorted}
+              disabled={occupied || isPending || escorted}
               onClick={() => onSelectEmptyTable(tableNumber)}
               className={
                 occupied

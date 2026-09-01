@@ -9,13 +9,26 @@
 // tracking.md, Task 11 breakdown): the plan text originally imagined
 // escort intents riding along in get_table_occupancy_snapshot's response,
 // but that RPC's contract (Task 6, already shipped and covered by
-// tests/table-occupancy-rpc-contract.test.ts) never included them.
-// Rather than touch that RPC, each intent's id/table/expiry is tracked
-// entirely client-side, scoped to the role_session_id that created it via
-// the storage key below -- this satisfies the spec's isolation
-// requirement for free: a different Satgas session (or the same device
-// after a fresh login creates a new role_session_id) reads a different
-// key and so can never see another session's pending intent.
+// tests/table-occupancy-rpc-contract.test.ts) didn't include them at the
+// time. Each intent's id/table/expiry is still tracked entirely
+// client-side here, scoped to the role_session_id that created it via the
+// storage key below -- this remains this session's own fast, local record
+// of what *it* is waiting to confirm, and is what drives the 10-minute
+// countdown/prompt.
+//
+// H-04 remediation (Fase 2, 2026-09-02) added exactly what this original
+// note said the RPC's contract lacked: get_table_occupancy_snapshot
+// (supabase/migrations/20260902040000_escort_intent_duplicate_guard.sql)
+// now also reports each KOSONG table's active escort intent, including
+// whether it belongs to the calling session. That server-side view is
+// additive, cross-device truth used by src/routes/satgas/index.tsx to
+// show/disable a table another Satgas session is already escorting -- it
+// does not replace this module's own waitlist, which remains the source
+// for this session's own confirm-prompt timing (this session's isolation
+// requirement below still holds unchanged: a different Satgas session, or
+// the same device after a fresh login creates a new role_session_id,
+// reads a different key and so can never see another session's *locally
+// tracked* pending intent).
 
 export type EscortWaitEntry = {
   intentId: string;
@@ -131,8 +144,12 @@ function statusFor(tables: OccupancyStatusRow[], tableNumber: number): "kosong" 
 // - autoCleared: the table is already terisi (resolved by a QR scan,
 //   Kasir, or anyone else) -- disappears with no prompt, checked first so
 //   it always wins over the window having also elapsed.
-// - readyToConfirm: still kosong, and the 30-minute window has elapsed --
-//   show the Konfirmasi prompt.
+// - readyToConfirm: still kosong, and the 10-minute window has elapsed --
+//   show the Konfirmasi prompt. (The window was 30 minutes when this was
+//   first written; shortened to 10 minutes in supabase/migrations/
+//   20260902000000_escort_intent_10_minute_window.sql -- see
+//   ESCORT_INTENT_WINDOW_MS above, which this partition function is
+//   always called with.)
 // - stillWaiting: still kosong, window not yet elapsed -- no UI shown.
 export function partitionEscortWaitlist(
   entries: EscortWaitEntry[],
