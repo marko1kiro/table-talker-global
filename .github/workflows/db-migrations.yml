@@ -1,0 +1,42 @@
+name: Database migrations replay
+
+# H-03 (audit table-talker-global, Fase 1, 2026-09-02): permanent guard
+# against migrations that only work because production already has rows a
+# migration silently assumes exist. Every PR must prove the full
+# supabase/migrations/ chain plus supabase/seed.sql applies cleanly to a
+# brand-new, empty database -- exactly what `supabase db reset` does.
+# Runs entirely against the local Supabase stack this action starts; no
+# project secrets or linked project are used or required.
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/seed.sql"
+      - "supabase/config.toml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/seed.sql"
+      - "supabase/config.toml"
+
+jobs:
+  db-reset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: supabase start
+        run: supabase start
+
+      - name: supabase db reset (replays every migration + seed.sql from empty)
+        run: supabase db reset
+
+      - name: supabase stop
+        if: always()
+        run: supabase stop
