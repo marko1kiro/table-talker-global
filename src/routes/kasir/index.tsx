@@ -5,7 +5,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LayoutGrid, List, LogOut } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,15 +15,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  OwnerNotice,
-  OwnerPage,
-  OwnerPageHeader,
-  OwnerPanel,
-  OwnerRetry,
-  ownerPrimaryButtonClass,
-  ownerSecondaryButtonClass,
-} from "@/components/OwnerUi";
+import { OwnerNotice, OwnerPage, OwnerRetry, ownerPrimaryButtonClass } from "@/components/OwnerUi";
+import { CrewHeader, CrewTableSection } from "@/components/CrewHeader";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
   browserSessionStorage,
@@ -130,96 +122,86 @@ function KasirRoute() {
   const tables = snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
 
   return (
-    <OwnerPage>
-      <OwnerPageHeader
-        eyebrow={identity.restaurantDisplayName}
-        title="Kasir"
-        description={`Login sebagai ${identity.displayName}. Tap meja KOSONG untuk menandai TERISI setelah pelanggan bayar di kasir.`}
-        action={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
-              className={ownerSecondaryButtonClass}
-            >
-              {layoutPreference === "grid" ? (
-                <List className="size-4" />
-              ) : (
-                <LayoutGrid className="size-4" />
-              )}
-              {layoutPreference === "grid" ? "Tampilan List" : "Tampilan Grid"}
-            </button>
-            <button type="button" onClick={logout} className={ownerSecondaryButtonClass}>
-              <LogOut className="size-4" />
-              Keluar
-            </button>
-          </div>
-        }
-      />
+    <div className="mx-auto w-full max-w-[1440px] sm:px-6 sm:py-2 lg:px-10 lg:py-4">
+      <OwnerPage>
+        <CrewHeader
+          role="Kasir"
+          restaurantName={identity.restaurantDisplayName}
+          userName={identity.displayName}
+          onLogout={logout}
+        />
 
-      {realtimeStatus !== "SUBSCRIBED" && (
-        <OwnerNotice role="status" tone="warning">
-          Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
-        </OwnerNotice>
-      )}
-
-      {actionError && (
-        <OwnerNotice role="alert" tone="danger">
-          {actionError}
-        </OwnerNotice>
-      )}
-
-      {snapshot.isLoading ? (
-        <OwnerPanel>
-          <p className="text-sm text-slate-500">Memuat status meja...</p>
-        </OwnerPanel>
-      ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
-        <OwnerPanel>
-          <OwnerNotice role="alert" tone="danger">
-            Status meja tidak dapat dimuat.
+        {realtimeStatus !== "SUBSCRIBED" && (
+          <OwnerNotice role="status" tone="warning">
+            Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
           </OwnerNotice>
-          <div className="mt-4">
-            <OwnerRetry onClick={() => snapshot.refetch()} />
-          </div>
-        </OwnerPanel>
-      ) : layoutPreference === "grid" ? (
-        <TableGrid
-          tables={tables}
-          onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
-        />
-      ) : (
-        <TableList
-          tables={tables}
-          onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
-        />
-      )}
+        )}
 
-      <AlertDialog
-        open={confirmTable !== null}
-        onOpenChange={(open) => {
-          if (!open) setConfirmTable(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Tandai Meja {confirmTable} Terisi?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Gunakan ini hanya untuk pelanggan yang bayar langsung di kasir tanpa scan QR.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmTable(null)}>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              className={ownerPrimaryButtonClass}
-              disabled={markOccupied.isPending}
-              onClick={() => confirmTable !== null && markOccupied.mutate(confirmTable)}
-            >
-              Ya, Tandai Terisi
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </OwnerPage>
+        {actionError && (
+          <OwnerNotice role="alert" tone="danger">
+            {actionError}
+          </OwnerNotice>
+        )}
+
+        <CrewTableSection
+          legend={[
+            { color: "emerald", label: "Kosong" },
+            { color: "red", label: "Terisi" },
+          ]}
+          layoutPreference={layoutPreference}
+          onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
+        >
+          {snapshot.isLoading ? (
+            <p className="text-sm text-slate-500">Memuat status meja...</p>
+          ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
+            <>
+              <OwnerNotice role="alert" tone="danger">
+                Status meja tidak dapat dimuat.
+              </OwnerNotice>
+              <div className="mt-4">
+                <OwnerRetry onClick={() => snapshot.refetch()} />
+              </div>
+            </>
+          ) : layoutPreference === "grid" ? (
+            <TableGrid
+              tables={tables}
+              onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
+            />
+          ) : (
+            <TableList
+              tables={tables}
+              onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
+            />
+          )}
+        </CrewTableSection>
+
+        <AlertDialog
+          open={confirmTable !== null}
+          onOpenChange={(open) => {
+            if (!open) setConfirmTable(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Tandai Meja {confirmTable} Terisi?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Gunakan ini hanya untuk pelanggan yang bayar langsung di kasir tanpa scan QR.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setConfirmTable(null)}>Batal</AlertDialogCancel>
+              <AlertDialogAction
+                className={ownerPrimaryButtonClass}
+                disabled={markOccupied.isPending}
+                onClick={() => confirmTable !== null && markOccupied.mutate(confirmTable)}
+              >
+                Ya, Tandai Terisi
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </OwnerPage>
+    </div>
   );
 }
 
@@ -231,31 +213,29 @@ function TableGrid({
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel title="Grid Meja" description="Hijau = KOSONG, Merah = TERISI.">
-      <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 lg:grid-cols-10">
-        {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
-          const status = tableStatus(tables, tableNumber);
-          const occupied = status === "terisi";
-          return (
-            <button
-              key={tableNumber}
-              type="button"
-              aria-label={`Meja ${tableNumber}`}
-              aria-disabled={occupied}
-              disabled={occupied}
-              onClick={() => onSelectEmptyTable(tableNumber)}
-              className={
-                occupied
-                  ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700"
-                  : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100"
-              }
-            >
-              {tableNumber}
-            </button>
-          );
-        })}
-      </div>
-    </OwnerPanel>
+    <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 sm:gap-2.5 md:grid-cols-10 lg:grid-cols-12 lg:gap-3 xl:grid-cols-[repeat(15,minmax(0,1fr))] 2xl:grid-cols-[repeat(18,minmax(0,1fr))]">
+      {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
+        const status = tableStatus(tables, tableNumber);
+        const occupied = status === "terisi";
+        return (
+          <button
+            key={tableNumber}
+            type="button"
+            aria-label={`Meja ${tableNumber}`}
+            aria-disabled={occupied}
+            disabled={occupied}
+            onClick={() => onSelectEmptyTable(tableNumber)}
+            className={
+              occupied
+                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 lg:text-base"
+                : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-100 hover:shadow-sm active:translate-y-0 lg:text-base"
+            }
+          >
+            {tableNumber}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -267,39 +247,37 @@ function TableList({
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel title="Daftar Meja" description="Hijau = KOSONG, Merah = TERISI.">
-      <div className="divide-y divide-slate-100">
-        {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
-          const status = tableStatus(tables, tableNumber);
-          const occupied = status === "terisi";
-          return (
-            <button
-              key={tableNumber}
-              type="button"
-              aria-label={`Meja ${tableNumber}`}
-              aria-disabled={occupied}
-              disabled={occupied}
-              onClick={() => onSelectEmptyTable(tableNumber)}
+    <div className="divide-y divide-slate-100">
+      {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
+        const status = tableStatus(tables, tableNumber);
+        const occupied = status === "terisi";
+        return (
+          <button
+            key={tableNumber}
+            type="button"
+            aria-label={`Meja ${tableNumber}`}
+            aria-disabled={occupied}
+            disabled={occupied}
+            onClick={() => onSelectEmptyTable(tableNumber)}
+            className={
+              occupied
+                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700"
+                : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition hover:bg-emerald-50"
+            }
+          >
+            <span>Meja {tableNumber}</span>
+            <span
               className={
                 occupied
-                  ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700"
-                  : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition hover:bg-emerald-50"
+                  ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
+                  : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
               }
             >
-              <span>Meja {tableNumber}</span>
-              <span
-                className={
-                  occupied
-                    ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
-                    : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
-                }
-              >
-                {occupied ? "TERISI" : "KOSONG"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </OwnerPanel>
+              {occupied ? "TERISI" : "KOSONG"}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }

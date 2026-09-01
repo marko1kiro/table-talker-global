@@ -15,7 +15,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LayoutGrid, List, LogOut } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,12 +29,10 @@ import {
   OwnerEmpty,
   OwnerNotice,
   OwnerPage,
-  OwnerPageHeader,
-  OwnerPanel,
   OwnerRetry,
   ownerPrimaryButtonClass,
-  ownerSecondaryButtonClass,
 } from "@/components/OwnerUi";
+import { CrewHeader, CrewTableSection } from "@/components/CrewHeader";
 import {
   browserSessionStorage,
   readRoleSessionIdentity,
@@ -145,30 +142,11 @@ function ClearUpRoute() {
 
   return (
     <OwnerPage>
-      <OwnerPageHeader
-        eyebrow={identity.restaurantDisplayName}
-        title="Clear Up"
-        description={`Login sebagai ${identity.displayName}. Tap meja setelah selesai dibersihkan untuk menandai KOSONG.`}
-        action={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
-              className={ownerSecondaryButtonClass}
-            >
-              {layoutPreference === "grid" ? (
-                <List className="size-4" />
-              ) : (
-                <LayoutGrid className="size-4" />
-              )}
-              {layoutPreference === "grid" ? "Tampilan List" : "Tampilan Grid"}
-            </button>
-            <button type="button" onClick={logout} className={ownerSecondaryButtonClass}>
-              <LogOut className="size-4" />
-              Keluar
-            </button>
-          </div>
-        }
+      <CrewHeader
+        role="Clear Up"
+        restaurantName={identity.restaurantDisplayName}
+        userName={identity.displayName}
+        onLogout={logout}
       />
 
       {realtimeStatus !== "SUBSCRIBED" && (
@@ -183,31 +161,33 @@ function ClearUpRoute() {
         </OwnerNotice>
       )}
 
-      {snapshot.isLoading ? (
-        <OwnerPanel>
+      <CrewTableSection
+        legend={[{ color: "red", label: "Perlu Dibersihkan" }]}
+        layoutPreference={layoutPreference}
+        onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
+      >
+        {snapshot.isLoading ? (
           <p className="text-sm text-slate-500">Memuat status meja...</p>
-        </OwnerPanel>
-      ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
-        <OwnerPanel>
-          <OwnerNotice role="alert" tone="danger">
-            Status meja tidak dapat dimuat.
-          </OwnerNotice>
-          <div className="mt-4">
-            <OwnerRetry onClick={() => snapshot.refetch()} />
-          </div>
-        </OwnerPanel>
-      ) : queue.length === 0 ? (
-        <OwnerPanel>
+        ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
+          <>
+            <OwnerNotice role="alert" tone="danger">
+              Status meja tidak dapat dimuat.
+            </OwnerNotice>
+            <div className="mt-4">
+              <OwnerRetry onClick={() => snapshot.refetch()} />
+            </div>
+          </>
+        ) : queue.length === 0 ? (
           <OwnerEmpty
             title="Tidak ada meja yang perlu dibersihkan"
             description="Semua meja saat ini KOSONG. Daftar ini otomatis muncul begitu ada meja TERISI."
           />
-        </OwnerPanel>
-      ) : layoutPreference === "grid" ? (
-        <TableGrid queue={queue} onSelectTable={(tableNumber) => setConfirmTable(tableNumber)} />
-      ) : (
-        <TableList queue={queue} onSelectTable={(tableNumber) => setConfirmTable(tableNumber)} />
-      )}
+        ) : layoutPreference === "grid" ? (
+          <TableGrid queue={queue} onSelectTable={(tableNumber) => setConfirmTable(tableNumber)} />
+        ) : (
+          <TableList queue={queue} onSelectTable={(tableNumber) => setConfirmTable(tableNumber)} />
+        )}
+      </CrewTableSection>
 
       <AlertDialog
         open={confirmTable !== null}
@@ -247,27 +227,22 @@ function TableGrid({
   onSelectTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel
-      title="Grid Meja Terisi"
-      description="Diurutkan dari yang paling lama terisi. Tap meja setelah selesai dibersihkan."
-    >
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
-        {queue.map((entry) => (
-          <button
-            key={entry.tableNumber}
-            type="button"
-            aria-label={`Meja ${entry.tableNumber}`}
-            onClick={() => onSelectTable(entry.tableNumber)}
-            className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border-2 border-red-300 bg-red-50 text-red-700 transition hover:border-red-400 hover:bg-red-100"
-          >
-            <span className="text-sm font-extrabold">{entry.tableNumber}</span>
-            <span className="text-[11px] font-bold text-red-600">
-              {formatOccupiedDuration(entry.durationMs)}
-            </span>
-          </button>
-        ))}
-      </div>
-    </OwnerPanel>
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
+      {queue.map((entry) => (
+        <button
+          key={entry.tableNumber}
+          type="button"
+          aria-label={`Meja ${entry.tableNumber}`}
+          onClick={() => onSelectTable(entry.tableNumber)}
+          className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border-2 border-red-300 bg-red-50 text-red-700 transition hover:border-red-400 hover:bg-red-100"
+        >
+          <span className="text-sm font-extrabold">{entry.tableNumber}</span>
+          <span className="text-[11px] font-bold text-red-600">
+            {formatOccupiedDuration(entry.durationMs)}
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -279,26 +254,21 @@ function TableList({
   onSelectTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel
-      title="Daftar Meja Terisi"
-      description="Diurutkan dari yang paling lama terisi. Tap meja setelah selesai dibersihkan."
-    >
-      <div className="divide-y divide-slate-100">
-        {queue.map((entry) => (
-          <button
-            key={entry.tableNumber}
-            type="button"
-            aria-label={`Meja ${entry.tableNumber}`}
-            onClick={() => onSelectTable(entry.tableNumber)}
-            className="flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition hover:bg-red-50"
-          >
-            <span>Meja {entry.tableNumber}</span>
-            <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700">
-              {formatOccupiedDuration(entry.durationMs)}
-            </span>
-          </button>
-        ))}
-      </div>
-    </OwnerPanel>
+    <div className="divide-y divide-slate-100">
+      {queue.map((entry) => (
+        <button
+          key={entry.tableNumber}
+          type="button"
+          aria-label={`Meja ${entry.tableNumber}`}
+          onClick={() => onSelectTable(entry.tableNumber)}
+          className="flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition hover:bg-red-50"
+        >
+          <span>Meja {entry.tableNumber}</span>
+          <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700">
+            {formatOccupiedDuration(entry.durationMs)}
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }
