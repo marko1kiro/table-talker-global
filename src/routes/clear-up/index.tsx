@@ -30,12 +30,12 @@ import {
   OwnerEmpty,
   OwnerNotice,
   OwnerPage,
-  OwnerPageHeader,
   OwnerPanel,
   OwnerRetry,
   ownerPrimaryButtonClass,
   ownerSecondaryButtonClass,
 } from "@/components/OwnerUi";
+import { CrewHeader } from "@/components/CrewHeader";
 import {
   browserSessionStorage,
   readRoleSessionIdentity,
@@ -145,7 +145,7 @@ function ClearUpRoute() {
 
   return (
     <OwnerPage>
-      <OwnerPageHeader
+      <CrewHeader
         eyebrow={identity.restaurantDisplayName}
         title="Clear Up"
         description={`Login sebagai ${identity.displayName}. Tap meja setelah selesai dibersihkan untuk menandai KOSONG.`}

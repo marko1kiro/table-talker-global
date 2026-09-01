@@ -75,14 +75,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1" },
-      { title: "Table Talker — Panggilan Meja Restoran" },
+      { title: "LIME — Panggilan Meja Restoran" },
       {
         name: "description",
         content:
           "Soundboard panggilan meja untuk restoran. Tap nomor meja, suara panggilan otomatis diputar.",
       },
       { name: "theme-color", content: "#f5f2e8" },
-      { property: "og:title", content: "Table Talker — Panggilan Meja Restoran" },
+      { property: "og:title", content: "LIME — Panggilan Meja Restoran" },
       {
         property: "og:description",
         content:

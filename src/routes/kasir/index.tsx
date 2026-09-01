@@ -19,12 +19,12 @@ import {
 import {
   OwnerNotice,
   OwnerPage,
-  OwnerPageHeader,
   OwnerPanel,
   OwnerRetry,
   ownerPrimaryButtonClass,
   ownerSecondaryButtonClass,
 } from "@/components/OwnerUi";
+import { CrewHeader } from "@/components/CrewHeader";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
   browserSessionStorage,
@@ -131,7 +131,7 @@ function KasirRoute() {
 
   return (
     <OwnerPage>
-      <OwnerPageHeader
+      <CrewHeader
         eyebrow={identity.restaurantDisplayName}
         title="Kasir"
         description={`Login sebagai ${identity.displayName}. Tap meja KOSONG untuk menandai TERISI setelah pelanggan bayar di kasir.`}

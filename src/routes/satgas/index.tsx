@@ -23,12 +23,12 @@ import {
 import {
   OwnerNotice,
   OwnerPage,
-  OwnerPageHeader,
   OwnerPanel,
   OwnerRetry,
   ownerPrimaryButtonClass,
   ownerSecondaryButtonClass,
 } from "@/components/OwnerUi";
+import { CrewHeader } from "@/components/CrewHeader";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
   browserSessionStorage,
@@ -244,7 +244,7 @@ function SatgasRoute() {
 
   return (
     <OwnerPage>
-      <OwnerPageHeader
+      <CrewHeader
         eyebrow={identity.restaurantDisplayName}
         title="Satgas"
         description={`Login sebagai ${identity.displayName}. Tap meja KOSONG untuk mengantar tamu, lalu konfirmasi jika sudah 10 menit.`}
