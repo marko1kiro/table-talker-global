@@ -433,10 +433,10 @@ export function RoleLoginFlow({
               </div>
 
               <h1 className="text-2xl font-black tracking-tight text-slate-900">
-                Pilih Peran
+                Pilih Station
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Pilih peran kamu untuk melanjutkan.
+                Pilih station kamu untuk melanjutkan.
               </p>
 
               <div className="mt-6 flex flex-col gap-3">
@@ -478,7 +478,7 @@ export function RoleLoginFlow({
                 onClick={backToRole}
                 className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-slate-400 transition hover:text-slate-600"
               >
-                <ArrowLeft className="size-3.5" /> Ganti Peran
+                <ArrowLeft className="size-3.5" /> Ganti Station
               </button>
 
               <div className="mb-5 flex flex-wrap items-center gap-2">
