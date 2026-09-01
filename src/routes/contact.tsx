@@ -3,6 +3,7 @@ import { Mail, MessageCircle, Clock } from "lucide-react";
 
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { useCrewLogout } from "@/hooks/use-crew-logout";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -21,9 +22,10 @@ export const Route = createFileRoute("/contact")({
 });
 
 function ContactPage() {
+  const logout = useCrewLogout();
   return (
     <div className="min-h-screen bg-background pb-10">
-      <Header readyCount={0} totalCount={0} />
+      <Header readyCount={0} totalCount={0} onLogout={logout} />
       <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <div className="brutal-border brutal-shadow-lg bg-card p-6 sm:p-10">
           <h1 className="font-display text-2xl uppercase leading-tight sm:text-4xl">Kontak</h1>

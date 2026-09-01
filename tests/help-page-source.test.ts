@@ -40,6 +40,16 @@ it("renders the shared Header and Footer for consistent navigation", () => {
   const page = source("../src/routes/help.tsx");
   expect(page).toContain('import { Header } from "@/components/Header"');
   expect(page).toContain('import { Footer } from "@/components/Footer"');
-  expect(page).toContain("<Header readyCount={0} totalCount={0} />");
   expect(page).toContain("<Footer />");
+});
+
+// H-06: this page previously rendered <Header readyCount={0} totalCount={0} />
+// without an onLogout handler at all, which violated HeaderProps' (then)
+// required `onLogout` and left the logout button calling `undefined` at
+// runtime. Fixed by wiring the generic useCrewLogout() hook in.
+it("wires a working logout handler into the shared Header instead of omitting onLogout", () => {
+  const page = source("../src/routes/help.tsx");
+  expect(page).toContain('import { useCrewLogout } from "@/hooks/use-crew-logout"');
+  expect(page).toContain("const logout = useCrewLogout();");
+  expect(page).toContain("<Header readyCount={0} totalCount={0} onLogout={logout} />");
 });

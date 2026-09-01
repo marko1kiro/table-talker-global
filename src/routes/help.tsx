@@ -6,6 +6,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useCrewLogout } from "@/hooks/use-crew-logout";
 import { buildWhatsAppHelpUrl } from "@/lib/help-message";
 
 export const Route = createFileRoute("/help")({
@@ -26,6 +27,7 @@ export const Route = createFileRoute("/help")({
 });
 
 function HelpPage() {
+  const logout = useCrewLogout();
   const [restaurantCode, setRestaurantCode] = useState("");
   const [crewName, setCrewName] = useState("");
   const [issue, setIssue] = useState("");
@@ -49,7 +51,7 @@ function HelpPage() {
 
   return (
     <div className="min-h-screen bg-background pb-10">
-      <Header readyCount={0} totalCount={0} />
+      <Header readyCount={0} totalCount={0} onLogout={logout} />
       <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
         <div className="brutal-border brutal-shadow-lg bg-card p-6 sm:p-10">
           <div className="brutal-border mb-4 inline-flex h-12 w-12 items-center justify-center bg-accent">

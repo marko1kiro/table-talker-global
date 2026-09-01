@@ -6,7 +6,15 @@ interface HeaderProps {
   totalCount: number;
   restaurantDisplayName?: string;
   userName?: string;
-  onLogout: () => void;
+  // H-06: optional -- the 6 public info pages (about, contact, faq, help,
+  // privacy-policy, terms-of-use) render this Header without an active
+  // crew/role session of their own. Previously this was required, so those
+  // callers omitted it entirely (a TypeScript contract violation the
+  // project's quality gate wasn't catching -- see M-06/M-07) and the button
+  // called `onClick={undefined}` at runtime. The button below is only
+  // rendered when a handler is actually supplied; it is never wired to a
+  // no-op so it can't silently fail to work.
+  onLogout?: () => void;
 }
 
 // SS station header. Kept neo-brutalist (unlike the plain shadcn
@@ -56,15 +64,17 @@ export function Header({
                 {userName}
               </span>
             )}
-            <button
-              type="button"
-              onClick={onLogout}
-              aria-label="Keluar"
-              title="Keluar"
-              className="brutal-border brutal-shadow-sm brutal-press flex h-11 w-11 shrink-0 items-center justify-center bg-destructive text-destructive-foreground"
-            >
-              <LogOut className="h-5 w-5" strokeWidth={3} />
-            </button>
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                aria-label="Keluar"
+                title="Keluar"
+                className="brutal-border brutal-shadow-sm brutal-press flex h-11 w-11 shrink-0 items-center justify-center bg-destructive text-destructive-foreground"
+              >
+                <LogOut className="h-5 w-5" strokeWidth={3} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -93,14 +103,16 @@ export function Header({
               {readyCount}
               <span className="opacity-60">/{totalCount}</span>
             </span>
-            <button
-              type="button"
-              onClick={onLogout}
-              aria-label="Keluar"
-              className="brutal-border brutal-press flex h-6 w-6 items-center justify-center bg-destructive text-destructive-foreground"
-            >
-              <LogOut className="h-4 w-4" strokeWidth={3} />
-            </button>
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                aria-label="Keluar"
+                className="brutal-border brutal-press flex h-6 w-6 items-center justify-center bg-destructive text-destructive-foreground"
+              >
+                <LogOut className="h-4 w-4" strokeWidth={3} />
+              </button>
+            )}
           </div>
         </div>
       </div>
