@@ -28,6 +28,12 @@ it("provisions a plain-text code through service-role RPC without printing it", 
 
 it("accepts one piped code line without printing it", () => {
   const code = "PILOT77";
+  // Deliberately unset the server credentials the script needs, even if the
+  // process running this test (e.g. a Vercel build) has real ones exported —
+  // this test exercises the "missing config" failure path, not live provisioning.
+  const env = { ...process.env };
+  delete env.SUPABASE_URL;
+  delete env.SUPABASE_SERVICE_ROLE_KEY;
   const result = spawnSync(
     process.execPath,
     [
@@ -36,7 +42,7 @@ it("accepts one piped code line without printing it", () => {
       "00000000-0000-4000-8000-000000000001",
       "--code-stdin",
     ],
-    { cwd: new URL("..", import.meta.url), encoding: "utf8", input: `${code}\r\n` },
+    { cwd: new URL("..", import.meta.url), encoding: "utf8", input: `${code}\r\n`, env },
   );
 
   expect(result.status).toBe(1);
