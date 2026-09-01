@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -183,16 +184,24 @@ function ClearUpRoute() {
             description="Semua meja saat ini KOSONG. Daftar ini otomatis muncul begitu ada meja TERISI."
           />
         ) : layoutPreference === "grid" ? (
-          <TableGrid queue={queue} onSelectTable={(tableNumber) => setConfirmTable(tableNumber)} />
+          <TableGrid
+            queue={queue}
+            pendingTable={markEmpty.isPending ? confirmTable : null}
+            onSelectTable={(tableNumber) => setConfirmTable(tableNumber)}
+          />
         ) : (
-          <TableList queue={queue} onSelectTable={(tableNumber) => setConfirmTable(tableNumber)} />
+          <TableList
+            queue={queue}
+            pendingTable={markEmpty.isPending ? confirmTable : null}
+            onSelectTable={(tableNumber) => setConfirmTable(tableNumber)}
+          />
         )}
       </CrewTableSection>
 
       <AlertDialog
         open={confirmTable !== null}
         onOpenChange={(open) => {
-          if (!open) setConfirmTable(null);
+          if (!open && !markEmpty.isPending) setConfirmTable(null);
         }}
       >
         <AlertDialogContent>
@@ -204,13 +213,22 @@ function ClearUpRoute() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmTable(null)}>Batal</AlertDialogCancel>
+            <AlertDialogCancel disabled={markEmpty.isPending} onClick={() => setConfirmTable(null)}>
+              Batal
+            </AlertDialogCancel>
             <AlertDialogAction
               className={ownerPrimaryButtonClass}
               disabled={markEmpty.isPending}
               onClick={() => confirmTable !== null && markEmpty.mutate(confirmTable)}
             >
-              Ya, Tandai Kosong
+              {markEmpty.isPending ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  Memproses...
+                </span>
+              ) : (
+                "Ya, Tandai Kosong"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -221,54 +239,86 @@ function ClearUpRoute() {
 
 function TableGrid({
   queue,
+  pendingTable,
   onSelectTable,
 }: {
   queue: OccupiedTableEntry[];
+  pendingTable: number | null;
   onSelectTable: (tableNumber: number) => void;
 }) {
   return (
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
-      {queue.map((entry) => (
-        <button
-          key={entry.tableNumber}
-          type="button"
-          aria-label={`Meja ${entry.tableNumber}`}
-          onClick={() => onSelectTable(entry.tableNumber)}
-          className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border-2 border-red-300 bg-red-50 text-red-700 transition hover:border-red-400 hover:bg-red-100"
-        >
-          <span className="text-sm font-extrabold">{entry.tableNumber}</span>
-          <span className="text-[11px] font-bold text-red-600">
-            {formatOccupiedDuration(entry.durationMs)}
-          </span>
-        </button>
-      ))}
+      {queue.map((entry) => {
+        const isPending = pendingTable === entry.tableNumber;
+        return (
+          <button
+            key={entry.tableNumber}
+            type="button"
+            aria-label={`Meja ${entry.tableNumber}`}
+            aria-disabled={isPending}
+            disabled={isPending}
+            onClick={() => onSelectTable(entry.tableNumber)}
+            className={
+              isPending
+                ? "flex aspect-square cursor-wait flex-col items-center justify-center gap-1 rounded-xl border-2 border-red-300 bg-red-50 text-red-700 transition-colors duration-300"
+                : "flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border-2 border-red-300 bg-red-50 text-red-700 transition-colors duration-300 hover:border-red-400 hover:bg-red-100"
+            }
+          >
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <>
+                <span className="text-sm font-extrabold">{entry.tableNumber}</span>
+                <span className="text-[11px] font-bold text-red-600">
+                  {formatOccupiedDuration(entry.durationMs)}
+                </span>
+              </>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 function TableList({
   queue,
+  pendingTable,
   onSelectTable,
 }: {
   queue: OccupiedTableEntry[];
+  pendingTable: number | null;
   onSelectTable: (tableNumber: number) => void;
 }) {
   return (
     <div className="divide-y divide-slate-100">
-      {queue.map((entry) => (
-        <button
-          key={entry.tableNumber}
-          type="button"
-          aria-label={`Meja ${entry.tableNumber}`}
-          onClick={() => onSelectTable(entry.tableNumber)}
-          className="flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition hover:bg-red-50"
-        >
-          <span>Meja {entry.tableNumber}</span>
-          <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700">
-            {formatOccupiedDuration(entry.durationMs)}
-          </span>
-        </button>
-      ))}
+      {queue.map((entry) => {
+        const isPending = pendingTable === entry.tableNumber;
+        return (
+          <button
+            key={entry.tableNumber}
+            type="button"
+            aria-label={`Meja ${entry.tableNumber}`}
+            aria-disabled={isPending}
+            disabled={isPending}
+            onClick={() => onSelectTable(entry.tableNumber)}
+            className={
+              isPending
+                ? "flex w-full cursor-wait items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300"
+                : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300 hover:bg-red-50"
+            }
+          >
+            <span>Meja {entry.tableNumber}</span>
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin text-red-700" />
+            ) : (
+              <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700">
+                {formatOccupiedDuration(entry.durationMs)}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

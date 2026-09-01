@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -150,6 +151,7 @@ function KasirRoute() {
           ]}
           layoutPreference={layoutPreference}
           onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
+          desktopHint="Tap nomor meja untuk mengubah status dari KOSONG (Hijau) menjadi TERISI (Merah)."
         >
           {snapshot.isLoading ? (
             <p className="text-sm text-slate-500">Memuat status meja...</p>
@@ -165,11 +167,13 @@ function KasirRoute() {
           ) : layoutPreference === "grid" ? (
             <TableGrid
               tables={tables}
+              pendingTable={markOccupied.isPending ? confirmTable : null}
               onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
             />
           ) : (
             <TableList
               tables={tables}
+              pendingTable={markOccupied.isPending ? confirmTable : null}
               onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
             />
           )}
@@ -178,7 +182,7 @@ function KasirRoute() {
         <AlertDialog
           open={confirmTable !== null}
           onOpenChange={(open) => {
-            if (!open) setConfirmTable(null);
+            if (!open && !markOccupied.isPending) setConfirmTable(null);
           }}
         >
           <AlertDialogContent>
@@ -189,13 +193,25 @@ function KasirRoute() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setConfirmTable(null)}>Batal</AlertDialogCancel>
+              <AlertDialogCancel
+                disabled={markOccupied.isPending}
+                onClick={() => setConfirmTable(null)}
+              >
+                Batal
+              </AlertDialogCancel>
               <AlertDialogAction
                 className={ownerPrimaryButtonClass}
                 disabled={markOccupied.isPending}
                 onClick={() => confirmTable !== null && markOccupied.mutate(confirmTable)}
               >
-                Ya, Tandai Terisi
+                {markOccupied.isPending ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    Memproses...
+                  </span>
+                ) : (
+                  "Ya, Tandai Terisi"
+                )}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -207,9 +223,11 @@ function KasirRoute() {
 
 function TableGrid({
   tables,
+  pendingTable,
   onSelectEmptyTable,
 }: {
   tables: TableOccupancyRow[];
+  pendingTable: number | null;
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
@@ -217,21 +235,24 @@ function TableGrid({
       {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
         const status = tableStatus(tables, tableNumber);
         const occupied = status === "terisi";
+        const isPending = pendingTable === tableNumber;
         return (
           <button
             key={tableNumber}
             type="button"
             aria-label={`Meja ${tableNumber}`}
-            aria-disabled={occupied}
-            disabled={occupied}
+            aria-disabled={occupied || isPending}
+            disabled={occupied || isPending}
             onClick={() => onSelectEmptyTable(tableNumber)}
             className={
               occupied
-                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 lg:text-base"
-                : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-100 hover:shadow-sm active:translate-y-0 lg:text-base"
+                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 transition-colors duration-300 lg:text-base"
+                : isPending
+                  ? "flex aspect-square cursor-wait items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 lg:text-base"
+                  : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-100 hover:shadow-sm active:translate-y-0 lg:text-base"
             }
           >
-            {tableNumber}
+            {isPending ? <Loader2 className="size-4 animate-spin" /> : tableNumber}
           </button>
         );
       })}
@@ -241,9 +262,11 @@ function TableGrid({
 
 function TableList({
   tables,
+  pendingTable,
   onSelectEmptyTable,
 }: {
   tables: TableOccupancyRow[];
+  pendingTable: number | null;
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
@@ -251,30 +274,37 @@ function TableList({
       {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
         const status = tableStatus(tables, tableNumber);
         const occupied = status === "terisi";
+        const isPending = pendingTable === tableNumber;
         return (
           <button
             key={tableNumber}
             type="button"
             aria-label={`Meja ${tableNumber}`}
-            aria-disabled={occupied}
-            disabled={occupied}
+            aria-disabled={occupied || isPending}
+            disabled={occupied || isPending}
             onClick={() => onSelectEmptyTable(tableNumber)}
             className={
               occupied
-                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700"
-                : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition hover:bg-emerald-50"
+                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300"
+                : isPending
+                  ? "flex w-full cursor-wait items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300"
+                  : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 hover:bg-emerald-50"
             }
           >
             <span>Meja {tableNumber}</span>
-            <span
-              className={
-                occupied
-                  ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
-                  : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
-              }
-            >
-              {occupied ? "TERISI" : "KOSONG"}
-            </span>
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin text-emerald-700" />
+            ) : (
+              <span
+                className={
+                  occupied
+                    ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
+                    : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
+                }
+              >
+                {occupied ? "TERISI" : "KOSONG"}
+              </span>
+            )}
           </button>
         );
       })}

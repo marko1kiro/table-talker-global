@@ -50,7 +50,7 @@ export function CrewHeader({
             onClick={onLogout}
             aria-label="Keluar"
             title="Keluar"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full border border-red-600 bg-red-600 text-white transition hover:border-red-700 hover:bg-red-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100"
           >
             <LogOut className="size-4" />
           </button>
@@ -72,20 +72,31 @@ export function CrewTableSection({
   legend,
   layoutPreference,
   onToggleLayout,
+  desktopHint,
   children,
 }: {
   legend: { color: "emerald" | "amber" | "red"; label: string }[];
   layoutPreference: "grid" | "list";
   onToggleLayout: () => void;
+  // Optional explanatory text rendered next to the title, desktop only
+  // (hidden below the `lg` breakpoint). Currently only used by Kasir.
+  desktopHint?: string;
   children: ReactNode;
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-extrabold uppercase tracking-wide text-slate-900 sm:text-lg">
-            Daftar Nomor Meja
-          </h2>
+          <div className="flex min-w-0 items-baseline gap-3">
+            <h2 className="shrink-0 text-base font-extrabold uppercase tracking-wide text-slate-900 sm:text-lg">
+              Daftar Nomor Meja
+            </h2>
+            {desktopHint && (
+              <span className="hidden truncate text-xs font-medium normal-case tracking-normal text-slate-500 lg:inline">
+                {desktopHint}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={onToggleLayout}

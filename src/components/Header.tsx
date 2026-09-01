@@ -61,7 +61,7 @@ export function Header({
               onClick={onLogout}
               aria-label="Keluar"
               title="Keluar"
-              className="brutal-border brutal-shadow-sm brutal-press flex h-11 w-11 shrink-0 items-center justify-center bg-card text-destructive"
+              className="brutal-border brutal-shadow-sm brutal-press flex h-11 w-11 shrink-0 items-center justify-center bg-destructive text-destructive-foreground"
             >
               <LogOut className="h-5 w-5" strokeWidth={3} />
             </button>
@@ -97,7 +97,7 @@ export function Header({
               type="button"
               onClick={onLogout}
               aria-label="Keluar"
-              className="brutal-press flex h-6 w-6 items-center justify-center text-destructive"
+              className="brutal-border brutal-press flex h-6 w-6 items-center justify-center bg-destructive text-destructive-foreground"
             >
               <LogOut className="h-4 w-4" strokeWidth={3} />
             </button>
