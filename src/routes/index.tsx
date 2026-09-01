@@ -190,6 +190,27 @@ function SoundboardPage() {
     setAccessError("Audio diblokir karena sesi resto tidak valid.");
   }, []);
 
+  // Manual sign-out, distinct from invalidateCrewSession above: no error
+  // banner, just a clean return to RoleLoginFlow, mirroring the logout
+  // Kasir/Satgas/Clear Up already have.
+  const logout = useCallback(() => {
+    playbackGenerationRef.current.next();
+    audioControllerRef.current?.stop();
+    activeAudioIdRef.current = null;
+    setPlaying(null);
+    setPaused(null);
+    setLoading(null);
+    audioUrlPoolRef.current?.clear();
+    audioUrlPoolRef.current = null;
+    validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
+    accessValidationPromiseRef.current = null;
+    removeCrewSessionIdentity(browserSessionStorage());
+    void clearQueuedEvents();
+    setCrewIdentity(null);
+    setAudioSynced(false);
+    setAvailableAudioIds(new Set());
+  }, []);
+
   const validateCrewAccessInBackground = useCallback(() => {
     const identity = crewIdentityRef.current;
     if (!identity?.crewSessionId || !identity.crewSessionToken) return;
@@ -417,6 +438,8 @@ function SoundboardPage() {
         readyCount={availableAudioIds.size}
         totalCount={TABLE_COUNT}
         restaurantDisplayName={crewIdentity?.restaurantDisplayName}
+        userName={crewIdentity?.displayName}
+        onLogout={logout}
       />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">

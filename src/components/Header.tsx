@@ -1,50 +1,77 @@
 import { Link } from "@tanstack/react-router";
-import { LifeBuoy, Volume2 } from "lucide-react";
+import { LifeBuoy, LogOut } from "lucide-react";
 
 interface HeaderProps {
   readyCount: number;
   totalCount: number;
   restaurantDisplayName?: string;
+  userName?: string;
+  onLogout: () => void;
 }
 
-export function Header({ readyCount, totalCount, restaurantDisplayName }: HeaderProps) {
-  const restoLabel = restaurantDisplayName?.trim() || "Table Talker";
+// SS station header. Kept neo-brutalist (unlike the plain shadcn
+// CrewHeader used by Kasir/Satgas/Clear Up) but restructured so the top
+// area is uniform with the other crew dashboards: logo + role badge on
+// the left, sign-out on the right, then resto name and logged-in user
+// name each on their own line. The Soundboard grid/table-number style
+// below this header is untouched.
+export function Header({
+  readyCount,
+  totalCount,
+  restaurantDisplayName,
+  userName,
+  onLogout,
+}: HeaderProps) {
+  const restoLabel = restaurantDisplayName?.trim() || "Restoran";
   return (
     <header className="sticky top-0 z-40 border-b-[3px] border-foreground bg-brutal-bg">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-        <Link to="/" className="group flex items-center gap-2.5">
-          <div className="brutal-border brutal-shadow-sm relative flex h-11 w-11 items-center justify-center bg-accent transition-transform group-hover:-rotate-6">
-            <Volume2 className="h-5 w-5" strokeWidth={3} />
-            <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-foreground bg-destructive" />
-          </div>
-          <div className="leading-none">
-            <div className="font-display text-lg uppercase tracking-tight sm:text-xl">
-              <span className="bg-foreground px-1.5 py-0.5 text-primary-foreground">Table</span>
-              <span className="ml-1 bg-accent px-1.5 py-0.5 text-accent-foreground [text-shadow:2px_2px_0_var(--brutal-fg)]">
-                Talker
-              </span>
+      <div className="mx-auto max-w-6xl px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <Link to="/" className="group flex min-w-0 items-center gap-2.5">
+            <div className="brutal-border brutal-shadow-sm flex h-11 w-11 shrink-0 items-center justify-center bg-card p-1.5 transition-transform group-hover:-rotate-6">
+              <img src="/lime-logo.webp" alt="LIME" className="h-full w-full object-contain" />
             </div>
-            <div className="mt-1 inline-block max-w-[220px] truncate border-2 border-foreground bg-card px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider">
-              <span className="text-destructive">◆</span> {restoLabel}
-            </div>
-          </div>
-        </Link>
-
-        <div className="flex items-center gap-2">
-          <Link
-            to="/help"
-            aria-label="Butuh bantuan?"
-            className="brutal-border brutal-shadow-sm brutal-press hidden h-11 w-11 items-center justify-center bg-card sm:flex"
-          >
-            <LifeBuoy className="h-5 w-5" strokeWidth={3} />
+            <span className="brutal-border shrink-0 bg-foreground px-2 py-1 text-[10px] font-black uppercase tracking-wider text-primary-foreground">
+              SS
+            </span>
           </Link>
-          <div className="brutal-border hidden bg-card px-3 py-1.5 sm:block">
-            <div className="text-[9px] font-bold uppercase text-muted-foreground">Siap</div>
-            <div className="font-display text-sm leading-none">
-              {readyCount}
-              <span className="text-muted-foreground">/{totalCount}</span>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="brutal-border hidden bg-card px-3 py-1.5 sm:block">
+              <div className="text-[9px] font-bold uppercase text-muted-foreground">Siap</div>
+              <div className="font-display text-sm leading-none">
+                {readyCount}
+                <span className="text-muted-foreground">/{totalCount}</span>
+              </div>
             </div>
+            <Link
+              to="/help"
+              aria-label="Butuh bantuan?"
+              className="brutal-border brutal-shadow-sm brutal-press hidden h-11 w-11 items-center justify-center bg-card sm:flex"
+            >
+              <LifeBuoy className="h-5 w-5" strokeWidth={3} />
+            </Link>
+            <button
+              type="button"
+              onClick={onLogout}
+              aria-label="Keluar"
+              title="Keluar"
+              className="brutal-border brutal-shadow-sm brutal-press flex h-11 w-11 items-center justify-center bg-card text-destructive"
+            >
+              <LogOut className="h-5 w-5" strokeWidth={3} />
+            </button>
           </div>
+        </div>
+
+        <div className="mt-2 flex flex-col items-start gap-1.5">
+          <div className="inline-block max-w-full truncate border-2 border-foreground bg-card px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider">
+            <span className="text-destructive">◆</span> {restoLabel}
+          </div>
+          {userName && (
+            <div className="inline-block max-w-full truncate border-2 border-foreground bg-accent px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-accent-foreground">
+              {userName}
+            </div>
+          )}
         </div>
       </div>
       <div className="border-t-[3px] border-foreground bg-accent px-4 py-1.5 sm:hidden">
@@ -61,10 +88,20 @@ export function Header({ readyCount, totalCount, restaurantDisplayName }: Header
               Jika kamu butuh bantuan atau ada Error
             </span>
           </Link>
-          <span className="font-display shrink-0 text-sm">
-            {readyCount}
-            <span className="opacity-60">/{totalCount}</span>
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="font-display text-sm">
+              {readyCount}
+              <span className="opacity-60">/{totalCount}</span>
+            </span>
+            <button
+              type="button"
+              onClick={onLogout}
+              aria-label="Keluar"
+              className="brutal-press flex h-6 w-6 items-center justify-center text-destructive"
+            >
+              <LogOut className="h-4 w-4" strokeWidth={3} />
+            </button>
+          </div>
         </div>
       </div>
     </header>

@@ -15,7 +15,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LayoutGrid, List, LogOut } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +32,6 @@ import {
   OwnerPanel,
   OwnerRetry,
   ownerPrimaryButtonClass,
-  ownerSecondaryButtonClass,
 } from "@/components/OwnerUi";
 import { CrewHeader } from "@/components/CrewHeader";
 import {
@@ -146,29 +144,15 @@ function ClearUpRoute() {
   return (
     <OwnerPage>
       <CrewHeader
-        eyebrow={identity.restaurantDisplayName}
-        title="Clear Up"
-        description={`Login sebagai ${identity.displayName}. Tap meja setelah selesai dibersihkan untuk menandai KOSONG.`}
-        action={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
-              className={ownerSecondaryButtonClass}
-            >
-              {layoutPreference === "grid" ? (
-                <List className="size-4" />
-              ) : (
-                <LayoutGrid className="size-4" />
-              )}
-              {layoutPreference === "grid" ? "Tampilan List" : "Tampilan Grid"}
-            </button>
-            <button type="button" onClick={logout} className={ownerSecondaryButtonClass}>
-              <LogOut className="size-4" />
-              Keluar
-            </button>
-          </div>
-        }
+        role="Clear Up"
+        restaurantName={identity.restaurantDisplayName}
+        userName={identity.displayName}
+        onLogout={logout}
+        sectionTitle="Meja Terisi"
+        hint="Diurutkan dari yang paling lama terisi. Tap meja setelah selesai dibersihkan."
+        legend={[{ color: "red", label: "Perlu Dibersihkan" }]}
+        layoutPreference={layoutPreference}
+        onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
       />
 
       {realtimeStatus !== "SUBSCRIBED" && (
@@ -247,10 +231,7 @@ function TableGrid({
   onSelectTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel
-      title="Grid Meja Terisi"
-      description="Diurutkan dari yang paling lama terisi. Tap meja setelah selesai dibersihkan."
-    >
+    <OwnerPanel>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
         {queue.map((entry) => (
           <button
@@ -279,10 +260,7 @@ function TableList({
   onSelectTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel
-      title="Daftar Meja Terisi"
-      description="Diurutkan dari yang paling lama terisi. Tap meja setelah selesai dibersihkan."
-    >
+    <OwnerPanel>
       <div className="divide-y divide-slate-100">
         {queue.map((entry) => (
           <button

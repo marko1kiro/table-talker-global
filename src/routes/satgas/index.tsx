@@ -9,7 +9,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LayoutGrid, List, LogOut } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +25,6 @@ import {
   OwnerPanel,
   OwnerRetry,
   ownerPrimaryButtonClass,
-  ownerSecondaryButtonClass,
 } from "@/components/OwnerUi";
 import { CrewHeader } from "@/components/CrewHeader";
 import { TABLE_COUNT } from "@/lib/audio";
@@ -245,29 +243,19 @@ function SatgasRoute() {
   return (
     <OwnerPage>
       <CrewHeader
-        eyebrow={identity.restaurantDisplayName}
-        title="Satgas"
-        description={`Login sebagai ${identity.displayName}. Tap meja KOSONG untuk mengantar tamu, lalu konfirmasi jika sudah 10 menit.`}
-        action={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
-              className={ownerSecondaryButtonClass}
-            >
-              {layoutPreference === "grid" ? (
-                <List className="size-4" />
-              ) : (
-                <LayoutGrid className="size-4" />
-              )}
-              {layoutPreference === "grid" ? "Tampilan List" : "Tampilan Grid"}
-            </button>
-            <button type="button" onClick={logout} className={ownerSecondaryButtonClass}>
-              <LogOut className="size-4" />
-              Keluar
-            </button>
-          </div>
-        }
+        role="Satgas"
+        restaurantName={identity.restaurantDisplayName}
+        userName={identity.displayName}
+        onLogout={logout}
+        sectionTitle="Meja"
+        hint="Tap meja KOSONG untuk mengantar tamu, lalu konfirmasi jika sudah 10 menit."
+        legend={[
+          { color: "emerald", label: "Kosong" },
+          { color: "amber", label: "Sudah Di-escort" },
+          { color: "red", label: "Terisi" },
+        ]}
+        layoutPreference={layoutPreference}
+        onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
       />
 
       {realtimeStatus !== "SUBSCRIBED" && (
@@ -375,10 +363,7 @@ function TableGrid({
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel
-      title="Grid Meja"
-      description="Hijau = KOSONG, Kuning = Sudah Di-escort, Merah = TERISI. Tap meja kosong untuk Escort."
-    >
+    <OwnerPanel>
       <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 lg:grid-cols-10">
         {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
           const status = tableStatus(tables, tableNumber);
@@ -419,10 +404,7 @@ function TableList({
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel
-      title="Daftar Meja"
-      description="Hijau = KOSONG, Kuning = Sudah Di-escort, Merah = TERISI. Tap meja kosong untuk Escort."
-    >
+    <OwnerPanel>
       <div className="divide-y divide-slate-100">
         {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
           const status = tableStatus(tables, tableNumber);
