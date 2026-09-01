@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  KeyRound,
   Loader2,
   Lock,
   ShieldCheck,
@@ -14,7 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { loginToRestaurant } from "@/lib/restaurants.server";
+import { loginToRestaurant, verifyRestaurantPin } from "@/lib/restaurants.server";
 import { normalizeCrewName } from "@/lib/remote-audio-domain";
 import {
   CREW_ROLE_LABELS,
@@ -41,9 +42,12 @@ import type {
 // the SS dashboard ONLY once an identity exists, so nothing from any
 // role's dashboard is visible before login completes.
 //
-// Sequence: Kode Resto -> Pilih Role (vertical list, resto name shown as
-// a confirmation badge -- replaces the old separate "Konfirmasi Resto"
-// yes/no dialog) -> Nama & Jam Kerja -> claim_role_session -> hand off.
+// Sequence: Kode Resto -> ID Resto (PIN, 4 digit, admin-issued -- added
+// 2026-09-01 so a crew member who only knows/guesses a Kode Resto can't
+// get into another restaurant's dashboard) -> Pilih Role (vertical list,
+// resto name shown as a confirmation badge -- replaces the old separate
+// "Konfirmasi Resto" yes/no dialog) -> Nama & Jam Kerja -> claim_role_session
+// -> hand off.
 //
 // Theme: plain shadcn UI (white + blue/cyan + magenta gradient accents),
 // intentionally NOT neo-brutalist -- this screen is shared by all 4
@@ -55,7 +59,7 @@ import type {
 // signInAnonymously() here only satisfies claim_role_session's
 // `auth.uid() is not null` check and runs for all 4 roles.
 
-type Step = "code" | "role" | "identity";
+type Step = "code" | "pin" | "role" | "identity";
 
 type LoginResult = {
   restaurantId: string;
@@ -87,7 +91,11 @@ const ROLE_META: Record<
   },
 };
 
-const STEP_ORDER: Step[] = ["code", "role", "identity"];
+const STEP_ORDER: Step[] = ["code", "pin", "role", "identity"];
+
+function onlyDigits(value: string, maxLength: number) {
+  return value.replace(/\D/g, "").slice(0, maxLength);
+}
 
 export function RoleLoginFlow({
   onSsContinue,
@@ -98,6 +106,9 @@ export function RoleLoginFlow({
   const [codeError, setCodeError] = useState("");
   const [submittingCode, setSubmittingCode] = useState(false);
   const [login, setLogin] = useState<LoginResult | null>(null);
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [submittingPin, setSubmittingPin] = useState(false);
   const [role, setRole] = useState<CrewRole | null>(null);
   const [name, setName] = useState("");
   const [checkedInAt, setCheckedInAt] = useState("");
@@ -108,6 +119,18 @@ export function RoleLoginFlow({
     setStep("code");
     setCodeError("");
     setLogin(null);
+    setPin("");
+    setPinError("");
+    setRole(null);
+    setName("");
+    setCheckedInAt("");
+    setIdentityError("");
+  };
+
+  const backToPin = () => {
+    setStep("pin");
+    setPin("");
+    setPinError("");
     setRole(null);
     setName("");
     setCheckedInAt("");
@@ -138,11 +161,34 @@ export function RoleLoginFlow({
         displayName: result.displayName,
         tenantToken: result.tenantToken,
       });
-      setStep("role");
+      setPin("");
+      setPinError("");
+      setStep("pin");
     } catch {
       setCodeError("Kode Resto salah.");
     }
     setSubmittingCode(false);
+  };
+
+  const submitPin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!login) return;
+    setSubmittingPin(true);
+    setPinError("");
+    try {
+      const result = await verifyRestaurantPin({
+        data: { tenantToken: login.tenantToken, pin },
+      });
+      if ("error" in result) {
+        setPinError(result.error as string);
+        setSubmittingPin(false);
+        return;
+      }
+      setStep("role");
+    } catch {
+      setPinError("ID Resto salah.");
+    }
+    setSubmittingPin(false);
   };
 
   const submitIdentity = async (event: FormEvent<HTMLFormElement>) => {
@@ -299,7 +345,7 @@ export function RoleLoginFlow({
             </>
           )}
 
-          {step === "role" && login && (
+          {step === "pin" && login && (
             <>
               <button
                 type="button"
@@ -307,6 +353,76 @@ export function RoleLoginFlow({
                 className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-slate-400 transition hover:text-slate-600"
               >
                 <ArrowLeft className="size-3.5" /> Ganti Kode Resto
+              </button>
+
+              <div className="mb-5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-gradient-to-r from-sky-50 to-fuchsia-50 px-3 py-1.5 ring-1 ring-inset ring-cyan-100">
+                <CheckCircle2 className="size-4 shrink-0 text-cyan-600" />
+                <span className="truncate text-sm font-extrabold text-slate-800">
+                  {login.displayName}
+                </span>
+              </div>
+
+              <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-lg shadow-cyan-500/20">
+                <KeyRound className="size-6" />
+              </div>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">
+                ID Resto
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Masukkan ID Resto (4 digit) yang diberikan admin untuk resto
+                ini.
+              </p>
+              <form className="mt-6 space-y-4" onSubmit={submitPin}>
+                <label
+                  className="block text-sm font-bold text-slate-700"
+                  htmlFor="restaurant-pin"
+                >
+                  ID Resto
+                </label>
+                <Input
+                  id="restaurant-pin"
+                  value={pin}
+                  onChange={(event) =>
+                    setPin(onlyDigits(event.target.value, 4))
+                  }
+                  placeholder="0000"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={4}
+                  required
+                  autoFocus
+                  className="h-12 rounded-xl border-slate-200 text-center text-lg font-black tracking-[0.4em] focus-visible:border-cyan-400 focus-visible:ring-cyan-500/20"
+                />
+                {pinError && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
+                  >
+                    {pinError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={submittingPin || pin.length !== 4}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 via-cyan-500 to-fuchsia-500 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg shadow-cyan-500/25 transition hover:opacity-90 disabled:opacity-60"
+                >
+                  {submittingPin && (
+                    <Loader2 className="size-4 animate-spin" />
+                  )}
+                  {submittingPin ? "Memeriksa..." : "Lanjutkan"}
+                </button>
+              </form>
+            </>
+          )}
+
+          {step === "role" && login && (
+            <>
+              <button
+                type="button"
+                onClick={backToPin}
+                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-slate-400 transition hover:text-slate-600"
+              >
+                <ArrowLeft className="size-3.5" /> Ganti ID Resto
               </button>
 
               <div className="mb-5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-gradient-to-r from-sky-50 to-fuchsia-50 px-3 py-1.5 ring-1 ring-inset ring-cyan-100">

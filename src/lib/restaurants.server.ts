@@ -14,6 +14,8 @@ export type ManifestItem = {
 };
 
 const CODE_ERROR = "Kode Resto salah.";
+const PIN_ERROR = "ID Resto salah.";
+const PIN_PATTERN = /^[0-9]{4}$/;
 
 function offline() {
   return { offline: true as const, message: "Realtime offline" };
@@ -52,6 +54,37 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
       };
     } catch {
       return { error: CODE_ERROR };
+    }
+  });
+
+// Second factor after Kode Resto: an admin-issued 4-digit PIN unique per
+// restaurant ("ID Resto"), added so a crew member who only knows/guesses a
+// Kode Resto (which is not treated as a secret -- see restaurant-code.server.ts)
+// cannot get into another restaurant's dashboard. Checked server-side against
+// restaurants.pin, scoped to the restaurant already resolved by tenantToken
+// (verifyActiveTenantSession), so this can never be used to probe other
+// restaurants' PINs by supplying a different restaurantId.
+export const verifyRestaurantPin = createServerFn({ method: "POST" })
+  .validator(z.object({ tenantToken: z.string(), pin: z.string() }))
+  .handler(async ({ data }) => {
+    const client = getServiceClient();
+    if (!client) return { error: PIN_ERROR };
+    if (!PIN_PATTERN.test(data.pin)) return { error: PIN_ERROR };
+
+    try {
+      const { verifyActiveTenantSession } = await serverCredentialModules();
+      const tenant = await verifyActiveTenantSession(client, data.tenantToken);
+      if (!tenant) return { error: "Sesi resto tidak valid. Ulangi dari Kode Resto." };
+
+      const { data: restaurant, error } = await client
+        .from("restaurants")
+        .select("pin")
+        .eq("id", tenant.restaurantId)
+        .single();
+      if (error || !restaurant || restaurant.pin !== data.pin) return { error: PIN_ERROR };
+      return { ok: true as const };
+    } catch {
+      return { error: PIN_ERROR };
     }
   });
 
