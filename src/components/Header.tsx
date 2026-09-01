@@ -36,13 +36,7 @@ export function Header({
             </span>
           </Link>
 
-          {userName && (
-            <span className="min-w-0 flex-1 truncate text-center text-[11px] font-black uppercase tracking-wider">
-              {userName}
-            </span>
-          )}
-
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex min-w-0 shrink-0 items-center gap-2">
             <div className="brutal-border hidden bg-card px-3 py-1.5 sm:block">
               <div className="text-[9px] font-bold uppercase text-muted-foreground">Siap</div>
               <div className="font-display text-sm leading-none">
@@ -57,12 +51,17 @@ export function Header({
             >
               <LifeBuoy className="h-5 w-5" strokeWidth={3} />
             </Link>
+            {userName && (
+              <span className="max-w-[6rem] truncate text-[10px] font-black uppercase tracking-wider sm:max-w-[10rem] sm:text-[11px]">
+                {userName}
+              </span>
+            )}
             <button
               type="button"
               onClick={onLogout}
               aria-label="Keluar"
               title="Keluar"
-              className="brutal-border brutal-shadow-sm brutal-press flex h-11 w-11 items-center justify-center bg-card text-destructive"
+              className="brutal-border brutal-shadow-sm brutal-press flex h-11 w-11 shrink-0 items-center justify-center bg-card text-destructive"
             >
               <LogOut className="h-5 w-5" strokeWidth={3} />
             </button>
