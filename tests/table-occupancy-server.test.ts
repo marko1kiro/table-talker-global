@@ -195,29 +195,33 @@ describe("confirmEscortIntentCore", () => {
 describe("getTableOccupancySnapshotCore", () => {
   const input = { restaurantId: RESTAURANT_ID, sessionToken: "role-session-token" };
 
-  it("normalizes all 100 rows returned by the RPC", async () => {
+  it("normalizes the revision and all rows returned by the versioned RPC", async () => {
     const rpc = async (fn: string, params: Record<string, unknown>) => {
-      expect(fn).toBe("get_table_occupancy_snapshot");
+      expect(fn).toBe("get_table_occupancy_snapshot_versioned");
       expect(params).toEqual({
         p_restaurant_id: RESTAURANT_ID,
         p_session_token: "role-session-token",
       });
       return {
-        data: [
-          { table_number: 1, status: "kosong", occupied_at: null, occupied_source: null },
-          {
-            table_number: 2,
-            status: "terisi",
-            occupied_at: "2026-08-30T09:00:00.000Z",
-            occupied_source: "kasir",
-          },
-        ],
+        data: {
+          revision: 7,
+          tables: [
+            { table_number: 1, status: "kosong", occupied_at: null, occupied_source: null },
+            {
+              table_number: 2,
+              status: "terisi",
+              occupied_at: "2026-08-30T09:00:00.000Z",
+              occupied_source: "kasir",
+            },
+          ],
+        },
         error: null,
       };
     };
     const result = await getTableOccupancySnapshotCore(input, rpc);
     expect(result).toEqual({
       ok: true,
+      revision: 7,
       tables: [
         {
           tableNumber: 1,
@@ -241,28 +245,72 @@ describe("getTableOccupancySnapshotCore", () => {
     });
   });
 
+  it("falls back to the legacy snapshot during a database-first rollout gap", async () => {
+    const calls: string[] = [];
+    const rpc = async (fn: string) => {
+      calls.push(fn);
+      if (fn === "get_table_occupancy_snapshot_versioned") {
+        return {
+          data: null,
+          error: {
+            message:
+              "Could not find the function public.get_table_occupancy_snapshot_versioned in the schema cache",
+          },
+        };
+      }
+      return {
+        data: [{ table_number: 1, status: "kosong", occupied_at: null, occupied_source: null }],
+        error: null,
+      };
+    };
+
+    expect(await getTableOccupancySnapshotCore(input, rpc)).toEqual({
+      ok: true,
+      revision: 0,
+      tables: [
+        {
+          tableNumber: 1,
+          status: "kosong",
+          occupiedAt: null,
+          occupiedSource: null,
+          escortIntentId: null,
+          escortIntentExpiresAt: null,
+          escortIntentMine: false,
+        },
+      ],
+    });
+    expect(calls).toEqual([
+      "get_table_occupancy_snapshot_versioned",
+      "get_table_occupancy_snapshot",
+    ]);
+  });
+
   // H-04 remediation (Fase 2, 2026-09-02): get_table_occupancy_snapshot
   // (supabase/migrations/20260902040000_escort_intent_duplicate_guard.sql)
   // now surfaces an active escort intent on a KOSONG row, including
   // whether it belongs to the calling session.
-  it("normalizes a kosong row carrying an active escort intent", async () => {
+  it("normalizes a versioned kosong row carrying an active escort intent", async () => {
     const rpc = async () => ({
-      data: [
-        {
-          table_number: 5,
-          status: "kosong",
-          occupied_at: null,
-          occupied_source: null,
-          escort_intent_id: "intent-uuid-9",
-          escort_intent_expires_at: "2026-09-02T01:50:00.000Z",
-          escort_intent_mine: true,
-        },
-      ],
+      data: {
+        revision: 8,
+        tables: [
+          {
+            table_number: 5,
+            status: "kosong",
+            occupied_at: null,
+            occupied_source: null,
+            escort_intent_id: "intent-uuid-9",
+            escort_intent_expires_at: "2026-09-02T01:50:00.000Z",
+            escort_intent_mine: true,
+          },
+        ],
+      },
       error: null,
     });
     const result = await getTableOccupancySnapshotCore(input, rpc);
     expect(result).toEqual({
       ok: true,
+      revision: 8,
       tables: [
         {
           tableNumber: 5,
@@ -286,8 +334,13 @@ describe("getTableOccupancySnapshotCore", () => {
     });
   });
 
-  it("returns UNAVAILABLE when the RPC response is not an array", async () => {
-    const rpc = async () => ({ data: null, error: null });
+  it.each([
+    null,
+    { revision: -1, tables: [] },
+    { revision: 1.5, tables: [] },
+    { revision: 1, tables: null },
+  ])("returns UNAVAILABLE for a malformed versioned response: %j", async (data) => {
+    const rpc = async () => ({ data, error: null });
     expect(await getTableOccupancySnapshotCore(input, rpc)).toEqual({
       ok: false,
       code: "UNAVAILABLE",

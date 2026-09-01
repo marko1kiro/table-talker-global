@@ -244,33 +244,75 @@ export type TableOccupancyRow = {
 };
 
 export type TableOccupancySnapshotResult =
-  | { ok: true; tables: TableOccupancyRow[] }
+  | { ok: true; revision: number; tables: TableOccupancyRow[] }
   | { ok: false; code: "INVALID_SESSION" | "UNAVAILABLE"; message: string };
+
+const VERSIONED_SNAPSHOT_RPC = "get_table_occupancy_snapshot_versioned";
+
+function isMissingVersionedSnapshotRpc(message: string) {
+  return (
+    message.startsWith("Could not find the function") && message.includes(VERSIONED_SNAPSHOT_RPC)
+  );
+}
+
+function normalizeSnapshotRows(rows: unknown[]): TableOccupancyRow[] {
+  return rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      tableNumber: Number(r.table_number),
+      status: r.status === "terisi" ? "terisi" : "kosong",
+      occupiedAt: typeof r.occupied_at === "string" ? r.occupied_at : null,
+      occupiedSource:
+        r.occupied_source === "kasir" || r.occupied_source === "qr" ? r.occupied_source : null,
+      escortIntentId: typeof r.escort_intent_id === "string" ? r.escort_intent_id : null,
+      escortIntentExpiresAt:
+        typeof r.escort_intent_expires_at === "string" ? r.escort_intent_expires_at : null,
+      escortIntentMine: Boolean(r.escort_intent_mine),
+    };
+  });
+}
 
 export async function getTableOccupancySnapshotCore(
   data: TableOccupancySnapshotRpcInput,
   rpc: RpcCaller,
 ): Promise<TableOccupancySnapshotResult> {
   try {
-    const { data: rows, error } = await rpc("get_table_occupancy_snapshot", {
+    const params = {
       p_restaurant_id: data.restaurantId,
       p_session_token: data.sessionToken,
-    });
-    if (error) return mapError(error.message, ["INVALID_SESSION"] as const);
-    if (!Array.isArray(rows)) return { ok: false, code: "UNAVAILABLE", message: GENERIC_ERROR };
-    const tables: TableOccupancyRow[] = rows.map((row) => {
-      const r = row as Record<string, unknown>;
-      return {
-        tableNumber: Number(r.table_number),
-        status: r.status as "kosong" | "terisi",
-        occupiedAt: (r.occupied_at as string | null) ?? null,
-        occupiedSource: (r.occupied_source as string | null) ?? null,
-        escortIntentId: (r.escort_intent_id as string | null) ?? null,
-        escortIntentExpiresAt: (r.escort_intent_expires_at as string | null) ?? null,
-        escortIntentMine: Boolean(r.escort_intent_mine),
-      };
-    });
-    return { ok: true, tables };
+    };
+    const { data: snapshot, error } = await rpc(VERSIONED_SNAPSHOT_RPC, params);
+    if (error) {
+      if (!isMissingVersionedSnapshotRpc(error.message)) {
+        return mapError(error.message, ["INVALID_SESSION"] as const);
+      }
+
+      // Keep an app-first deployment safe until the additive database migration lands.
+      const { data: legacyRows, error: legacyError } = await rpc(
+        "get_table_occupancy_snapshot",
+        params,
+      );
+      if (legacyError) return mapError(legacyError.message, ["INVALID_SESSION"] as const);
+      if (!Array.isArray(legacyRows)) return unavailable();
+      return { ok: true, revision: 0, tables: normalizeSnapshotRows(legacyRows) };
+    }
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      return unavailable();
+    }
+
+    const raw = snapshot as Record<string, unknown>;
+    const revision = raw.revision;
+    const rows = raw.tables;
+    if (
+      typeof revision !== "number" ||
+      !Number.isSafeInteger(revision) ||
+      revision < 0 ||
+      !Array.isArray(rows)
+    ) {
+      return unavailable();
+    }
+
+    return { ok: true, revision, tables: normalizeSnapshotRows(rows) };
   } catch {
     return { ok: false, code: "UNAVAILABLE", message: GENERIC_ERROR };
   }

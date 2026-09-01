@@ -8,10 +8,10 @@
 // presence/connection-keep-alive piece that the older module had. There
 // is no session-claiming RPC call anywhere in this module and no custom
 // reconnect loop. The *only* outbound side effect this module ever
-// performs is calling the caller-provided `refetch` callback -- on a
-// broadcast `invalidate` event (rate-limited to at most once/sec) or, while
-// the channel is not subscribed and the page is visible, on a plain
-// interval-polling fallback (10-15s). This is a permanent architectural
+// performs is calling the caller-provided `refetch` callback -- on a newer
+// broadcast `invalidate` revision (rate-limited to at most once/sec) or, while
+// the page is visible, on a plain interval polling safety net (10-15s), even
+// when Realtime reports SUBSCRIBED. This is a permanent architectural
 // invariant for this codebase: any future change to this file must keep
 // it free of the removed keep-alive pattern (enforced by a source-scan
 // test suite alongside the behavioral tests for this module).
@@ -80,6 +80,7 @@ export function createTableOccupancyRealtimeController({
   client,
   restaurantId,
   refetch,
+  getCurrentRevision = () => null,
   onStatusChange,
   now = () => Date.now(),
   setIntervalFn = (handler: () => void, ms: number) => setInterval(handler, ms),
@@ -89,6 +90,7 @@ export function createTableOccupancyRealtimeController({
   client: SupabaseClientLike | null;
   restaurantId: string;
   refetch: () => void;
+  getCurrentRevision?: () => number | null;
   onStatusChange?: (status: TableOccupancyRealtimeStatus) => void;
   now?: () => number;
   setIntervalFn?: (handler: () => void, ms: number) => ReturnType<typeof setInterval>;
@@ -98,7 +100,6 @@ export function createTableOccupancyRealtimeController({
   let lastRefetchAt = -Infinity;
   let pollHandle: ReturnType<typeof setInterval> | null = null;
   let channel: BroadcastChannelLike | null = null;
-  let currentStatus: TableOccupancyRealtimeStatus = "SUBSCRIBING";
   let disposed = false;
 
   const rateLimitedRefetch = () => {
@@ -123,34 +124,48 @@ export function createTableOccupancyRealtimeController({
   };
 
   const syncPolling = () => {
-    if (!disposed && currentStatus !== "SUBSCRIBED" && visibility.isVisible()) {
-      startPolling();
-    } else {
-      stopPolling();
-    }
+    if (!disposed && visibility.isVisible()) startPolling();
+    else stopPolling();
   };
 
   const unsubscribeVisibility = visibility.subscribe(syncPolling);
 
   const handleStatus = (status: string) => {
     if (disposed) return;
-    currentStatus = status as TableOccupancyRealtimeStatus;
-    onStatusChange?.(currentStatus);
-    syncPolling();
+    onStatusChange?.(status as TableOccupancyRealtimeStatus);
+  };
+
+  const handleInvalidate = (message: unknown) => {
+    if (!message || typeof message !== "object") {
+      rateLimitedRefetch();
+      return;
+    }
+    const payload = (message as { payload?: unknown }).payload;
+    if (!payload || typeof payload !== "object") {
+      rateLimitedRefetch();
+      return;
+    }
+    const revision = (payload as { revision?: unknown }).revision;
+    if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0) {
+      rateLimitedRefetch();
+      return;
+    }
+    const currentRevision = getCurrentRevision();
+    if (currentRevision !== null && revision <= currentRevision) return;
+    rateLimitedRefetch();
   };
 
   if (client) {
     channel = client
       .channel(tableOccupancyChannelName(restaurantId))
-      .on("broadcast", { event: "invalidate" }, () => rateLimitedRefetch())
+      .on("broadcast", { event: "invalidate" }, handleInvalidate)
       .subscribe(handleStatus);
-    // Protect against a stalled subscribe attempt that never emits a status.
-    syncPolling();
   } else {
     // No client available (e.g. missing env vars) -- fall back to polling
     // immediately rather than never refreshing at all.
     handleStatus("CHANNEL_ERROR");
   }
+  syncPolling();
 
   return {
     dispose() {
@@ -163,10 +178,16 @@ export function createTableOccupancyRealtimeController({
   };
 }
 
-export function useTableOccupancyRealtime(restaurantId: string, refetch: () => void) {
+export function useTableOccupancyRealtime(
+  restaurantId: string,
+  revision: number | null,
+  refetch: () => void,
+) {
   const [status, setStatus] = useState<TableOccupancyRealtimeStatus>("SUBSCRIBING");
   const refetchRef = useRef(refetch);
+  const revisionRef = useRef(revision);
   refetchRef.current = refetch;
+  revisionRef.current = revision;
 
   useEffect(() => {
     // The real SupabaseClient's channel/removeChannel signatures are far
@@ -177,6 +198,7 @@ export function useTableOccupancyRealtime(restaurantId: string, refetch: () => v
       client,
       restaurantId,
       refetch: () => refetchRef.current(),
+      getCurrentRevision: () => revisionRef.current,
       onStatusChange: setStatus,
       visibility: browserVisibilitySource(),
     });

@@ -116,12 +116,6 @@ function SatgasRoute() {
   }, []);
 
   const restaurantId = identity?.restaurantId ?? "";
-  const realtimeStatus = useTableOccupancyRealtime(restaurantId, () => {
-    void queryClient.invalidateQueries({
-      queryKey: snapshotQueryKey(restaurantId),
-    });
-  });
-
   const snapshot = useQuery({
     queryKey: snapshotQueryKey(restaurantId),
     queryFn: async () =>
@@ -133,9 +127,16 @@ function SatgasRoute() {
         },
       }),
     enabled: Boolean(identity),
-    // Realtime is primary; the hook owns the visible-only 12-second fallback.
+    // Realtime is primary; the hook also owns the visible-only 12-second safety net.
     refetchOnWindowFocus: true,
   });
+  const realtimeStatus = useTableOccupancyRealtime(
+    restaurantId,
+    snapshot.data?.ok ? snapshot.data.revision : null,
+    () => {
+      void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
+    },
+  );
 
   const tables = useMemo(
     () => (snapshot.data && snapshot.data.ok ? snapshot.data.tables : []),

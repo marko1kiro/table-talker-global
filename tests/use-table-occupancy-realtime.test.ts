@@ -27,7 +27,8 @@ function fakeChannel() {
   };
   return {
     channel,
-    emitInvalidate: () => broadcastCallback?.(undefined),
+    emitInvalidate: (revision?: number) =>
+      broadcastCallback?.(revision === undefined ? undefined : { payload: { revision } }),
     emitStatus: (status: string) => statusCallback?.(status),
   };
 }
@@ -93,6 +94,30 @@ describe("createTableOccupancyRealtimeController", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores stale revisions and refetches when a newer or gapped revision arrives", () => {
+    const { client, channels } = fakeClient();
+    const refetch = vi.fn();
+    let currentRevision = 4;
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      refetch,
+      getCurrentRevision: () => currentRevision,
+    });
+    const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
+
+    entry.emitInvalidate(3);
+    entry.emitInvalidate(4);
+    expect(refetch).not.toHaveBeenCalled();
+
+    entry.emitInvalidate(6); // revision 5 was missed
+    expect(refetch).toHaveBeenCalledTimes(1);
+
+    currentRevision = 6;
+    entry.emitInvalidate(6); // duplicate delivery
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
   it("rate-limits refetch to at most once per second", () => {
     const { client, channels } = fakeClient();
     const refetch = vi.fn();
@@ -136,7 +161,7 @@ describe("createTableOccupancyRealtimeController", () => {
     }
   });
 
-  it("stops polling once the channel status recovers to SUBSCRIBED", () => {
+  it("keeps light safety polling active even while SUBSCRIBED", () => {
     vi.useFakeTimers();
     try {
       const { client, channels } = fakeClient();
@@ -144,13 +169,9 @@ describe("createTableOccupancyRealtimeController", () => {
       createTableOccupancyRealtimeController({ client, restaurantId: RESTAURANT_ID, refetch });
       const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
 
-      entry.emitStatus("TIMED_OUT");
-      vi.advanceTimersByTime(POLL_FALLBACK_MS);
-      expect(refetch).toHaveBeenCalledTimes(1);
-
       entry.emitStatus("SUBSCRIBED");
       vi.advanceTimersByTime(POLL_FALLBACK_MS * 3);
-      expect(refetch).toHaveBeenCalledTimes(1); // no further polling once recovered
+      expect(refetch).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
     }
@@ -286,7 +307,7 @@ describe("no-heartbeat architectural invariant", () => {
     vi.useRealTimers();
   });
 
-  it("never calls any RPC-like function even while subscribed and idle for a long time", () => {
+  it("never calls any RPC-like heartbeat while subscribed; only the light safety poll refetches", () => {
     const { client, channels } = fakeClient();
     const rpc = vi.fn();
     const refetch = vi.fn();
@@ -297,7 +318,7 @@ describe("no-heartbeat architectural invariant", () => {
     vi.advanceTimersByTime(60_000);
 
     expect(rpc).not.toHaveBeenCalled();
-    expect(refetch).not.toHaveBeenCalled(); // healthy channel: no polling, no heartbeat
+    expect(refetch).toHaveBeenCalledTimes(5);
   });
 
   const hookSource = readFileSync(
@@ -322,12 +343,10 @@ describe("no-heartbeat architectural invariant", () => {
     expect(hookSource).not.toContain("postgres_changes");
   });
 
-  it("uses setInterval only for the documented polling fallback, guarded by realtime health", () => {
+  it("uses one light polling safety net regardless of realtime subscription status", () => {
     const intervalCount = (hookSource.match(/setInterval\(/g) ?? []).length;
-    // Exactly one direct setInterval call: the default setIntervalFn used
-    // by the injectable polling fallback. No second, unconditional timer.
     expect(intervalCount).toBe(1);
-    expect(hookSource).toContain('currentStatus !== "SUBSCRIBED"');
+    expect(hookSource).not.toContain('currentStatus !== "SUBSCRIBED"');
   });
 });
 
@@ -345,5 +364,12 @@ describe("useTableOccupancyRealtime hook source contract", () => {
     const start = hookSource.indexOf("export function useTableOccupancyRealtime");
     const block = hookSource.slice(start);
     expect(block).toContain("[restaurantId]");
+  });
+
+  it("feeds the latest rendered snapshot revision to the controller", () => {
+    const start = hookSource.indexOf("export function useTableOccupancyRealtime");
+    const block = hookSource.slice(start);
+    expect(block).toContain("revisionRef.current = revision");
+    expect(block).toContain("getCurrentRevision: () => revisionRef.current");
   });
 });
