@@ -42,13 +42,19 @@ import {
 } from "@/lib/crew-session-identity";
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
-import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import {
+  getLiveAccessToken,
+  getSupabaseBrowserClient,
+} from "@/lib/supabase-browser";
 import {
   formatOccupiedDuration,
   sortedOccupiedTables,
   type OccupiedTableEntry,
 } from "@/lib/clear-up-queue";
-import { getTableOccupancySnapshot, setTableEmptyCleanup } from "@/lib/table-occupancy.server";
+import {
+  getTableOccupancySnapshot,
+  setTableEmptyCleanup,
+} from "@/lib/table-occupancy.server";
 
 export const Route = createFileRoute("/clear-up/")({ component: ClearUpRoute });
 
@@ -64,7 +70,8 @@ function ClearUpRoute() {
   const [confirmTable, setConfirmTable] = useState<number | null>(null);
   const [actionError, setActionError] = useState("");
   const [now, setNow] = useState(() => Date.now());
-  const { layoutPreference, setLayoutPreference } = useLayoutPreference("clear_up");
+  const { layoutPreference, setLayoutPreference } =
+    useLayoutPreference("clear_up");
 
   // Client-only hydration, same pattern as Kasir/Satgas: reading
   // sessionStorage during SSR would always return null and mismatch the
@@ -90,7 +97,9 @@ function ClearUpRoute() {
 
   const restaurantId = identity?.restaurantId ?? "";
   const realtimeStatus = useTableOccupancyRealtime(restaurantId, () => {
-    void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
+    void queryClient.invalidateQueries({
+      queryKey: snapshotQueryKey(restaurantId),
+    });
   });
 
   const snapshot = useQuery({
@@ -100,7 +109,10 @@ function ClearUpRoute() {
         data: {
           restaurantId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: await getLiveAccessToken(
+            getSupabaseBrowserClient(),
+            identity!.accessToken,
+          ),
         },
       }),
     enabled: Boolean(identity),
@@ -109,7 +121,8 @@ function ClearUpRoute() {
   });
 
   const queue = useMemo(() => {
-    const tables = snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
+    const tables =
+      snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
     return sortedOccupiedTables(tables, now);
   }, [snapshot.data, now]);
 
@@ -120,7 +133,10 @@ function ClearUpRoute() {
           restaurantId,
           tableNumber,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: await getLiveAccessToken(
+            getSupabaseBrowserClient(),
+            identity!.accessToken,
+          ),
         },
       }),
     onSuccess: (result) => {
@@ -130,7 +146,9 @@ function ClearUpRoute() {
       }
       setActionError("");
       setConfirmTable(null);
-      void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
+      void queryClient.invalidateQueries({
+        queryKey: snapshotQueryKey(restaurantId),
+      });
     },
   });
 
@@ -152,7 +170,8 @@ function ClearUpRoute() {
 
       {realtimeStatus !== "SUBSCRIBED" && (
         <OwnerNotice role="status" tone="warning">
-          Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
+          Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap
+          beberapa detik.
         </OwnerNotice>
       )}
 
@@ -165,7 +184,9 @@ function ClearUpRoute() {
       <CrewTableSection
         legend={[{ color: "red", label: "Perlu Dibersihkan" }]}
         layoutPreference={layoutPreference}
-        onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
+        onToggleLayout={() =>
+          setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")
+        }
       >
         {snapshot.isLoading ? (
           <p className="text-sm text-slate-500">Memuat status meja...</p>
@@ -206,20 +227,36 @@ function ClearUpRoute() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Tandai Meja {confirmTable} Sudah Dibersihkan?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Tandai Meja {confirmTable} Sudah Dibersihkan?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Gunakan ini hanya setelah meja benar-benar selesai dibersihkan dan siap dipakai
-              kembali.
+              Gunakan ini hanya setelah meja benar-benar selesai dibersihkan dan
+              siap dipakai kembali.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={markEmpty.isPending} onClick={() => setConfirmTable(null)}>
+            <AlertDialogCancel
+              disabled={markEmpty.isPending}
+              onClick={() => setConfirmTable(null)}
+            >
               Batal
             </AlertDialogCancel>
             <AlertDialogAction
               className={ownerPrimaryButtonClass}
               disabled={markEmpty.isPending}
-              onClick={() => confirmTable !== null && markEmpty.mutate(confirmTable)}
+              onClick={(event) => {
+                // AlertDialogAction closes the dialog on click by default
+                // (Radix wraps it in a Dialog.Close). Without preventing
+                // that here, the dialog dismisses immediately -- before
+                // `markEmpty.isPending` has propagated to this render --
+                // so the "Memproses..." spinner below, and the matching
+                // spinner on the table grid, never get a chance to show.
+                // Closing is instead handled explicitly in `onSuccess`
+                // once the mutation actually finishes.
+                event.preventDefault();
+                if (confirmTable !== null) markEmpty.mutate(confirmTable);
+              }}
             >
               {markEmpty.isPending ? (
                 <span className="flex items-center justify-center gap-2">
@@ -268,7 +305,9 @@ function TableGrid({
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <>
-                <span className="text-sm font-extrabold">{entry.tableNumber}</span>
+                <span className="text-sm font-extrabold">
+                  {entry.tableNumber}
+                </span>
                 <span className="text-[11px] font-bold text-red-600">
                   {formatOccupiedDuration(entry.durationMs)}
                 </span>
