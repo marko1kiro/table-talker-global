@@ -41,7 +41,6 @@ dist-ssr
 
 # Local worktrees
 .worktrees/
-.env*
 
 # Supabase CLI local artifacts
 supabase/.temp/

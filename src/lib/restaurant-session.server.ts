@@ -11,14 +11,16 @@ export function hashOpaqueRestaurantToken(token: string): string {
 
 function currentRestaurantVersion(
   restaurants:
-    { is_active: boolean; code_version: number } | { is_active: boolean; code_version: number }[],
+    | { is_active: boolean; code_version: number }
+    | { is_active: boolean; code_version: number }[],
 ) {
   return Array.isArray(restaurants) ? restaurants[0]?.code_version : restaurants.code_version;
 }
 
 function isRestaurantActive(
   restaurants:
-    { is_active: boolean; code_version: number } | { is_active: boolean; code_version: number }[],
+    | { is_active: boolean; code_version: number }
+    | { is_active: boolean; code_version: number }[],
 ) {
   return Array.isArray(restaurants) ? restaurants[0]?.is_active : restaurants.is_active;
 }

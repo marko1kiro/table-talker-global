@@ -17,8 +17,17 @@ it("uses a direct plain-code lookup and one generic failure at crew boundary", (
   expect(crewSource).not.toContain("hashLegacyRestaurantCode");
   expect(crewSource).not.toContain('.ilike("code"');
   expect(crewSource).not.toContain("verifyLegacyRestaurantPin");
-  expect(crewSource).not.toContain("pin_hash");
   expect([...crewSource.matchAll(/Kode Resto salah\./g)]).toHaveLength(1);
+});
+
+// C-01 remediation (Fase 1, 2026-09-02): restaurants.pin (plaintext) was
+// replaced with restaurants.pin_hash (sha256 hex). This file's Kode Resto
+// (restaurant code) lookup above stays intentionally plain-text -- codes are
+// not treated as a secret -- but the separate "ID Resto" PIN second-factor,
+// verified in this same file, must now compare against the hashed column.
+it("verifies the ID Resto PIN second factor against the hashed column, not plaintext", () => {
+  expect(crewSource).toContain("restaurant.pin_hash !== hashOpaqueRestaurantToken(data.pin)");
+  expect(crewSource).not.toContain('.select("pin")');
 });
 
 it("keeps owner credential handlers server-only, audited, and no-store", () => {

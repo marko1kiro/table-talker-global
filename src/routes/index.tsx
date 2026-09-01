@@ -18,10 +18,7 @@ import { RoleLoginFlow } from "@/components/RoleLoginFlow";
 import { SyncDialog } from "@/components/SyncDialog";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
 import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
-import {
-  announcementPlaybackId,
-  announcementPlaybackStatus,
-} from "@/lib/announcement-playback";
+import { announcementPlaybackId, announcementPlaybackStatus } from "@/lib/announcement-playback";
 import {
   browserSessionStorage,
   readCrewSessionIdentity,
@@ -89,9 +86,7 @@ function crewAccessKey(identity: CrewIdentity) {
 function SoundboardPage() {
   const navigate = useNavigate();
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioControllerRef = useRef<ReturnType<
-    typeof createAudioPlaybackController
-  > | null>(null);
+  const audioControllerRef = useRef<ReturnType<typeof createAudioPlaybackController> | null>(null);
   const activeAudioIdRef = useRef<number | AudioId | null>(null);
   const playbackGenerationRef = useRef(createPlaybackGeneration());
   const [playing, setPlaying] = useState<number | AudioId | null>(null);
@@ -100,13 +95,9 @@ function SoundboardPage() {
   const [crewIdentity, setCrewIdentity] = useState<CrewIdentity | null>(null);
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [audioSynced, setAudioSynced] = useState(false);
-  const [availableAudioIds, setAvailableAudioIds] = useState<
-    ReadonlySet<AudioId>
-  >(new Set());
+  const [availableAudioIds, setAvailableAudioIds] = useState<ReadonlySet<AudioId>>(new Set());
   const [accessError, setAccessError] = useState("");
-  const audioUrlPoolRef = useRef<ReturnType<
-    typeof createCachedAudioUrlPool
-  > | null>(null);
+  const audioUrlPoolRef = useRef<ReturnType<typeof createCachedAudioUrlPool> | null>(null);
   const validatedAccessRef = useRef({ identityKey: "", validatedAt: 0 });
   const accessValidationPromiseRef = useRef<Promise<void> | null>(null);
   const crewIdentityRef = useRef<CrewIdentity | null>(null);
@@ -165,16 +156,13 @@ function SoundboardPage() {
   const getAudioController = useCallback(() => {
     const audio = audioRef.current ?? new Audio();
     audioRef.current = audio;
-    audioControllerRef.current ??= createAudioPlaybackController(
-      audio,
-      (token) => {
-        if (!playbackGenerationRef.current.isCurrent(token)) return;
-        activeAudioIdRef.current = null;
-        setPlaying(null);
-        setPaused(null);
-        setLoading(null);
-      },
-    );
+    audioControllerRef.current ??= createAudioPlaybackController(audio, (token) => {
+      if (!playbackGenerationRef.current.isCurrent(token)) return;
+      activeAudioIdRef.current = null;
+      setPlaying(null);
+      setPaused(null);
+      setLoading(null);
+    });
     return { audio, controller: audioControllerRef.current };
   }, []);
 
@@ -245,8 +233,7 @@ function SoundboardPage() {
     })
       .then((result) => {
         const currentIdentity = crewIdentityRef.current;
-        if (!currentIdentity || crewAccessKey(currentIdentity) !== identityKey)
-          return;
+        if (!currentIdentity || crewAccessKey(currentIdentity) !== identityKey) return;
         if (!result.ok) {
           invalidateCrewSession();
           return;
@@ -397,9 +384,7 @@ function SoundboardPage() {
   const activeAudioId = playing ?? loading ?? paused;
   const activeAnnouncement =
     typeof activeAudioId === "string"
-      ? ANNOUNCEMENT_CATALOG.find(
-          ({ id }) => announcementPlaybackId(id) === activeAudioId,
-        )
+      ? ANNOUNCEMENT_CATALOG.find(({ id }) => announcementPlaybackId(id) === activeAudioId)
       : undefined;
   const activeAudioLabel = activeAnnouncement?.label ?? activeAudioId;
 
@@ -430,10 +415,7 @@ function SoundboardPage() {
             validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
             setAudioSynced(false);
             const audioReady = await unlockAudio();
-            const saved = writeCrewSessionIdentity(
-              browserSessionStorage(),
-              identity,
-            );
+            const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
             setCrewIdentity({ ...(saved ?? identity), audioReady });
           }}
           onRoleContinue={(identity) => {
@@ -458,10 +440,7 @@ function SoundboardPage() {
               onSynced={(audioIds) => {
                 setAvailableAudioIds(new Set(audioIds as AudioId[]));
                 setAudioSynced(true);
-                void getAudioUrlPool().preload(
-                  crewIdentity.restaurantId,
-                  audioIds,
-                );
+                void getAudioUrlPool().preload(crewIdentity.restaurantId, audioIds);
               }}
               onSessionInvalid={invalidateCrewSession}
             />
@@ -492,15 +471,12 @@ function SoundboardPage() {
               announcementTriggerElevated={activeAudioId !== null}
               tableDisabled={() => activeAudioId !== null}
               announcementDisabled={(audioId) =>
-                loading !== null ||
-                (activeAudioId !== null && activeAudioId !== audioId)
+                loading !== null || (activeAudioId !== null && activeAudioId !== audioId)
               }
               tableStatus={(tableNumber) => {
                 if (playing === tableNumber) return "playing";
                 if (loading === tableNumber) return "loading";
-                return availableAudioIds.has(tableAudioId(tableNumber))
-                  ? "ready"
-                  : "empty";
+                return availableAudioIds.has(tableAudioId(tableNumber)) ? "ready" : "empty";
               }}
               announcementStatus={(announcementId) =>
                 announcementPlaybackStatus(
@@ -540,15 +516,9 @@ function SoundboardPage() {
                 onClick={stop}
                 className="brutal-border brutal-shadow-lg brutal-press flex items-center gap-2 bg-destructive px-5 py-3 font-display uppercase text-destructive-foreground"
               >
-                <Square
-                  className="h-4 w-4"
-                  fill="currentColor"
-                  strokeWidth={3}
-                />
+                <Square className="h-4 w-4" fill="currentColor" strokeWidth={3} />
                 Stop{" "}
-                {typeof activeAudioId === "number"
-                  ? `Meja ${activeAudioId}`
-                  : activeAudioLabel}
+                {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioLabel}
               </button>
             </div>
           )}

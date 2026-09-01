@@ -16,12 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  OwnerNotice,
-  OwnerPage,
-  OwnerRetry,
-  ownerPrimaryButtonClass,
-} from "@/components/OwnerUi";
+import { OwnerNotice, OwnerPage, OwnerRetry, ownerPrimaryButtonClass } from "@/components/OwnerUi";
 import { CrewHeader, CrewTableSection } from "@/components/CrewHeader";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
@@ -32,10 +27,7 @@ import {
 } from "@/lib/crew-session-identity";
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
-import {
-  getLiveAccessToken,
-  getSupabaseBrowserClient,
-} from "@/lib/supabase-browser";
+import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   getTableOccupancySnapshot,
   setTableOccupiedKasir,
@@ -55,10 +47,7 @@ function tableStatus(
   tables: TableOccupancyRow[],
   tableNumber: number,
 ): TableOccupancyRow["status"] {
-  return (
-    tables.find((table) => table.tableNumber === tableNumber)?.status ??
-    "kosong"
-  );
+  return tables.find((table) => table.tableNumber === tableNumber)?.status ?? "kosong";
 }
 
 function KasirRoute() {
@@ -75,8 +64,7 @@ function KasirRoute() {
   // alive until the snapshot query has actually refetched the new status.
   const [processingTable, setProcessingTable] = useState<number | null>(null);
   const [actionError, setActionError] = useState("");
-  const { layoutPreference, setLayoutPreference } =
-    useLayoutPreference("kasir");
+  const { layoutPreference, setLayoutPreference } = useLayoutPreference("kasir");
 
   // Client-only hydration, same pattern as src/routes/index.tsx: reading
   // sessionStorage during SSR would always return null and mismatch the
@@ -105,10 +93,7 @@ function KasirRoute() {
         data: {
           restaurantId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(
-            getSupabaseBrowserClient(),
-            identity!.accessToken,
-          ),
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
         },
       }),
     enabled: Boolean(identity),
@@ -123,10 +108,7 @@ function KasirRoute() {
           restaurantId,
           tableNumber,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(
-            getSupabaseBrowserClient(),
-            identity!.accessToken,
-          ),
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
         },
       }),
     onSuccess: (result) => {
@@ -171,8 +153,7 @@ function KasirRoute() {
 
         {realtimeStatus !== "SUBSCRIBED" && (
           <OwnerNotice role="status" tone="warning">
-            Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap
-            beberapa detik.
+            Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
           </OwnerNotice>
         )}
 
@@ -188,9 +169,7 @@ function KasirRoute() {
             { color: "red", label: "Terisi" },
           ]}
           layoutPreference={layoutPreference}
-          onToggleLayout={() =>
-            setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")
-          }
+          onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
           desktopHint="Tap nomor meja untuk mengubah status dari KOSONG (Hijau) menjadi TERISI (Merah)."
         >
           {processingTable !== null && (
@@ -236,18 +215,13 @@ function KasirRoute() {
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>
-                Tandai Meja {confirmTable} Terisi?
-              </AlertDialogTitle>
+              <AlertDialogTitle>Tandai Meja {confirmTable} Terisi?</AlertDialogTitle>
               <AlertDialogDescription>
-                Gunakan ini hanya untuk pelanggan yang bayar langsung di kasir
-                tanpa scan QR.
+                Gunakan ini hanya untuk pelanggan yang bayar langsung di kasir tanpa scan QR.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setConfirmTable(null)}>
-                Batal
-              </AlertDialogCancel>
+              <AlertDialogCancel onClick={() => setConfirmTable(null)}>Batal</AlertDialogCancel>
               <AlertDialogAction
                 className={ownerPrimaryButtonClass}
                 onClick={() => {
@@ -283,36 +257,30 @@ function TableGrid({
 }) {
   return (
     <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 sm:gap-2.5 md:grid-cols-10 lg:grid-cols-12 lg:gap-3 xl:grid-cols-[repeat(15,minmax(0,1fr))] 2xl:grid-cols-[repeat(18,minmax(0,1fr))]">
-      {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map(
-        (tableNumber) => {
-          const status = tableStatus(tables, tableNumber);
-          const occupied = status === "terisi";
-          const isPending = pendingTable === tableNumber;
-          return (
-            <button
-              key={tableNumber}
-              type="button"
-              aria-label={`Meja ${tableNumber}`}
-              aria-disabled={occupied || isPending}
-              disabled={occupied || isPending}
-              onClick={() => onSelectEmptyTable(tableNumber)}
-              className={
-                occupied
-                  ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 transition-colors duration-300 lg:text-base"
-                  : isPending
-                    ? "flex aspect-square cursor-wait items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 lg:text-base"
-                    : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-100 hover:shadow-sm active:translate-y-0 lg:text-base"
-              }
-            >
-              {isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                tableNumber
-              )}
-            </button>
-          );
-        },
-      )}
+      {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
+        const status = tableStatus(tables, tableNumber);
+        const occupied = status === "terisi";
+        const isPending = pendingTable === tableNumber;
+        return (
+          <button
+            key={tableNumber}
+            type="button"
+            aria-label={`Meja ${tableNumber}`}
+            aria-disabled={occupied || isPending}
+            disabled={occupied || isPending}
+            onClick={() => onSelectEmptyTable(tableNumber)}
+            className={
+              occupied
+                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 transition-colors duration-300 lg:text-base"
+                : isPending
+                  ? "flex aspect-square cursor-wait items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 lg:text-base"
+                  : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-100 hover:shadow-sm active:translate-y-0 lg:text-base"
+            }
+          >
+            {isPending ? <Loader2 className="size-4 animate-spin" /> : tableNumber}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -328,45 +296,43 @@ function TableList({
 }) {
   return (
     <div className="divide-y divide-slate-100">
-      {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map(
-        (tableNumber) => {
-          const status = tableStatus(tables, tableNumber);
-          const occupied = status === "terisi";
-          const isPending = pendingTable === tableNumber;
-          return (
-            <button
-              key={tableNumber}
-              type="button"
-              aria-label={`Meja ${tableNumber}`}
-              aria-disabled={occupied || isPending}
-              disabled={occupied || isPending}
-              onClick={() => onSelectEmptyTable(tableNumber)}
-              className={
-                occupied
-                  ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300"
-                  : isPending
-                    ? "flex w-full cursor-wait items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300"
-                    : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 hover:bg-emerald-50"
-              }
-            >
-              <span>Meja {tableNumber}</span>
-              {isPending ? (
-                <Loader2 className="size-4 animate-spin text-emerald-700" />
-              ) : (
-                <span
-                  className={
-                    occupied
-                      ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
-                      : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
-                  }
-                >
-                  {occupied ? "TERISI" : "KOSONG"}
-                </span>
-              )}
-            </button>
-          );
-        },
-      )}
+      {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
+        const status = tableStatus(tables, tableNumber);
+        const occupied = status === "terisi";
+        const isPending = pendingTable === tableNumber;
+        return (
+          <button
+            key={tableNumber}
+            type="button"
+            aria-label={`Meja ${tableNumber}`}
+            aria-disabled={occupied || isPending}
+            disabled={occupied || isPending}
+            onClick={() => onSelectEmptyTable(tableNumber)}
+            className={
+              occupied
+                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300"
+                : isPending
+                  ? "flex w-full cursor-wait items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300"
+                  : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 hover:bg-emerald-50"
+            }
+          >
+            <span>Meja {tableNumber}</span>
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin text-emerald-700" />
+            ) : (
+              <span
+                className={
+                  occupied
+                    ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
+                    : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
+                }
+              >
+                {occupied ? "TERISI" : "KOSONG"}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

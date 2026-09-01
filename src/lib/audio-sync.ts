@@ -25,7 +25,8 @@ export type SyncResult = {
 };
 
 export type DownloadResult =
-  { ok: true; buffer: ArrayBuffer } | { ok: false; reason: DownloadFailureReason };
+  | { ok: true; buffer: ArrayBuffer }
+  | { ok: false; reason: DownloadFailureReason };
 
 type DownloadOptions = {
   headers?: HeadersInit;

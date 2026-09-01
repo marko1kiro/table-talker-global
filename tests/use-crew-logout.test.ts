@@ -24,7 +24,7 @@ describe("Header.tsx: onLogout is optional and only rendered when supplied", () 
 
   it("guards both the desktop and mobile logout buttons behind onLogout", () => {
     const header = source("../src/components/Header.tsx");
-    const logoutButtonBlocks = header.split("aria-label=\"Keluar\"").slice(1);
+    const logoutButtonBlocks = header.split('aria-label="Keluar"').slice(1);
     expect(logoutButtonBlocks.length).toBe(2);
     // Each occurrence of the Keluar button must be wrapped in an
     // `{onLogout && ( ... )}` guard rather than always rendering with a
@@ -51,14 +51,7 @@ describe("useCrewLogout hook (src/hooks/use-crew-logout.ts)", () => {
 });
 
 describe("The 6 public info routes wire a working onLogout instead of omitting it", () => {
-  const routes = [
-    "about",
-    "contact",
-    "faq",
-    "help",
-    "privacy-policy",
-    "terms-of-use",
-  ];
+  const routes = ["about", "contact", "faq", "help", "privacy-policy", "terms-of-use"];
 
   it.each(routes)("%s.tsx imports useCrewLogout and passes it to Header", (routeName) => {
     const page = source(`../src/routes/${routeName}.tsx`);

@@ -1,7 +1,13 @@
 import { reportOperationalError } from "./operational-errors.server";
 
 export type ErrorStage =
-  "tenant_login" | "sync_cache" | "playback" | "realtime" | "r2_upload" | "rpc" | "server";
+  | "tenant_login"
+  | "sync_cache"
+  | "playback"
+  | "realtime"
+  | "r2_upload"
+  | "rpc"
+  | "server";
 
 type ReportOptions = {
   stage: ErrorStage;

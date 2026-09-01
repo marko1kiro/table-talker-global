@@ -54,14 +54,14 @@ describe("Satgas route: live data via snapshot + realtime", () => {
   // before the request instead of reading identity.accessToken directly.
   it("re-derives a live access token via getLiveAccessToken instead of reusing the stale login-time snapshot", () => {
     const text = source();
-    expect(text).toContain(
-      'import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser"',
+    expect(text).toMatch(
+      /import \{\s*getLiveAccessToken,\s*getSupabaseBrowserClient,?\s*\} from "@\/lib\/supabase-browser";/,
     );
     expect(text).not.toContain("accessToken: identity!.accessToken");
     expect(
       (
         text.match(
-          /accessToken: await getLiveAccessToken\(getSupabaseBrowserClient\(\), identity!\.accessToken\)/g,
+          /accessToken: await getLiveAccessToken\(\s*getSupabaseBrowserClient\(\),\s*identity!\.accessToken,?\s*\)/g,
         ) ?? []
       ).length,
     ).toBe(3);
@@ -71,8 +71,8 @@ describe("Satgas route: live data via snapshot + realtime", () => {
     const text = source();
     expect(text).toContain("const realtimeStatus = useTableOccupancyRealtime(restaurantId,");
     expect(text).toContain('realtimeStatus !== "SUBSCRIBED"');
-    expect(text).toContain(
-      "queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) })",
+    expect(text).toMatch(
+      /queryClient\.invalidateQueries\(\{\s*queryKey:\s*snapshotQueryKey\(restaurantId\),?\s*\}\)/,
     );
   });
 
@@ -96,8 +96,12 @@ describe("Satgas route: the grid itself is read-only -- Satgas never mutates tab
 
   it("disables already-occupied (red) tables so tapping them is a no-op", () => {
     const text = source();
-    expect(text).toMatch(/disabled=\{occupied\}/);
-    expect(text).toMatch(/aria-disabled=\{occupied\}/);
+    // `occupied` is the leading condition; pending-mutation and escorted
+    // guards were added alongside it so a tap can't double-fire mid-request
+    // and an already-escorted table can't be escorted twice -- but occupied
+    // tables must stay disabled regardless.
+    expect(text).toMatch(/disabled=\{occupied(\s*\|\|[^}]+)?\}/);
+    expect(text).toMatch(/aria-disabled=\{occupied(\s*\|\|[^}]+)?\}/);
   });
 });
 
@@ -183,12 +187,17 @@ describe("Satgas route: an intent resolved by an incoming QR scan before 10 minu
 });
 
 describe("Satgas route: theme", () => {
-  it("uses the OwnerUi.tsx component set, not the SS neo-brutalist theme", () => {
+  it("uses the OwnerUi.tsx component set (via the shared CrewHeader), not the SS neo-brutalist theme", () => {
     const text = source();
+    // Task 11: OwnerPageHeader was superseded by the shared CrewHeader
+    // component (also used by Kasir/Clear Up) once all three role routes
+    // converged on the same header/table-section shell; OwnerPage (page
+    // shell) and OwnerPanel (admin-note banner) are both still used here.
     expect(text).toContain('from "@/components/OwnerUi"');
     expect(text).toContain("OwnerPage");
-    expect(text).toContain("OwnerPageHeader");
     expect(text).toContain("OwnerPanel");
+    expect(text).toContain('from "@/components/CrewHeader"');
+    expect(text).toContain("<CrewHeader");
   });
 
   it("colors KOSONG green (emerald) and TERISI red, per spec", () => {

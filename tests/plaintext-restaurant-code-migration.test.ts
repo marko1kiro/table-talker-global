@@ -17,8 +17,23 @@ it("adds back a plain, strictly-uppercase, case-sensitive unique `code` column",
   expect(sql).not.toMatch(/restaurants_code_key on public\.restaurants \(lower\(code\)\)/);
 });
 
-it("backfills all 9 known restaurants by UUID with the user-supplied plain codes", () => {
+// H-03 remediation (2026-09-02): the inline backfill of the 9 known
+// restaurants' plain codes -- and the UNPROVISIONED_RESTAURANT_PLAINTEXT_CODE
+// guard that used to depend on it -- were moved out of this versioned
+// migration entirely, into supabase/seed.sql (applied only by
+// `supabase db reset`, never by `db push` against a linked/production
+// project). This is exactly the fix for the audit's H-03 finding ("migration
+// chain can't be replayed from an empty DB" -- production/seed data mixed
+// into schema migrations). The migration itself is now schema-only.
+it("no longer backfills restaurant codes inline -- that data now lives in supabase/seed.sql", () => {
   const sql = migration();
+  expect(sql).not.toMatch(/update public\.restaurants set code = '[A-Z0-9]+' where id = /);
+  expect(sql).not.toContain("raise exception 'UNPROVISIONED_RESTAURANT_PLAINTEXT_CODE'");
+  expect(sql).toContain("supabase/seed.sql");
+});
+
+it("backfills all 9 known restaurants by UUID with the user-supplied plain codes in supabase/seed.sql", () => {
+  const seed = readFileSync(new URL("../supabase/seed.sql", import.meta.url), "utf8");
   const backfills: Array<[string, string]> = [
     ["b519a58f-1ecb-4131-9c69-4fa2a1bae18a", "BKSBAN"],
     ["08da5334-4244-4db7-9f63-74a0d675529c", "BKSMUT"],
@@ -31,9 +46,17 @@ it("backfills all 9 known restaurants by UUID with the user-supplied plain codes
     ["fa2dea0f-8c68-4c2f-bb72-17c34825c61e", "CKRBOS"],
   ];
   for (const [id, code] of backfills) {
-    expect(sql).toContain(`update public.restaurants set code = '${code}' where id = '${id}'`);
+    expect(seed).toContain(`'${id}', '${code}'`);
   }
-  expect(sql).toContain("raise exception 'UNPROVISIONED_RESTAURANT_PLAINTEXT_CODE'");
+  // Real PINs must never be committed, hashed or not -- only obviously-fake
+  // sequential dev PINs (9001-9009), hashed inline by Postgres via
+  // extensions.digest(...) at seed time. A precomputed 64-hex-char sha256
+  // literal would mean a real (or brute-forceable) hash got committed.
+  expect(seed).not.toMatch(/'[0-9a-f]{64}'/i);
+  for (let pin = 9001; pin <= 9009; pin++) {
+    expect(seed).toContain(`extensions.digest('${pin}', 'sha256')`);
+  }
+  expect(seed).toContain("on conflict (id) do nothing;");
 });
 
 it("drops code_hash and code_encrypted entirely, per hapus total saja", () => {

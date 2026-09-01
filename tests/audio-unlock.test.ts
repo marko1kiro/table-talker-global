@@ -111,7 +111,11 @@ it("hydrates a same-tab crew after mount without persisting audio readiness", ()
   expect(hydrationEffect).not.toBeNull();
   expect(hydrationEffect?.[0]).toContain("audioReady: false");
   expect(hydrationEffect?.[0]).toContain("setIdentityHydrated(true)");
-  expect(route).toContain("writeCrewSessionIdentity(browserSessionStorage(), identity)");
+  // Match whitespace-tolerantly: prettier may reformat this call onto one
+  // line or several depending on surrounding line length.
+  expect(route).toMatch(
+    /writeCrewSessionIdentity\(\s*\n?\s*browserSessionStorage\(\),\s*\n?\s*identity,?\s*\n?\s*\)/,
+  );
   expect(route).toContain("removeCrewSessionIdentity(browserSessionStorage())");
 });
 
@@ -121,7 +125,12 @@ it("gates the crew dialog until identity hydration completes", () => {
     "\n",
   );
 
-  expect(route).toContain(
-    "{identityHydrated && (\n        <RoleLoginFlow\n          open={!crewIdentity}",
-  );
+  // The login flow is only mounted once hydration has finished and no crew
+  // identity has been established yet -- unlike an `open` prop that would
+  // keep it mounted (and its internal step state alive) behind the
+  // dashboard, this guarantees a fresh RoleLoginFlow every time a crew logs
+  // out, and that nothing is rendered while `identityHydrated` is false.
+  expect(route).toContain("{identityHydrated && !crewIdentity && (");
+  expect(route).toContain("<RoleLoginFlow\n          onSsContinue={async (identity) => {");
+  expect(route).toContain("{identityHydrated && crewIdentity && (");
 });

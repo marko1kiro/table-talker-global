@@ -24,14 +24,8 @@ import {
 } from "@/lib/role-session-domain";
 import type { CrewRole } from "@/lib/role-session-domain";
 import { claimRoleSession } from "@/lib/role-session.server";
-import {
-  ensureAnonAccessToken,
-  getSupabaseBrowserClient,
-} from "@/lib/supabase-browser";
-import type {
-  CrewSessionIdentity,
-  RoleSessionIdentity,
-} from "@/lib/crew-session-identity";
+import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import type { CrewSessionIdentity, RoleSessionIdentity } from "@/lib/crew-session-identity";
 
 // Dedicated full-page login flow ("Login Khusus"), superseding the old
 // modal-on-top-of-the-SS-soundboard approach. Previously RoleLoginFlow
@@ -72,10 +66,7 @@ export type RoleLoginFlowProps = {
   onRoleContinue: (identity: RoleSessionIdentity) => void;
 };
 
-const ROLE_META: Record<
-  CrewRole,
-  { icon: typeof Volume2; description: string }
-> = {
+const ROLE_META: Record<CrewRole, { icon: typeof Volume2; description: string }> = {
   ss: { icon: Volume2, description: "Panggil pelanggan lewat panggilan meja" },
   kasir: {
     icon: Wallet,
@@ -97,10 +88,7 @@ function onlyDigits(value: string, maxLength: number) {
   return value.replace(/\D/g, "").slice(0, maxLength);
 }
 
-export function RoleLoginFlow({
-  onSsContinue,
-  onRoleContinue,
-}: RoleLoginFlowProps) {
+export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowProps) {
   const [step, setStep] = useState<Step>("code");
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState("");
@@ -207,9 +195,7 @@ export function RoleLoginFlow({
     }
     setSubmittingIdentity(true);
     try {
-      const accessToken = await ensureAnonAccessToken(
-        getSupabaseBrowserClient(),
-      );
+      const accessToken = await ensureAnonAccessToken(getSupabaseBrowserClient());
       if (!accessToken) {
         setIdentityError("Gagal memulai sesi peran. Coba lagi.");
         setSubmittingIdentity(false);
@@ -266,8 +252,7 @@ export function RoleLoginFlow({
   };
 
   const stepIndex = STEP_ORDER.indexOf(step);
-  const canSubmitIdentity =
-    name.trim().length > 0 && checkedInAt.trim().length > 0;
+  const canSubmitIdentity = name.trim().length > 0 && checkedInAt.trim().length > 0;
 
   return (
     <main className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-white px-4 py-10 sm:px-6">
@@ -275,14 +260,8 @@ export function RoleLoginFlow({
 
       <div className="relative w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <img
-            src="/lime-logo.webp"
-            alt="LIME"
-            className="h-14 w-auto select-none sm:h-16"
-          />
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-            Login Crew
-          </p>
+          <img src="/lime-logo.webp" alt="LIME" className="h-14 w-auto select-none sm:h-16" />
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Login Crew</p>
         </div>
 
         <div className="mb-5 flex items-center justify-center gap-2">
@@ -306,17 +285,12 @@ export function RoleLoginFlow({
               <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-lg shadow-cyan-500/20">
                 <Store className="size-6" />
               </div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">
-                Masuk ke Resto
-              </h1>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">Masuk ke Resto</h1>
               <p className="mt-1 text-sm text-slate-500">
                 Masukkan Kode Resto yang diberikan admin.
               </p>
               <form className="mt-6 space-y-4" onSubmit={submitCode}>
-                <label
-                  className="block text-sm font-bold text-slate-700"
-                  htmlFor="restaurant-code"
-                >
+                <label className="block text-sm font-bold text-slate-700" htmlFor="restaurant-code">
                   Kode Resto
                 </label>
                 <Input
@@ -342,9 +316,7 @@ export function RoleLoginFlow({
                   disabled={submittingCode}
                   className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 via-cyan-500 to-fuchsia-500 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg shadow-cyan-500/25 transition hover:opacity-90 disabled:opacity-60"
                 >
-                  {submittingCode && (
-                    <Loader2 className="size-4 animate-spin" />
-                  )}
+                  {submittingCode && <Loader2 className="size-4 animate-spin" />}
                   {submittingCode ? "Memeriksa..." : "Lanjutkan"}
                 </button>
               </form>
@@ -371,26 +343,18 @@ export function RoleLoginFlow({
               <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-lg shadow-cyan-500/20">
                 <KeyRound className="size-6" />
               </div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">
-                ID Resto
-              </h1>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">ID Resto</h1>
               <p className="mt-1 text-sm text-slate-500">
-                Masukkan ID Resto (4 digit) yang diberikan admin untuk resto
-                ini.
+                Masukkan ID Resto (4 digit) yang diberikan admin untuk resto ini.
               </p>
               <form className="mt-6 space-y-4" onSubmit={submitPin}>
-                <label
-                  className="block text-sm font-bold text-slate-700"
-                  htmlFor="restaurant-pin"
-                >
+                <label className="block text-sm font-bold text-slate-700" htmlFor="restaurant-pin">
                   ID Resto
                 </label>
                 <Input
                   id="restaurant-pin"
                   value={pin}
-                  onChange={(event) =>
-                    setPin(onlyDigits(event.target.value, 4))
-                  }
+                  onChange={(event) => setPin(onlyDigits(event.target.value, 4))}
                   placeholder="0000"
                   inputMode="numeric"
                   autoComplete="off"
@@ -412,9 +376,7 @@ export function RoleLoginFlow({
                   disabled={submittingPin || pin.length !== 4}
                   className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 via-cyan-500 to-fuchsia-500 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg shadow-cyan-500/25 transition hover:opacity-90 disabled:opacity-60"
                 >
-                  {submittingPin && (
-                    <Loader2 className="size-4 animate-spin" />
-                  )}
+                  {submittingPin && <Loader2 className="size-4 animate-spin" />}
                   {submittingPin ? "Memeriksa..." : "Lanjutkan"}
                 </button>
               </form>
@@ -438,12 +400,8 @@ export function RoleLoginFlow({
                 </span>
               </div>
 
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">
-                Pilih Station
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Pilih station kamu untuk melanjutkan.
-              </p>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">Pilih Station</h1>
+              <p className="mt-1 text-sm text-slate-500">Pilih station kamu untuk melanjutkan.</p>
 
               <div className="mt-6 flex flex-col gap-3">
                 {CREW_ROLE_ORDER.map((option) => {
@@ -496,18 +454,13 @@ export function RoleLoginFlow({
                 </span>
               </div>
 
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">
-                Lengkapi Data
-              </h1>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">Lengkapi Data</h1>
               <p className="mt-1 text-sm text-slate-500">
                 Isi nama dan jam kerja kamu sebagai {CREW_ROLE_LABELS[role]}.
               </p>
 
               <form className="mt-6 space-y-4" onSubmit={submitIdentity}>
-                <label
-                  className="block text-sm font-bold text-slate-700"
-                  htmlFor="crew-name"
-                >
+                <label className="block text-sm font-bold text-slate-700" htmlFor="crew-name">
                   Nama
                 </label>
                 <Input
@@ -519,10 +472,7 @@ export function RoleLoginFlow({
                   autoFocus
                   className="h-12 rounded-xl border-slate-200 text-base focus-visible:border-cyan-400 focus-visible:ring-cyan-500/20"
                 />
-                <label
-                  className="block text-sm font-bold text-slate-700"
-                  htmlFor="checked-in-at"
-                >
+                <label className="block text-sm font-bold text-slate-700" htmlFor="checked-in-at">
                   Tanggal &amp; Jam Kerja
                 </label>
                 <Input

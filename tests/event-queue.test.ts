@@ -33,9 +33,9 @@ describe("isDeadLetterEvent", () => {
   });
 
   it("is dead-letter once flushAttempts reaches MAX_FLUSH_ATTEMPTS", () => {
-    expect(isDeadLetterEvent({ flushAttempts: MAX_FLUSH_ATTEMPTS, enqueuedAt: undefined }, now)).toBe(
-      true,
-    );
+    expect(
+      isDeadLetterEvent({ flushAttempts: MAX_FLUSH_ATTEMPTS, enqueuedAt: undefined }, now),
+    ).toBe(true);
     expect(
       isDeadLetterEvent({ flushAttempts: MAX_FLUSH_ATTEMPTS - 1, enqueuedAt: undefined }, now),
     ).toBe(false);

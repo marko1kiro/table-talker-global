@@ -54,14 +54,14 @@ describe("Kasir route: live data via snapshot + realtime", () => {
   // before the request instead of reading identity.accessToken directly.
   it("re-derives a live access token via getLiveAccessToken instead of reusing the stale login-time snapshot", () => {
     const text = source();
-    expect(text).toContain(
-      'import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser"',
+    expect(text).toMatch(
+      /import \{\s*getLiveAccessToken,\s*getSupabaseBrowserClient,?\s*\} from "@\/lib\/supabase-browser";/,
     );
     expect(text).not.toContain("accessToken: identity!.accessToken");
     expect(
       (
         text.match(
-          /accessToken: await getLiveAccessToken\(getSupabaseBrowserClient\(\), identity!\.accessToken\)/g,
+          /accessToken: await getLiveAccessToken\(\s*getSupabaseBrowserClient\(\),\s*identity!\.accessToken,?\s*\)/g,
         ) ?? []
       ).length,
     ).toBe(2);
@@ -71,8 +71,8 @@ describe("Kasir route: live data via snapshot + realtime", () => {
     const text = source();
     expect(text).toContain("const realtimeStatus = useTableOccupancyRealtime(restaurantId,");
     expect(text).toContain('realtimeStatus !== "SUBSCRIBED"');
-    expect(text).toContain(
-      "queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) })",
+    expect(text).toMatch(
+      /queryClient\.invalidateQueries\(\{\s*queryKey:\s*snapshotQueryKey\(restaurantId\),?\s*\}\)/,
     );
   });
 
@@ -107,8 +107,12 @@ describe("Kasir route: KOSONG -> TERISI is the only transition Kasir may perform
 
   it("disables already-occupied (red) tables so tapping them is a no-op", () => {
     const text = source();
-    expect(text).toMatch(/disabled=\{occupied\}/);
-    expect(text).toMatch(/aria-disabled=\{occupied\}/);
+    // `occupied` is the leading (and originally the only) condition; a
+    // pending-mutation guard was added alongside it later so a tap can't
+    // double-fire mid-request, but occupied tables must stay disabled
+    // regardless.
+    expect(text).toMatch(/disabled=\{occupied(\s*\|\|[^}]+)?\}/);
+    expect(text).toMatch(/aria-disabled=\{occupied(\s*\|\|[^}]+)?\}/);
   });
 
   it("only opens the confirmation dialog from the empty-table tap handler, not from the occupied cell", () => {
@@ -124,12 +128,17 @@ describe("Kasir route: KOSONG -> TERISI is the only transition Kasir may perform
 });
 
 describe("Kasir route: theme", () => {
-  it("uses the OwnerUi.tsx component set, not the SS neo-brutalist theme", () => {
+  it("uses the OwnerUi.tsx component set (via the shared CrewHeader), not the SS neo-brutalist theme", () => {
     const text = source();
+    // Task 10: OwnerPageHeader was superseded by the shared CrewHeader
+    // component (also used by Satgas/Clear Up) once all three role routes
+    // converged on the same header/table-section shell; the OwnerUi.tsx
+    // page shell (OwnerPage) is still the wrapper underneath it. Kasir
+    // never needed OwnerPanel (that's satgas's admin-note banner only).
     expect(text).toContain('from "@/components/OwnerUi"');
     expect(text).toContain("OwnerPage");
-    expect(text).toContain("OwnerPageHeader");
-    expect(text).toContain("OwnerPanel");
+    expect(text).toContain('from "@/components/CrewHeader"');
+    expect(text).toContain("<CrewHeader");
   });
 
   it("colors KOSONG green (emerald) and TERISI red, per spec", () => {

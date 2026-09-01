@@ -14,6 +14,12 @@ function row(overrides: Partial<TableOccupancyRow>): TableOccupancyRow {
     status: "kosong",
     occupiedAt: null,
     occupiedSource: null,
+    // H-04 (escort intent dedup) added these required fields to
+    // TableOccupancyRow; irrelevant to the clear-up queue logic under
+    // test here, so default them to their "no active escort" shape.
+    escortIntentId: null,
+    escortIntentExpiresAt: null,
+    escortIntentMine: false,
     ...overrides,
   };
 }

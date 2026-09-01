@@ -5,7 +5,14 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), "u
 
 it("shows a desktop help icon linking to /help next to the ready counter", () => {
   const header = source("../src/components/Header.tsx");
-  const desktopBlock = header.slice(header.indexOf("flex items-center gap-2"));
+  // The desktop help icon is the first `to="/help"` Link in the file (it
+  // sits in the top-right icon row next to the ready counter); the mobile
+  // banner's own `to="/help"` link comes later. Anchor on the Link element
+  // itself rather than a specific surrounding class string, since the
+  // wrapper's utility classes have been reordered/extended over time
+  // (min-w-0/shrink-0 were added around the original flex/items-center/gap
+  // classes) without changing this contract.
+  const desktopBlock = header.slice(0, header.indexOf("sm:hidden"));
   expect(desktopBlock).toContain('to="/help"');
   expect(desktopBlock).toContain('aria-label="Butuh bantuan?"');
   expect(desktopBlock).toContain("<LifeBuoy");

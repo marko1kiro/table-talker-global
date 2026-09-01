@@ -78,7 +78,9 @@ it("prestages event in memory before awaiting IndexedDB", () => {
 // other queued tenants/groups in the same pass.
 it("does not abort the whole flush when a batch fails (H-05)", () => {
   const source = eventFlush();
-  const flushBody = source.match(/const flush = useCallback\(async \(\) => \{[\s\S]*?\n {2}\}, \[flushToServer\]\);/);
+  const flushBody = source.match(
+    /const flush = useCallback\(async \(\) => \{[\s\S]*?\n {2}\}, \[flushToServer\]\);/,
+  );
   expect(flushBody).not.toBeNull();
   const body = flushBody?.[0] ?? "";
   expect(body).toContain("failedTenants");

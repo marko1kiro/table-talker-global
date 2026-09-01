@@ -11,7 +11,9 @@ const sql = readFileSync(
 
 it("cleans up pre-existing duplicate/orphaned unresolved intents before the unique index is created", () => {
   const cleanupIndex = sql.indexOf("update public.table_escort_intents tei");
-  const indexIndex = sql.indexOf("create unique index table_escort_intents_one_active_per_table_idx");
+  const indexIndex = sql.indexOf(
+    "create unique index table_escort_intents_one_active_per_table_idx",
+  );
   expect(cleanupIndex).toBeGreaterThan(-1);
   expect(indexIndex).toBeGreaterThan(-1);
   expect(cleanupIndex).toBeLessThan(indexIndex);
@@ -79,14 +81,18 @@ it("also resolves any stale pending escort intent inside set_table_empty_cleanup
 });
 
 it("drops get_table_occupancy_snapshot before recreating it, since its RETURNS TABLE column list is changing", () => {
-  const dropIndex = sql.indexOf("drop function if exists public.get_table_occupancy_snapshot(uuid, text)");
+  const dropIndex = sql.indexOf(
+    "drop function if exists public.get_table_occupancy_snapshot(uuid, text)",
+  );
   const createIndex = sql.indexOf("create function public.get_table_occupancy_snapshot(");
   expect(dropIndex).toBeGreaterThan(-1);
   expect(createIndex).toBeGreaterThan(dropIndex);
 });
 
 it("extends get_table_occupancy_snapshot's return shape with escort_intent_id/expires_at/mine", () => {
-  expect(sql).toMatch(/escort_intent_id uuid,\s*\n\s*escort_intent_expires_at timestamptz,\s*\n\s*escort_intent_mine boolean/);
+  expect(sql).toMatch(
+    /escort_intent_id uuid,\s*\n\s*escort_intent_expires_at timestamptz,\s*\n\s*escort_intent_mine boolean/,
+  );
 });
 
 it("unions in kosong tables with an active escort intent, excluding any that are also terisi", () => {
@@ -111,5 +117,7 @@ it("still excludes the 'ss' role and preserves the grant/revoke pair for get_tab
 });
 
 it("never grants direct table access to public/anon/authenticated in this migration (RPC-only surface)", () => {
-  expect(sql).not.toMatch(/grant\s+[\s\S]*?on\s+(?:table\s+)?public\.table_escort_intents\s+to\s+(anon|authenticated)/i);
+  expect(sql).not.toMatch(
+    /grant\s+[\s\S]*?on\s+(?:table\s+)?public\.table_escort_intents\s+to\s+(anon|authenticated)/i,
+  );
 });

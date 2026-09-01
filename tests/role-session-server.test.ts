@@ -12,12 +12,16 @@ const source = () =>
 const RESTAURANT_ID = "33916a05-7e95-42fa-bc3c-050bed2402c5";
 
 describe("claimRoleSessionCore", () => {
+  // C-01 remediation (Fase 1, 2026-09-02): claim_role_session is the
+  // authoritative PIN check, so pin is now a required field forwarded to
+  // the RPC as p_pin alongside the pre-existing params.
   const baseInput = {
     restaurantId: RESTAURANT_ID,
     tenantToken: "tenant-token",
     role: "kasir" as const,
     displayName: "Budi",
     checkedInAt: "2026-08-30T09:00:00.000Z",
+    pin: "1234",
   };
 
   it("returns a normalized ok result on a successful RPC response", async () => {
@@ -29,6 +33,7 @@ describe("claimRoleSessionCore", () => {
         p_role: "kasir",
         p_display_name: "Budi",
         p_checked_in_at: "2026-08-30T09:00:00.000Z",
+        p_pin: "1234",
       });
       return {
         data: {

@@ -29,6 +29,10 @@ describe("index.tsx: persists the role session identity before navigating away",
 
   it("mirrors the existing SS branch, which persists via writeCrewSessionIdentity the same way", () => {
     const text = source();
-    expect(text).toContain("writeCrewSessionIdentity(browserSessionStorage(), identity)");
+    // Formatted across multiple lines by prettier; match whitespace-tolerantly
+    // rather than requiring the exact single-line call.
+    expect(text).toMatch(
+      /writeCrewSessionIdentity\(\s*\n?\s*browserSessionStorage\(\),\s*\n?\s*identity,?\s*\n?\s*\)/,
+    );
   });
 });

@@ -11,30 +11,42 @@ describe("RoleLoginFlow: step 1 - Kode Resto (plain text, no masking)", () => {
     expect(text).toContain('id="restaurant-code"');
   });
 
-  it("reuses validateRestaurantCode and loginToRestaurant unchanged", () => {
+  // C-01 remediation (Fase 1, 2026-09-02) moved code validation entirely
+  // server-side (loginToRestaurant already runs validateRestaurantCode
+  // internally, see src/lib/restaurants.server.ts), so the component no
+  // longer duplicates that import/call on the client -- it only submits the
+  // raw code and reacts to loginToRestaurant's result.
+  it("reuses loginToRestaurant unchanged and lets the server validate the code", () => {
     const text = source();
-    expect(text).toContain('import { validateRestaurantCode } from "@/lib/restaurant-domain"');
-    expect(text).toContain('import { loginToRestaurant } from "@/lib/restaurants.server"');
-    expect(text).toContain("loginToRestaurant({ data:");
+    expect(text).not.toContain('from "@/lib/restaurant-domain"');
+    expect(text).toContain(
+      'import { loginToRestaurant, verifyRestaurantPin } from "@/lib/restaurants.server"',
+    );
+    expect(text).toContain("loginToRestaurant({ data: { code } })");
   });
 });
 
-describe("RoleLoginFlow: step 2 - confirmation dialog", () => {
-  it("shows the exact confirmation copy with the restaurant's display name and YA/TIDAK actions", () => {
+// C-01 remediation (Fase 1, 2026-09-02) inserted a mandatory "ID Resto" PIN
+// step between Kode Resto and the role picker (see the in-file sequence
+// comment at the top of RoleLoginFlow.tsx), and folded the old separate
+// "Konfirmasi Resto" YA/TIDAK dialog into that same step: the resolved
+// restaurant's display name is now shown as a confirmation badge on the PIN
+// screen and later on the role picker, rather than as its own step.
+describe("RoleLoginFlow: step 2 - ID Resto PIN (replaces the old YA/TIDAK confirmation dialog)", () => {
+  it("verifies the PIN via verifyRestaurantPin using the tenant token from step 1", () => {
     const text = source();
-    expect(text).toContain("Apakah kamu login ke Resto");
-    expect(text).toContain("YA");
-    expect(text).toContain("TIDAK");
+    expect(text).toContain("verifyRestaurantPin({");
+    expect(text).toContain("tenantToken: login.tenantToken, pin");
   });
 
-  it("TIDAK discards the tenant token and returns to step 1 with a cleared code field", () => {
+  it("going back from the PIN step clears the PIN and (via backToCode) the tenant login state", () => {
     const text = source();
     expect(text).toMatch(/setStep\(\s*"code"\s*\)/);
-    expect(text).toContain('setCode("")');
     expect(text).toContain("setLogin(null)");
+    expect(text).toContain('setPin("")');
   });
 
-  it("YA advances to the role picker without any server call", () => {
+  it("advances to the role picker only after the PIN is verified server-side", () => {
     const text = source();
     expect(text).toMatch(/setStep\(\s*"role"\s*\)/);
   });
@@ -97,10 +109,12 @@ describe("RoleLoginFlow: step 5 - claim session and hand off to caller", () => {
 
   it("obtains a per-device anonymous-auth access token before calling claimRoleSession", () => {
     const text = source();
-    expect(text).toContain(
-      'import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser"',
+    expect(text).toMatch(
+      /import\s*\{\s*\n?\s*ensureAnonAccessToken,\s*\n?\s*getSupabaseBrowserClient,?\s*\n?\s*\}\s*from\s*"@\/lib\/supabase-browser"/,
     );
-    expect(text).toContain("ensureAnonAccessToken(getSupabaseBrowserClient())");
+    expect(text).toMatch(
+      /ensureAnonAccessToken\(\s*\n?\s*getSupabaseBrowserClient\(\),?\s*\n?\s*\)/,
+    );
     expect(text).toMatch(/\baccessToken,/);
   });
 
