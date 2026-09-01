@@ -11,10 +11,10 @@ interface HeaderProps {
 
 // SS station header. Kept neo-brutalist (unlike the plain shadcn
 // CrewHeader used by Kasir/Satgas/Clear Up) but restructured so the top
-// area is uniform with the other crew dashboards: logo + role badge on
-// the left, sign-out on the right, then resto name and logged-in user
-// name each on their own line. The Soundboard grid/table-number style
-// below this header is untouched.
+// area is uniform with the other crew dashboards: logo + role badge +
+// logged-in user name on one row (sign-out at the far right), then the
+// resto name on its own line below. The Soundboard grid/table-number
+// style below this header is untouched.
 export function Header({
   readyCount,
   totalCount,
@@ -27,7 +27,7 @@ export function Header({
     <header className="sticky top-0 z-40 border-b-[3px] border-foreground bg-brutal-bg">
       <div className="mx-auto max-w-6xl px-4 py-3">
         <div className="flex items-center justify-between gap-3">
-          <Link to="/" className="group flex min-w-0 items-center gap-2.5">
+          <Link to="/" className="group flex min-w-0 shrink-0 items-center gap-2.5">
             <div className="brutal-border brutal-shadow-sm flex h-11 w-11 shrink-0 items-center justify-center bg-card p-1.5 transition-transform group-hover:-rotate-6">
               <img src="/lime-logo.webp" alt="LIME" className="h-full w-full object-contain" />
             </div>
@@ -35,6 +35,12 @@ export function Header({
               SS
             </span>
           </Link>
+
+          {userName && (
+            <span className="min-w-0 flex-1 truncate text-center text-[11px] font-black uppercase tracking-wider">
+              {userName}
+            </span>
+          )}
 
           <div className="flex shrink-0 items-center gap-2">
             <div className="brutal-border hidden bg-card px-3 py-1.5 sm:block">
@@ -63,15 +69,10 @@ export function Header({
           </div>
         </div>
 
-        <div className="mt-2 flex flex-col items-start gap-1.5">
+        <div className="mt-2 flex items-start">
           <div className="inline-block max-w-full truncate border-2 border-foreground bg-card px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider">
             <span className="text-destructive">◆</span> {restoLabel}
           </div>
-          {userName && (
-            <div className="inline-block max-w-full truncate border-2 border-foreground bg-accent px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-accent-foreground">
-              {userName}
-            </div>
-          )}
         </div>
       </div>
       <div className="border-t-[3px] border-foreground bg-accent px-4 py-1.5 sm:hidden">

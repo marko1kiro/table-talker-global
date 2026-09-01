@@ -26,7 +26,7 @@ import {
   OwnerRetry,
   ownerPrimaryButtonClass,
 } from "@/components/OwnerUi";
-import { CrewHeader } from "@/components/CrewHeader";
+import { CrewHeader, CrewTableSection } from "@/components/CrewHeader";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
   browserSessionStorage,
@@ -247,15 +247,6 @@ function SatgasRoute() {
         restaurantName={identity.restaurantDisplayName}
         userName={identity.displayName}
         onLogout={logout}
-        sectionTitle="Meja"
-        hint="Tap meja KOSONG untuk mengantar tamu, lalu konfirmasi jika sudah 10 menit."
-        legend={[
-          { color: "emerald", label: "Kosong" },
-          { color: "amber", label: "Sudah Di-escort" },
-          { color: "red", label: "Terisi" },
-        ]}
-        layoutPreference={layoutPreference}
-        onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
       />
 
       {realtimeStatus !== "SUBSCRIBED" && (
@@ -296,32 +287,40 @@ function SatgasRoute() {
         </OwnerPanel>
       )}
 
-      {snapshot.isLoading ? (
-        <OwnerPanel>
+      <CrewTableSection
+        legend={[
+          { color: "emerald", label: "Kosong" },
+          { color: "amber", label: "Sudah Di-escort" },
+          { color: "red", label: "Terisi" },
+        ]}
+        layoutPreference={layoutPreference}
+        onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
+      >
+        {snapshot.isLoading ? (
           <p className="text-sm text-slate-500">Memuat status meja...</p>
-        </OwnerPanel>
-      ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
-        <OwnerPanel>
-          <OwnerNotice role="alert" tone="danger">
-            Status meja tidak dapat dimuat.
-          </OwnerNotice>
-          <div className="mt-4">
-            <OwnerRetry onClick={() => snapshot.refetch()} />
-          </div>
-        </OwnerPanel>
-      ) : layoutPreference === "grid" ? (
-        <TableGrid
-          tables={tables}
-          escortedTableNumbers={escortedTableNumbers}
-          onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
-        />
-      ) : (
-        <TableList
-          tables={tables}
-          escortedTableNumbers={escortedTableNumbers}
-          onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
-        />
-      )}
+        ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
+          <>
+            <OwnerNotice role="alert" tone="danger">
+              Status meja tidak dapat dimuat.
+            </OwnerNotice>
+            <div className="mt-4">
+              <OwnerRetry onClick={() => snapshot.refetch()} />
+            </div>
+          </>
+        ) : layoutPreference === "grid" ? (
+          <TableGrid
+            tables={tables}
+            escortedTableNumbers={escortedTableNumbers}
+            onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
+          />
+        ) : (
+          <TableList
+            tables={tables}
+            escortedTableNumbers={escortedTableNumbers}
+            onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
+          />
+        )}
+      </CrewTableSection>
 
       <AlertDialog
         open={escortTable !== null}
@@ -363,34 +362,32 @@ function TableGrid({
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel>
-      <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 lg:grid-cols-10">
-        {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
-          const status = tableStatus(tables, tableNumber);
-          const occupied = status === "terisi";
-          const escorted = !occupied && escortedTableNumbers.has(tableNumber);
-          return (
-            <button
-              key={tableNumber}
-              type="button"
-              aria-label={`Meja ${tableNumber}`}
-              aria-disabled={occupied}
-              disabled={occupied}
-              onClick={() => onSelectEmptyTable(tableNumber)}
-              className={
-                occupied
-                  ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700"
-                  : escorted
-                    ? "flex aspect-square items-center justify-center rounded-xl border-2 border-amber-300 bg-amber-50 text-sm font-extrabold text-amber-800 transition hover:border-amber-400 hover:bg-amber-100"
-                    : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100"
-              }
-            >
-              {tableNumber}
-            </button>
-          );
-        })}
-      </div>
-    </OwnerPanel>
+    <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 lg:grid-cols-10">
+      {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
+        const status = tableStatus(tables, tableNumber);
+        const occupied = status === "terisi";
+        const escorted = !occupied && escortedTableNumbers.has(tableNumber);
+        return (
+          <button
+            key={tableNumber}
+            type="button"
+            aria-label={`Meja ${tableNumber}`}
+            aria-disabled={occupied}
+            disabled={occupied}
+            onClick={() => onSelectEmptyTable(tableNumber)}
+            className={
+              occupied
+                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700"
+                : escorted
+                  ? "flex aspect-square items-center justify-center rounded-xl border-2 border-amber-300 bg-amber-50 text-sm font-extrabold text-amber-800 transition hover:border-amber-400 hover:bg-amber-100"
+                  : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100"
+            }
+          >
+            {tableNumber}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -404,44 +401,42 @@ function TableList({
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel>
-      <div className="divide-y divide-slate-100">
-        {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
-          const status = tableStatus(tables, tableNumber);
-          const occupied = status === "terisi";
-          const escorted = !occupied && escortedTableNumbers.has(tableNumber);
-          return (
-            <button
-              key={tableNumber}
-              type="button"
-              aria-label={`Meja ${tableNumber}`}
-              aria-disabled={occupied}
-              disabled={occupied}
-              onClick={() => onSelectEmptyTable(tableNumber)}
+    <div className="divide-y divide-slate-100">
+      {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
+        const status = tableStatus(tables, tableNumber);
+        const occupied = status === "terisi";
+        const escorted = !occupied && escortedTableNumbers.has(tableNumber);
+        return (
+          <button
+            key={tableNumber}
+            type="button"
+            aria-label={`Meja ${tableNumber}`}
+            aria-disabled={occupied}
+            disabled={occupied}
+            onClick={() => onSelectEmptyTable(tableNumber)}
+            className={
+              occupied
+                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700"
+                : escorted
+                  ? "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-amber-800 transition hover:bg-amber-50"
+                  : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition hover:bg-emerald-50"
+            }
+          >
+            <span>Meja {tableNumber}</span>
+            <span
               className={
                 occupied
-                  ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700"
+                  ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
                   : escorted
-                    ? "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-amber-800 transition hover:bg-amber-50"
-                    : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition hover:bg-emerald-50"
+                    ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700"
+                    : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
               }
             >
-              <span>Meja {tableNumber}</span>
-              <span
-                className={
-                  occupied
-                    ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
-                    : escorted
-                      ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700"
-                      : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
-                }
-              >
-                {occupied ? "TERISI" : escorted ? "DI-ESCORT" : "KOSONG"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </OwnerPanel>
+              {occupied ? "TERISI" : escorted ? "DI-ESCORT" : "KOSONG"}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
