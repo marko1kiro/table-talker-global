@@ -10,8 +10,12 @@ it("defines truthful verification scripts", async () => {
   expect(packageJson.scripts["check:edge"]).toBe(
     "deno check supabase/functions/owner-retention/index.ts",
   );
+  // check:edge (deno check) is intentionally excluded from the Vercel-gating
+  // `verify` chain: Vercel's build image has no `deno` binary, and the edge
+  // function it checks isn't part of what Vercel builds/deploys anyway. The
+  // `check:edge` script itself remains available for local/manual use.
   expect(packageJson.scripts.verify).toBe(
-    "npm test && npm run typecheck && npm run check:edge && npm run lint && npm run build",
+    "npm test && npm run typecheck && npm run lint && npm run build",
   );
 
   for (const script of Object.values(packageJson.scripts)) {
