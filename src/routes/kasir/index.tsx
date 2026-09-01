@@ -130,96 +130,98 @@ function KasirRoute() {
   const tables = snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
 
   return (
-    <OwnerPage>
-      <CrewHeader
-        eyebrow={identity.restaurantDisplayName}
-        title="Kasir"
-        description={`Login sebagai ${identity.displayName}. Tap meja KOSONG untuk menandai TERISI setelah pelanggan bayar di kasir.`}
-        action={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
-              className={ownerSecondaryButtonClass}
-            >
-              {layoutPreference === "grid" ? (
-                <List className="size-4" />
-              ) : (
-                <LayoutGrid className="size-4" />
-              )}
-              {layoutPreference === "grid" ? "Tampilan List" : "Tampilan Grid"}
-            </button>
-            <button type="button" onClick={logout} className={ownerSecondaryButtonClass}>
-              <LogOut className="size-4" />
-              Keluar
-            </button>
-          </div>
-        }
-      />
+    <div className="mx-auto w-full max-w-[1440px] sm:px-6 sm:py-2 lg:px-10 lg:py-4">
+      <OwnerPage>
+        <CrewHeader
+          eyebrow={identity.restaurantDisplayName}
+          title="Kasir"
+          description={`Login sebagai ${identity.displayName}. Tap meja KOSONG untuk menandai TERISI setelah pelanggan bayar di kasir.`}
+          action={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
+                className={ownerSecondaryButtonClass}
+              >
+                {layoutPreference === "grid" ? (
+                  <List className="size-4" />
+                ) : (
+                  <LayoutGrid className="size-4" />
+                )}
+                {layoutPreference === "grid" ? "Tampilan List" : "Tampilan Grid"}
+              </button>
+              <button type="button" onClick={logout} className={ownerSecondaryButtonClass}>
+                <LogOut className="size-4" />
+                Keluar
+              </button>
+            </div>
+          }
+        />
 
-      {realtimeStatus !== "SUBSCRIBED" && (
-        <OwnerNotice role="status" tone="warning">
-          Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
-        </OwnerNotice>
-      )}
-
-      {actionError && (
-        <OwnerNotice role="alert" tone="danger">
-          {actionError}
-        </OwnerNotice>
-      )}
-
-      {snapshot.isLoading ? (
-        <OwnerPanel>
-          <p className="text-sm text-slate-500">Memuat status meja...</p>
-        </OwnerPanel>
-      ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
-        <OwnerPanel>
-          <OwnerNotice role="alert" tone="danger">
-            Status meja tidak dapat dimuat.
+        {realtimeStatus !== "SUBSCRIBED" && (
+          <OwnerNotice role="status" tone="warning">
+            Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
           </OwnerNotice>
-          <div className="mt-4">
-            <OwnerRetry onClick={() => snapshot.refetch()} />
-          </div>
-        </OwnerPanel>
-      ) : layoutPreference === "grid" ? (
-        <TableGrid
-          tables={tables}
-          onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
-        />
-      ) : (
-        <TableList
-          tables={tables}
-          onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
-        />
-      )}
+        )}
 
-      <AlertDialog
-        open={confirmTable !== null}
-        onOpenChange={(open) => {
-          if (!open) setConfirmTable(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Tandai Meja {confirmTable} Terisi?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Gunakan ini hanya untuk pelanggan yang bayar langsung di kasir tanpa scan QR.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmTable(null)}>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              className={ownerPrimaryButtonClass}
-              disabled={markOccupied.isPending}
-              onClick={() => confirmTable !== null && markOccupied.mutate(confirmTable)}
-            >
-              Ya, Tandai Terisi
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </OwnerPage>
+        {actionError && (
+          <OwnerNotice role="alert" tone="danger">
+            {actionError}
+          </OwnerNotice>
+        )}
+
+        {snapshot.isLoading ? (
+          <OwnerPanel>
+            <p className="text-sm text-slate-500">Memuat status meja...</p>
+          </OwnerPanel>
+        ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
+          <OwnerPanel>
+            <OwnerNotice role="alert" tone="danger">
+              Status meja tidak dapat dimuat.
+            </OwnerNotice>
+            <div className="mt-4">
+              <OwnerRetry onClick={() => snapshot.refetch()} />
+            </div>
+          </OwnerPanel>
+        ) : layoutPreference === "grid" ? (
+          <TableGrid
+            tables={tables}
+            onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
+          />
+        ) : (
+          <TableList
+            tables={tables}
+            onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
+          />
+        )}
+
+        <AlertDialog
+          open={confirmTable !== null}
+          onOpenChange={(open) => {
+            if (!open) setConfirmTable(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Tandai Meja {confirmTable} Terisi?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Gunakan ini hanya untuk pelanggan yang bayar langsung di kasir tanpa scan QR.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setConfirmTable(null)}>Batal</AlertDialogCancel>
+              <AlertDialogAction
+                className={ownerPrimaryButtonClass}
+                disabled={markOccupied.isPending}
+                onClick={() => confirmTable !== null && markOccupied.mutate(confirmTable)}
+              >
+                Ya, Tandai Terisi
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </OwnerPage>
+    </div>
   );
 }
 
@@ -231,8 +233,11 @@ function TableGrid({
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
-    <OwnerPanel title="Grid Meja" description="Hijau = KOSONG, Merah = TERISI.">
-      <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 lg:grid-cols-10">
+    <OwnerPanel
+      title="Grid Meja"
+      description={`Hijau = KOSONG, Merah = TERISI. Total ${TABLE_COUNT} meja.`}
+    >
+      <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 sm:gap-2.5 md:grid-cols-10 lg:grid-cols-12 lg:gap-3 xl:grid-cols-[repeat(15,minmax(0,1fr))] 2xl:grid-cols-[repeat(18,minmax(0,1fr))]">
         {Array.from({ length: TABLE_COUNT }, (_, index) => index + 1).map((tableNumber) => {
           const status = tableStatus(tables, tableNumber);
           const occupied = status === "terisi";
@@ -246,8 +251,8 @@ function TableGrid({
               onClick={() => onSelectEmptyTable(tableNumber)}
               className={
                 occupied
-                  ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700"
-                  : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100"
+                  ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 lg:text-base"
+                  : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-100 hover:shadow-sm active:translate-y-0 lg:text-base"
               }
             >
               {tableNumber}
