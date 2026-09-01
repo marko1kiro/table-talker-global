@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -267,22 +268,27 @@ function SatgasRoute() {
           description="Sudah 10 menit sejak diantar dan meja masih tercatat kosong. Konfirmasi jika tamu sudah duduk."
         >
           <div className="flex flex-col gap-2">
-            {partition.readyToConfirm.map((entry) => (
-              <div
-                key={entry.intentId}
-                className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2"
-              >
-                <span className="text-sm font-bold text-amber-800">Meja {entry.tableNumber}</span>
-                <button
-                  type="button"
-                  disabled={confirmMutation.isPending}
-                  onClick={() => confirmMutation.mutate(entry)}
-                  className={ownerPrimaryButtonClass}
+            {partition.readyToConfirm.map((entry) => {
+              const isConfirming =
+                confirmMutation.isPending && confirmMutation.variables?.intentId === entry.intentId;
+              return (
+                <div
+                  key={entry.intentId}
+                  className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2"
                 >
-                  Konfirmasi
-                </button>
-              </div>
-            ))}
+                  <span className="text-sm font-bold text-amber-800">Meja {entry.tableNumber}</span>
+                  <button
+                    type="button"
+                    disabled={confirmMutation.isPending}
+                    onClick={() => confirmMutation.mutate(entry)}
+                    className={`${ownerPrimaryButtonClass} flex items-center gap-2`}
+                  >
+                    {isConfirming && <Loader2 className="size-4 animate-spin" />}
+                    {isConfirming ? "Memproses..." : "Konfirmasi"}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </OwnerPanel>
       )}
@@ -311,12 +317,14 @@ function SatgasRoute() {
           <TableGrid
             tables={tables}
             escortedTableNumbers={escortedTableNumbers}
+            pendingTable={escortMutation.isPending ? escortTable : null}
             onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
           />
         ) : (
           <TableList
             tables={tables}
             escortedTableNumbers={escortedTableNumbers}
+            pendingTable={escortMutation.isPending ? escortTable : null}
             onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
           />
         )}
@@ -325,7 +333,7 @@ function SatgasRoute() {
       <AlertDialog
         open={escortTable !== null}
         onOpenChange={(open) => {
-          if (!open) setEscortTable(null);
+          if (!open && !escortMutation.isPending) setEscortTable(null);
         }}
       >
         <AlertDialogContent>
@@ -337,13 +345,25 @@ function SatgasRoute() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setEscortTable(null)}>Batal</AlertDialogCancel>
+            <AlertDialogCancel
+              disabled={escortMutation.isPending}
+              onClick={() => setEscortTable(null)}
+            >
+              Batal
+            </AlertDialogCancel>
             <AlertDialogAction
               className={ownerPrimaryButtonClass}
               disabled={escortMutation.isPending}
               onClick={() => escortTable !== null && escortMutation.mutate(escortTable)}
             >
-              Ya, Escort
+              {escortMutation.isPending ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  Memproses...
+                </span>
+              ) : (
+                "Ya, Escort"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -355,10 +375,12 @@ function SatgasRoute() {
 function TableGrid({
   tables,
   escortedTableNumbers,
+  pendingTable,
   onSelectEmptyTable,
 }: {
   tables: TableOccupancyRow[];
   escortedTableNumbers: Set<number>;
+  pendingTable: number | null;
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
@@ -367,23 +389,26 @@ function TableGrid({
         const status = tableStatus(tables, tableNumber);
         const occupied = status === "terisi";
         const escorted = !occupied && escortedTableNumbers.has(tableNumber);
+        const isPending = pendingTable === tableNumber;
         return (
           <button
             key={tableNumber}
             type="button"
             aria-label={`Meja ${tableNumber}`}
-            aria-disabled={occupied}
-            disabled={occupied}
+            aria-disabled={occupied || isPending}
+            disabled={occupied || isPending}
             onClick={() => onSelectEmptyTable(tableNumber)}
             className={
               occupied
-                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700"
+                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 transition-colors duration-300"
                 : escorted
-                  ? "flex aspect-square items-center justify-center rounded-xl border-2 border-amber-300 bg-amber-50 text-sm font-extrabold text-amber-800 transition hover:border-amber-400 hover:bg-amber-100"
-                  : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100"
+                  ? "flex aspect-square items-center justify-center rounded-xl border-2 border-amber-300 bg-amber-50 text-sm font-extrabold text-amber-800 transition-colors duration-300 hover:border-amber-400 hover:bg-amber-100"
+                  : isPending
+                    ? "flex aspect-square cursor-wait items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300"
+                    : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 hover:border-emerald-400 hover:bg-emerald-100"
             }
           >
-            {tableNumber}
+            {isPending ? <Loader2 className="size-4 animate-spin" /> : tableNumber}
           </button>
         );
       })}
@@ -394,10 +419,12 @@ function TableGrid({
 function TableList({
   tables,
   escortedTableNumbers,
+  pendingTable,
   onSelectEmptyTable,
 }: {
   tables: TableOccupancyRow[];
   escortedTableNumbers: Set<number>;
+  pendingTable: number | null;
   onSelectEmptyTable: (tableNumber: number) => void;
 }) {
   return (
@@ -406,34 +433,41 @@ function TableList({
         const status = tableStatus(tables, tableNumber);
         const occupied = status === "terisi";
         const escorted = !occupied && escortedTableNumbers.has(tableNumber);
+        const isPending = pendingTable === tableNumber;
         return (
           <button
             key={tableNumber}
             type="button"
             aria-label={`Meja ${tableNumber}`}
-            aria-disabled={occupied}
-            disabled={occupied}
+            aria-disabled={occupied || isPending}
+            disabled={occupied || isPending}
             onClick={() => onSelectEmptyTable(tableNumber)}
             className={
               occupied
-                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700"
+                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300"
                 : escorted
-                  ? "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-amber-800 transition hover:bg-amber-50"
-                  : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition hover:bg-emerald-50"
+                  ? "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-amber-800 transition-colors duration-300 hover:bg-amber-50"
+                  : isPending
+                    ? "flex w-full cursor-wait items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300"
+                    : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 hover:bg-emerald-50"
             }
           >
             <span>Meja {tableNumber}</span>
-            <span
-              className={
-                occupied
-                  ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
-                  : escorted
-                    ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700"
-                    : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
-              }
-            >
-              {occupied ? "TERISI" : escorted ? "DI-ESCORT" : "KOSONG"}
-            </span>
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin text-emerald-700" />
+            ) : (
+              <span
+                className={
+                  occupied
+                    ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
+                    : escorted
+                      ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700"
+                      : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
+                }
+              >
+                {occupied ? "TERISI" : escorted ? "DI-ESCORT" : "KOSONG"}
+              </span>
+            )}
           </button>
         );
       })}
