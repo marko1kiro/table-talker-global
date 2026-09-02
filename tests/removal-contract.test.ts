@@ -99,7 +99,7 @@ function listFiles(dir: string): string[] {
     const full = path.join(dir, entry);
     const stats = statSync(full);
     if (stats.isDirectory()) files.push(...listFiles(full));
-    else files.push(full);
+    else files.push(full.split(path.sep).join("/"));
   }
   return files;
 }
