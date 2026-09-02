@@ -1,20 +1,15 @@
+import { randomUUID } from "node:crypto";
 import { getServiceClient } from "./remote-audio.server";
 import { recordQrScanCore, type RecordQrScanResult } from "./table-occupancy.server";
 
 // Task 7: QR Interceptor -- see docs/superpowers/plans/
 // 2026-08-29-table-occupancy-tracking.md, Task 7. This module is the
 // server-only implementation behind the raw API route at
-// src/routes/api/qr/$restaurantId/$tableNumber.ts (see that file for why
-// the path segment is the restaurant's UUID `id`, not a "slug" -- no such
-// column exists anywhere in the restaurants schema read for this feature).
+// src/routes/api/qr/$restaurantId/$tableNumber.ts.
 //
-// Every RPC this module touches (`record_qr_scan`) is `grant execute ...
-// to service_role` only (supabase/migrations/20260829020000_
-// table_occupancy_rpcs.sql) -- the opposite grant shape from the other six
-// Task 6 RPCs -- so, unlike table-occupancy.server.ts's other wrappers,
-// this module correctly uses the plain service-role client throughout.
-// This endpoint is hit directly by customers' phones with no login, so it
-// deliberately never accepts or forwards a bearer/access token.
+// The customer endpoint deliberately has no login. All database calls made
+// here use RPCs granted only to service_role; no bearer token is accepted or
+// forwarded.
 
 const ESB_BASE_URL = "https://esborder.qs.esb.co.id";
 
@@ -27,17 +22,18 @@ export type RecordQrScanFn = (
   tableNumber: number,
 ) => Promise<RecordQrScanResult>;
 
+export type EnqueueQrScanFn = (
+  scanId: string,
+  restaurantId: string,
+  tableNumber: number,
+) => Promise<void>;
+
+export type ProcessPendingQrScanFn = (scanId: string) => Promise<void>;
+
 export type ResolveEsbRedirectResult =
   | { ok: true; url: string }
   | { ok: false; code: "RESTAURANT_NOT_FOUND" | "RESTAURANT_INACTIVE" | "MISSING_ESB_APP_ID" };
 
-// ---------------------------------------------------------------------------
-// resolveEsbRedirectUrl -- pure, dependency-injected core (mirrors the
-// Core-fn pattern used throughout src/lib/*.server.ts): looks up the
-// restaurant's esb_app_id via an injected lookup function and builds the
-// real ESB order URL. Never throws -- any lookup failure is folded into
-// RESTAURANT_NOT_FOUND so the caller never leaks internal error detail.
-// ---------------------------------------------------------------------------
 export async function resolveEsbRedirectUrl(
   restaurantId: string,
   tableNumber: number,
@@ -57,11 +53,6 @@ export async function resolveEsbRedirectUrl(
   return { ok: true, url };
 }
 
-// ---------------------------------------------------------------------------
-// defaultRestaurantEsbLookup -- production RestaurantEsbLookup implementation,
-// backed by the plain service-role client (restaurants is `revoke all ...
-// from anon, authenticated`, readable only server-side).
-// ---------------------------------------------------------------------------
 export const defaultRestaurantEsbLookup: RestaurantEsbLookup = async (restaurantId) => {
   const client = getServiceClient();
   if (!client) return null;
@@ -77,12 +68,8 @@ export const defaultRestaurantEsbLookup: RestaurantEsbLookup = async (restaurant
   };
 };
 
-// ---------------------------------------------------------------------------
-// defaultRecordQrScan -- production RecordQrScanFn, reusing recordQrScanCore
-// from table-occupancy.server.ts (built in Task 6) rather than
-// re-implementing the record_qr_scan RPC call, per the plan's Task 7 Step 3
-// note.
-// ---------------------------------------------------------------------------
+// Retained as a compatibility wrapper for direct callers. The interceptor's
+// production path below uses the durable enqueue + processor flow instead.
 export const defaultRecordQrScan: RecordQrScanFn = async (restaurantId, tableNumber) => {
   const client = getServiceClient();
   if (!client) {
@@ -91,6 +78,24 @@ export const defaultRecordQrScan: RecordQrScanFn = async (restaurantId, tableNum
   return recordQrScanCore({ restaurantId, tableNumber }, async (fn, params) =>
     client.rpc(fn, params),
   );
+};
+
+export const defaultEnqueueQrScan: EnqueueQrScanFn = async (scanId, restaurantId, tableNumber) => {
+  const client = getServiceClient();
+  if (!client) throw new Error("QR_SCAN_OUTBOX_UNAVAILABLE");
+  const { error } = await client.rpc("enqueue_qr_scan", {
+    p_scan_id: scanId,
+    p_restaurant_id: restaurantId,
+    p_table_number: tableNumber,
+  });
+  if (error) throw error;
+};
+
+export const defaultProcessPendingQrScan: ProcessPendingQrScanFn = async (scanId) => {
+  const client = getServiceClient();
+  if (!client) throw new Error("QR_SCAN_PROCESSOR_UNAVAILABLE");
+  const { error } = await client.rpc("process_pending_qr_scan", { p_scan_id: scanId });
+  if (error) throw error;
 };
 
 function notFound(): Response {
@@ -110,9 +115,6 @@ function parseTableNumber(raw: string): number | null {
   return n >= 1 && n <= 100 ? n : null;
 }
 
-// Bounded budget for the fire-and-await scan log per the spec's fail-open
-// contract ("if it must be awaited for correctness, its budget is bounded
-// and any failure is swallowed -- the redirect always proceeds").
 const DEFAULT_SCAN_TIMEOUT_MS = 1500;
 
 async function recordScanBestEffort(
@@ -127,30 +129,54 @@ async function recordScanBestEffort(
       new Promise((resolve) => setTimeout(resolve, timeoutMs)),
     ]);
   } catch {
-    // Fail-open: logging failures never block or fail the customer's redirect.
+    // Fail-open: compatibility callers must never block the redirect.
+  }
+}
+
+export async function persistQrScanBestEffort(
+  scanId: string,
+  restaurantId: string,
+  tableNumber: number,
+  enqueueScan: EnqueueQrScanFn,
+  processPendingScan: ProcessPendingQrScanFn,
+  timeoutMs: number,
+): Promise<void> {
+  try {
+    await Promise.race([
+      (async () => {
+        // Processing is intentionally sequenced after the durable insert. If
+        // it times out, the database scheduler can safely retry this scan ID.
+        await enqueueScan(scanId, restaurantId, tableNumber);
+        await processPendingScan(scanId);
+      })(),
+      new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+    ]);
+  } catch {
+    // Fail-open: database failures never block or fail the customer redirect.
   }
 }
 
 export type HandleQrInterceptorRequestDeps = {
   lookup?: RestaurantEsbLookup;
-  recordScan?: RecordQrScanFn;
+  enqueueScan?: EnqueueQrScanFn;
+  processPendingScan?: ProcessPendingQrScanFn;
+  generateScanId?: () => string;
   scanTimeoutMs?: number;
+  // Compatibility injection for the pre-M-03 unit tests. Production callers
+  // omit it and therefore cannot bypass the durable outbox path.
+  recordScan?: RecordQrScanFn;
 };
 
-// ---------------------------------------------------------------------------
-// handleQrInterceptorRequest -- the full fail-open flow described in the
-// spec's QR Interceptor section: parse -> resolve ESB URL -> best-effort
-// scan log (bounded, swallowed on failure) -> 302. Unknown/inactive/
-// misconfigured restaurants and malformed params all fall back to a plain
-// 404 that never leaks internal error detail, per the plan's Task 7 Step 1b.
-// ---------------------------------------------------------------------------
 export async function handleQrInterceptorRequest(
   restaurantIdRaw: string,
   tableNumberRaw: string,
   {
     lookup = defaultRestaurantEsbLookup,
-    recordScan = defaultRecordQrScan,
+    enqueueScan = defaultEnqueueQrScan,
+    processPendingScan = defaultProcessPendingQrScan,
+    generateScanId = () => randomUUID(),
     scanTimeoutMs = DEFAULT_SCAN_TIMEOUT_MS,
+    recordScan,
   }: HandleQrInterceptorRequestDeps = {},
 ): Promise<Response> {
   if (!isValidUuid(restaurantIdRaw)) return notFound();
@@ -159,12 +185,22 @@ export async function handleQrInterceptorRequest(
 
   const resolved = await resolveEsbRedirectUrl(restaurantIdRaw, tableNumber, lookup);
 
-  // Only log a scan once we know the restaurant genuinely exists -- an
-  // unknown restaurant id would make record_qr_scan raise the identical
-  // RESTAURANT_NOT_FOUND anyway, so skipping it avoids a pointless RPC call
-  // on obviously-invalid/scanned garbage.
+  // Unknown UUIDs are skipped. Existing inactive/misconfigured restaurants
+  // still attempt the durable RPC, whose active-restaurant guard is
+  // authoritative and will reject an inactive restaurant.
   if (resolved.ok || resolved.code !== "RESTAURANT_NOT_FOUND") {
-    await recordScanBestEffort(recordScan, restaurantIdRaw, tableNumber, scanTimeoutMs);
+    if (recordScan) {
+      await recordScanBestEffort(recordScan, restaurantIdRaw, tableNumber, scanTimeoutMs);
+    } else {
+      await persistQrScanBestEffort(
+        generateScanId(),
+        restaurantIdRaw,
+        tableNumber,
+        enqueueScan,
+        processPendingScan,
+        scanTimeoutMs,
+      );
+    }
   }
 
   if (!resolved.ok) return notFound();
