@@ -133,7 +133,7 @@ export function AuthGate({
           </section>
         </div>
       </div>
-      <Footer className="mt-0 w-full border-t border-white/10 bg-slate-950 text-slate-400" />
+      <Footer variant="dark" className="mt-0" />
     </main>
   );
 }
