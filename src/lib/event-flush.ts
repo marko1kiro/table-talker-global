@@ -122,12 +122,16 @@ export function useEventFlush(flushToServer: FlushFn, getCrewSessionToken: () =>
       });
       if (navigator.sendBeacon?.("/api/telemetry", new Blob([body], { type: "text/plain" })))
         return;
+      // L-03: best-effort unload delivery -- the fetch must handle its own
+      // rejection so a failed unload flush never becomes an unhandled
+      // promise rejection. The durable IndexedDB queue remains the source
+      // of truth and the next flush pass retries these events.
       void fetch("/api/telemetry", {
         method: "POST",
         body,
         headers: { "content-type": "application/json" },
         keepalive: true,
-      });
+      }).catch(() => {});
     };
 
     window.addEventListener("pagehide", handlePageHide);

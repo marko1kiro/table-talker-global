@@ -37,6 +37,19 @@ it("uses beacon or keepalive transport during pagehide", () => {
   expect(source).toMatch(/sendBeacon|keepalive/);
 });
 
+// L-03: the keepalive fetch fallback in handlePageHide must handle its own
+// rejection. `void fetch(...)` without a catch turns a failed unload
+// delivery into an unhandled promise rejection (browser console noise).
+// Events remain durably queued in IndexedDB, so swallowing here is correct.
+it("handles keepalive fetch rejection in pagehide instead of leaving an unhandled rejection (L-03)", () => {
+  const source = eventFlush();
+  const pagehide = source.match(/const handlePageHide = \(\) => \{[\s\S]*?\n {4}\};/);
+  expect(pagehide).not.toBeNull();
+  const body = pagehide?.[0] ?? "";
+  expect(body).toMatch(/void fetch\("\/api\/telemetry"/);
+  expect(body).toMatch(/void fetch\("\/api\/telemetry"[\s\S]*?\.catch\(/);
+});
+
 it("exports useEventFlush hook", () => {
   const source = eventFlush();
   expect(source).toContain("export function useEventFlush");
