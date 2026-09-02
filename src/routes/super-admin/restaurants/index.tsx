@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Building2, CircleAlert, Plus, Radio, Volume2 } from "lucide-react";
+import { ArrowRight, CircleAlert, Plus, Radio } from "lucide-react";
 import { RestaurantCredentialDialog } from "@/components/RestaurantCredentialDialog";
 import {
   OwnerEmpty,
@@ -14,6 +14,14 @@ import {
   StatusBadge,
   ownerPrimaryButtonClass,
 } from "@/components/OwnerUi";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { listOwnerRestaurants } from "@/lib/owner-restaurants.server";
 
 export const Route = createFileRoute("/super-admin/restaurants/")({ component: Restaurants });
@@ -65,60 +73,69 @@ function Restaurants() {
       />
 
       {rows.length ? (
-        <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-          {rows.map((row) => (
-            <article
-              key={row.id}
-              className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-            >
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700">
-                    <Building2 className="size-5" />
-                  </span>
-                  <StatusBadge tone={row.is_active ? "success" : "neutral"}>
-                    {row.is_active ? "Aktif" : "Nonaktif"}
-                  </StatusBadge>
-                </div>
-                <Link
-                  to="/super-admin/restaurants/$id"
-                  params={{ id: row.id }}
-                  className="mt-4 inline-flex items-center gap-2 text-lg font-black text-slate-950 hover:text-amber-700"
-                >
-                  {row.display_name}
-                  <ArrowRight className="size-4 transition group-hover:translate-x-1" />
-                </Link>
-                <div className="mt-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
-                  <div>
-                    <p className="text-lg font-black text-slate-900">v{row.catalog_version}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Katalog
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-black text-slate-900">{row.plays_today}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Diputar
-                    </p>
-                  </div>
-                </div>
-              </div>
-              {row.latest_sync_failure ? (
-                <div className="flex items-center gap-2 border-t border-red-100 bg-red-50 px-5 py-3 text-xs font-bold text-red-700">
-                  <CircleAlert className="size-4" /> Sinkron gagal:{" "}
-                  {row.latest_sync_failure.report_code}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 border-t border-slate-100 px-5 py-3 text-xs font-semibold text-slate-500">
-                  <Radio className="size-4 text-emerald-500" /> Sinkronisasi normal{" "}
-                  <span className="ml-auto flex items-center gap-1">
-                    <Volume2 className="size-3.5" /> {row.plays_today} hari ini
-                  </span>
-                </div>
-              )}
-            </article>
-          ))}
-        </div>
+        <OwnerPanel>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Restoran</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Katalog</TableHead>
+                <TableHead className="text-right">Diputar Hari Ini</TableHead>
+                <TableHead>Sinkronisasi</TableHead>
+                <TableHead aria-label="Buka detail" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell>
+                    <Link
+                      to="/super-admin/restaurants/$id"
+                      params={{ id: row.id }}
+                      className="inline-flex items-center gap-2 font-bold text-slate-950 hover:text-amber-700"
+                    >
+                      {row.display_name}
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge tone={row.is_active ? "success" : "neutral"}>
+                      {row.is_active ? "Aktif" : "Nonaktif"}
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell className="font-semibold text-slate-700">
+                    v{row.catalog_version}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold text-slate-700">
+                    {row.plays_today}
+                  </TableCell>
+                  <TableCell>
+                    {row.latest_sync_failure ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-red-700">
+                        <CircleAlert className="size-4" /> Sinkron gagal:{" "}
+                        {row.latest_sync_failure.report_code}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                        <Radio className="size-4 text-emerald-500" /> Normal
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      to="/super-admin/restaurants/$id"
+                      params={{ id: row.id }}
+                      aria-label={`Buka detail ${row.display_name}`}
+                      className="inline-flex text-slate-400 transition hover:text-slate-700"
+                    >
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </OwnerPanel>
       ) : (
         <OwnerPanel>
           <OwnerEmpty
