@@ -1,3 +1,4 @@
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -19,6 +20,10 @@ export const R2_UPLOAD_MIN_BYTES = 1024;
 const R2_UPLOAD_CONTENT_TYPE = "audio/mpeg";
 const R2_UPLOAD_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const R2_HEALTHCHECK_KEY = "healthcheck";
+const QR_EXPORT_MAGIC = Buffer.from("LIMEQR01", "ascii");
+const QR_EXPORT_IV_BYTES = 12;
+const QR_EXPORT_TAG_BYTES = 16;
+const QR_EXPORT_KEY_PATTERN = /^qr-exports\/[0-9a-f-]+\/[0-9a-f-]+\/qr-codes\.(xlsx|csv)$/i;
 
 let client: S3Client | null = null;
 
@@ -68,8 +73,87 @@ export async function readFromR2(key: string): Promise<Uint8Array> {
   if (!s3) throw new Error("R2 belum dikonfigurasi.");
 
   const object = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
-  if (!object.Body) throw new Error("Objek audio tidak tersedia.");
+  if (!object.Body) throw new Error("Objek R2 tidak tersedia.");
   return object.Body.transformToByteArray();
+}
+
+function qrExportEncryptionKey(encodedKey = process.env.QR_EXPORT_ENCRYPTION_KEY ?? ""): Buffer {
+  const key = Buffer.from(encodedKey, "base64");
+  if (key.byteLength !== 32 || key.toString("base64") !== encodedKey) {
+    throw new Error("Kunci enkripsi export QR belum dikonfigurasi dengan benar.");
+  }
+  return key;
+}
+
+export function encryptPrivateQrExport(body: Uint8Array | string, encodedKey?: string): Uint8Array {
+  const plaintext = typeof body === "string" ? Buffer.from(body, "utf8") : Buffer.from(body);
+  const iv = randomBytes(QR_EXPORT_IV_BYTES);
+  const cipher = createCipheriv("aes-256-gcm", qrExportEncryptionKey(encodedKey), iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  return new Uint8Array(Buffer.concat([QR_EXPORT_MAGIC, iv, cipher.getAuthTag(), ciphertext]));
+}
+
+export function decryptPrivateQrExport(body: Uint8Array, encodedKey?: string): Uint8Array {
+  const envelope = Buffer.from(body);
+  const headerBytes = QR_EXPORT_MAGIC.byteLength + QR_EXPORT_IV_BYTES + QR_EXPORT_TAG_BYTES;
+  if (
+    envelope.byteLength < headerBytes ||
+    !envelope.subarray(0, QR_EXPORT_MAGIC.byteLength).equals(QR_EXPORT_MAGIC)
+  ) {
+    throw new Error("Arsip QR terenkripsi tidak valid.");
+  }
+  const ivStart = QR_EXPORT_MAGIC.byteLength;
+  const tagStart = ivStart + QR_EXPORT_IV_BYTES;
+  const dataStart = tagStart + QR_EXPORT_TAG_BYTES;
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    qrExportEncryptionKey(encodedKey),
+    envelope.subarray(ivStart, tagStart),
+  );
+  decipher.setAuthTag(envelope.subarray(tagStart, dataStart));
+  return new Uint8Array(
+    Buffer.concat([decipher.update(envelope.subarray(dataStart)), decipher.final()]),
+  );
+}
+
+function validateQrExportKey(key: string): void {
+  if (!QR_EXPORT_KEY_PATTERN.test(key)) throw new Error("Key export QR tidak valid.");
+}
+
+export async function uploadPrivateR2Object(
+  key: string,
+  body: Uint8Array | string,
+  contentType: string,
+): Promise<void> {
+  const s3 = getClient();
+  if (!s3) throw new Error("R2 belum dikonfigurasi.");
+  validateQrExportKey(key);
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      Body: encryptPrivateQrExport(body),
+      ContentType: "application/octet-stream",
+      CacheControl: "private, no-store",
+      Metadata: { "original-content-type": contentType },
+    }),
+  );
+}
+
+export async function readPrivateQrExportObject(key: string): Promise<Uint8Array> {
+  const s3 = getClient();
+  if (!s3) throw new Error("R2 belum dikonfigurasi.");
+  validateQrExportKey(key);
+  const object = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+  if (!object.Body) throw new Error("Objek R2 tidak tersedia.");
+  return decryptPrivateQrExport(await object.Body.transformToByteArray());
+}
+
+export async function deletePrivateQrExportObject(key: string): Promise<void> {
+  const s3 = getClient();
+  if (!s3) throw new Error("R2 belum dikonfigurasi.");
+  validateQrExportKey(key);
+  await s3.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key }));
 }
 
 type R2UploadRequest = {
