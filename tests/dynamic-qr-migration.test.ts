@@ -5,7 +5,12 @@ const migrationUrl = new URL(
   "../supabase/migrations/20260902090000_dynamic_qr_tokens.sql",
   import.meta.url,
 );
+const remediationUrl = new URL(
+  "../supabase/migrations/20260902110000_reject_null_qr_batch_tokens.sql",
+  import.meta.url,
+);
 const source = () => readFileSync(migrationUrl, "utf8").toLowerCase();
+const remediationSource = () => readFileSync(remediationUrl, "utf8").toLowerCase();
 
 describe("M-01 dynamic QR database contract", () => {
   it("stores permanent export batches and per-table opaque tokens", () => {
@@ -31,6 +36,12 @@ describe("M-01 dynamic QR database contract", () => {
     expect(sql).toContain("insert into public.qr_table_tokens");
     expect(sql).toContain("p_table_numbers");
     expect(sql).toContain("p_tokens");
+  });
+
+  it("rejects a null token array before creating an empty batch", () => {
+    const sql = remediationSource();
+    expect(sql).toContain("create or replace function public.commit_qr_export_batch");
+    expect(sql).toContain("coalesce(cardinality(p_tokens), 0)");
   });
 
   it("resolves only active tokens and durably debounces by restaurant, table, and IP for 30 seconds", () => {
