@@ -8,6 +8,7 @@ import {
 } from "../src/hooks/use-table-occupancy-realtime";
 
 const RESTAURANT_ID = "33916a05-7e95-42fa-bc3c-050bed2402c5";
+const SESSION_TOKEN = "role-session-token";
 
 type BroadcastCallback = (payload: unknown) => void;
 type StatusCallback = (status: string) => void;
@@ -33,11 +34,30 @@ function fakeChannel() {
   };
 }
 
+type RpcSuccess = {
+  data: boolean;
+  error: null;
+};
+
+function immediateRpcSuccess(): PromiseLike<RpcSuccess> {
+  const value: RpcSuccess = { data: true, error: null };
+  return {
+    then<TResult1 = RpcSuccess, TResult2 = never>(
+      onFulfilled?: ((value: RpcSuccess) => TResult1 | PromiseLike<TResult1>) | null,
+      _onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+    ): PromiseLike<TResult1 | TResult2> {
+      const result = onFulfilled ? onFulfilled(value) : (value as unknown as TResult1);
+      return Promise.resolve(result) as PromiseLike<TResult1 | TResult2>;
+    },
+  };
+}
+
 function fakeClient() {
   const channels = new Map<string, ReturnType<typeof fakeChannel>>();
   const removeChannel = vi.fn();
   const client = {
-    channel: vi.fn((name: string) => {
+    rpc: vi.fn(() => immediateRpcSuccess()),
+    channel: vi.fn((name: string, _options: { config: { private: true } }) => {
       const created = fakeChannel();
       channels.set(name, created);
       return created.channel;
@@ -80,9 +100,16 @@ describe("createTableOccupancyRealtimeController", () => {
   it("subscribes to the per-restaurant broadcast channel and invokes refetch on invalidate", () => {
     const { client, channels } = fakeClient();
     const refetch = vi.fn();
-    createTableOccupancyRealtimeController({ client, restaurantId: RESTAURANT_ID, refetch });
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch,
+    });
 
-    expect(client.channel).toHaveBeenCalledWith(`table-occupancy:${RESTAURANT_ID}`);
+    expect(client.channel).toHaveBeenCalledWith(`table-occupancy:${RESTAURANT_ID}`, {
+      config: { private: true },
+    });
     const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
     expect(entry.channel.on).toHaveBeenCalledWith(
       "broadcast",
@@ -101,6 +128,7 @@ describe("createTableOccupancyRealtimeController", () => {
     createTableOccupancyRealtimeController({
       client,
       restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
       refetch,
       getCurrentRevision: () => currentRevision,
     });
@@ -125,6 +153,7 @@ describe("createTableOccupancyRealtimeController", () => {
     createTableOccupancyRealtimeController({
       client,
       restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
       refetch,
       now: () => currentTime,
     });
@@ -147,7 +176,12 @@ describe("createTableOccupancyRealtimeController", () => {
     try {
       const { client, channels } = fakeClient();
       const refetch = vi.fn();
-      createTableOccupancyRealtimeController({ client, restaurantId: RESTAURANT_ID, refetch });
+      createTableOccupancyRealtimeController({
+        client,
+        restaurantId: RESTAURANT_ID,
+        sessionToken: SESSION_TOKEN,
+        refetch,
+      });
       const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
 
       entry.emitStatus("CHANNEL_ERROR");
@@ -166,7 +200,12 @@ describe("createTableOccupancyRealtimeController", () => {
     try {
       const { client, channels } = fakeClient();
       const refetch = vi.fn();
-      createTableOccupancyRealtimeController({ client, restaurantId: RESTAURANT_ID, refetch });
+      createTableOccupancyRealtimeController({
+        client,
+        restaurantId: RESTAURANT_ID,
+        sessionToken: SESSION_TOKEN,
+        refetch,
+      });
       const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
 
       entry.emitStatus("SUBSCRIBED");
@@ -185,6 +224,7 @@ describe("createTableOccupancyRealtimeController", () => {
       createTableOccupancyRealtimeController({
         client: null,
         restaurantId: RESTAURANT_ID,
+        sessionToken: SESSION_TOKEN,
         refetch,
         onStatusChange,
       });
@@ -206,6 +246,7 @@ describe("createTableOccupancyRealtimeController", () => {
       createTableOccupancyRealtimeController({
         client,
         restaurantId: RESTAURANT_ID,
+        sessionToken: SESSION_TOKEN,
         refetch,
         visibility,
       });
@@ -236,6 +277,7 @@ describe("createTableOccupancyRealtimeController", () => {
       createTableOccupancyRealtimeController({
         client,
         restaurantId: RESTAURANT_ID,
+        sessionToken: SESSION_TOKEN,
         refetch,
         visibility,
       });
@@ -261,6 +303,7 @@ describe("createTableOccupancyRealtimeController", () => {
       const controller = createTableOccupancyRealtimeController({
         client,
         restaurantId: RESTAURANT_ID,
+        sessionToken: SESSION_TOKEN,
         refetch,
       });
       const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
@@ -282,6 +325,7 @@ describe("createTableOccupancyRealtimeController", () => {
     const controller = createTableOccupancyRealtimeController({
       client,
       restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
       refetch,
     });
     const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
@@ -309,15 +353,20 @@ describe("no-heartbeat architectural invariant", () => {
 
   it("never calls any RPC-like heartbeat while subscribed; only the light safety poll refetches", () => {
     const { client, channels } = fakeClient();
-    const rpc = vi.fn();
     const refetch = vi.fn();
-    createTableOccupancyRealtimeController({ client, restaurantId: RESTAURANT_ID, refetch });
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch,
+    });
     const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
     entry.emitStatus("SUBSCRIBED");
 
     vi.advanceTimersByTime(60_000);
 
-    expect(rpc).not.toHaveBeenCalled();
+    // Exactly one authorization bind is allowed; no periodic RPC is allowed.
+    expect(client.rpc).toHaveBeenCalledTimes(1);
     expect(refetch).toHaveBeenCalledTimes(5);
   });
 
@@ -363,7 +412,7 @@ describe("useTableOccupancyRealtime hook source contract", () => {
   it("re-subscribes when restaurantId changes", () => {
     const start = hookSource.indexOf("export function useTableOccupancyRealtime");
     const block = hookSource.slice(start);
-    expect(block).toContain("[restaurantId]");
+    expect(block).toContain("[restaurantId, sessionToken]");
   });
 
   it("feeds the latest rendered snapshot revision to the controller", () => {

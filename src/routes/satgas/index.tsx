@@ -132,6 +132,7 @@ function SatgasRoute() {
   });
   const realtimeStatus = useTableOccupancyRealtime(
     restaurantId,
+    identity?.roleSessionToken ?? "",
     snapshot.data?.ok ? snapshot.data.revision : null,
     () => {
       void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });

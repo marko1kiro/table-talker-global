@@ -75,7 +75,7 @@ describe("Clear Up route: live data via snapshot + realtime, filtered to the occ
   it("captures the realtime status used by the connection notice and invalidates the snapshot on events", () => {
     const text = source();
     expect(text).toMatch(
-      /const realtimeStatus = useTableOccupancyRealtime\(\s*restaurantId,\s*snapshot\.data\?\.ok \? snapshot\.data\.revision : null,/,
+      /const realtimeStatus = useTableOccupancyRealtime\(\s*restaurantId,\s*identity\?\.roleSessionToken \?\? "",\s*snapshot\.data\?\.ok \? snapshot\.data\.revision : null,/,
     );
     expect(text).toContain('realtimeStatus !== "SUBSCRIBED"');
     expect(text).toMatch(

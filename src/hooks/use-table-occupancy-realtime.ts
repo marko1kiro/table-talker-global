@@ -1,20 +1,6 @@
-// Task 9: shared role-UI infrastructure. Realtime invalidation for the
-// table occupancy grid/list views (Kasir/Satgas/Clear Up/Manager).
-//
-// Modeled on the *shape* of the deleted crew-remote-relay hook module’s
-// channel-subscribe/cleanup lifecycle (see git history at ee77d6b) and on
-// the live `owner-dashboard` Supabase Realtime Broadcast pattern in
-// src/routes/super-admin/index.tsx -- but deliberately stripped of every
-// presence/connection-keep-alive piece that the older module had. There
-// is no session-claiming RPC call anywhere in this module and no custom
-// reconnect loop. The *only* outbound side effect this module ever
-// performs is calling the caller-provided `refetch` callback -- on a newer
-// broadcast `invalidate` revision (rate-limited to at most once/sec) or, while
-// the page is visible, on a plain interval polling safety net (10-15s), even
-// when Realtime reports SUBSCRIBED. This is a permanent architectural
-// invariant for this codebase: any future change to this file must keep
-// it free of the removed keep-alive pattern (enforced by a source-scan
-// test suite alongside the behavioral tests for this module).
+// Shared role-UI infrastructure for Kasir/Satgas/Clear Up occupancy views.
+// Realtime is an invalidation hint only: snapshots remain authorized by the
+// role-session RPC, and visible pages keep the 12-second polling safety net.
 import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase-browser";
 
@@ -26,7 +12,7 @@ export type TableOccupancyRealtimeStatus =
   | "CLOSED";
 
 export const REFETCH_RATE_LIMIT_MS = 1_000;
-export const POLL_FALLBACK_MS = 12_000; // within the spec's 10-15s range
+export const POLL_FALLBACK_MS = 12_000;
 
 type BroadcastChannelLike = {
   on: (
@@ -38,7 +24,11 @@ type BroadcastChannelLike = {
 };
 
 type SupabaseClientLike = {
-  channel: (name: string) => BroadcastChannelLike;
+  rpc: (
+    fn: string,
+    params: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  channel: (name: string, options: { config: { private: true } }) => BroadcastChannelLike;
   removeChannel: (channel: BroadcastChannelLike) => void;
 };
 
@@ -71,14 +61,13 @@ export type TableOccupancyRealtimeController = {
   dispose: () => void;
 };
 
-// Pure(-ish), dependency-injected core: given a Supabase-client-like
-// object (or null) and a refetch callback, subscribes to the per-
-// restaurant broadcast channel and manages the rate limit + visible-only
-// polling fallback. Kept separate from the React hook below so it can be
-// unit-tested directly without a browser environment.
+// Binds the bearer role session to the caller's Supabase Auth identity before
+// opening the private channel. A rejected binding never falls back to a public
+// channel; the visible-only polling safety net remains active instead.
 export function createTableOccupancyRealtimeController({
   client,
   restaurantId,
+  sessionToken,
   refetch,
   getCurrentRevision = () => null,
   onStatusChange,
@@ -89,6 +78,7 @@ export function createTableOccupancyRealtimeController({
 }: {
   client: SupabaseClientLike | null;
   restaurantId: string;
+  sessionToken: string;
   refetch: () => void;
   getCurrentRevision?: () => number | null;
   onStatusChange?: (status: TableOccupancyRealtimeStatus) => void;
@@ -155,14 +145,32 @@ export function createTableOccupancyRealtimeController({
     rateLimitedRefetch();
   };
 
-  if (client) {
+  const subscribePrivate = () => {
+    if (!client || disposed) return;
     channel = client
-      .channel(tableOccupancyChannelName(restaurantId))
+      .channel(tableOccupancyChannelName(restaurantId), { config: { private: true } })
       .on("broadcast", { event: "invalidate" }, handleInvalidate)
       .subscribe(handleStatus);
+  };
+
+  if (client && restaurantId && sessionToken) {
+    void client
+      .rpc("bind_role_session_realtime", {
+        p_restaurant_id: restaurantId,
+        p_session_token: sessionToken,
+      })
+      .then(
+        ({ data, error }) => {
+          if (disposed) return;
+          if (error || data !== true) {
+            handleStatus("CHANNEL_ERROR");
+            return;
+          }
+          subscribePrivate();
+        },
+        () => handleStatus("CHANNEL_ERROR"),
+      );
   } else {
-    // No client available (e.g. missing env vars) -- fall back to polling
-    // immediately rather than never refreshing at all.
     handleStatus("CHANNEL_ERROR");
   }
   syncPolling();
@@ -180,6 +188,7 @@ export function createTableOccupancyRealtimeController({
 
 export function useTableOccupancyRealtime(
   restaurantId: string,
+  sessionToken: string,
   revision: number | null,
   refetch: () => void,
 ) {
@@ -190,20 +199,18 @@ export function useTableOccupancyRealtime(
   revisionRef.current = revision;
 
   useEffect(() => {
-    // The real SupabaseClient's channel/removeChannel signatures are far
-    // richer than the minimal SupabaseClientLike shape this module
-    // actually uses, so narrow it down to just what's needed here.
     const client = getSupabaseBrowserClient() as unknown as SupabaseClientLike | null;
     const controller = createTableOccupancyRealtimeController({
       client,
       restaurantId,
+      sessionToken,
       refetch: () => refetchRef.current(),
       getCurrentRevision: () => revisionRef.current,
       onStatusChange: setStatus,
       visibility: browserVisibilitySource(),
     });
     return () => controller.dispose();
-  }, [restaurantId]);
+  }, [restaurantId, sessionToken]);
 
   return status;
 }
