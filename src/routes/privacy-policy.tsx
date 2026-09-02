@@ -7,13 +7,12 @@ import { useCrewLogout } from "@/hooks/use-crew-logout";
 export const Route = createFileRoute("/privacy-policy")({
   head: () => ({
     meta: [
-      { title: "Kebijakan Privasi — Table Talker" },
+      { title: "Kebijakan Privasi — LIME" },
       {
         name: "description",
-        content:
-          "Kebijakan privasi Table Talker: data apa yang dikumpulkan dan bagaimana digunakan.",
+        content: "Kebijakan privasi LIME: data apa yang dikumpulkan dan bagaimana digunakan.",
       },
-      { property: "og:title", content: "Kebijakan Privasi — Table Talker" },
+      { property: "og:title", content: "Kebijakan Privasi — LIME" },
       { property: "og:url", content: "/privacy-policy" },
     ],
     links: [{ rel: "canonical", href: "/privacy-policy" }],
@@ -41,7 +40,7 @@ function PrivacyPolicyPage() {
                 1. Data yang Dikumpulkan
               </h2>
               <p className="mt-2">
-                Table Talker mengumpulkan data operasional minimal yang diperlukan agar soundboard
+                LIME mengumpulkan data operasional minimal yang diperlukan agar soundboard
                 berfungsi, antara lain: kode resto, nama tampilan crew (dibuat otomatis), sesi
                 perangkat, dan catatan aktivitas pemutaran audio (waktu, nomor meja/pengumuman yang
                 diputar).

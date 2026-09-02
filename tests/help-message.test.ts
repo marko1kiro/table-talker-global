@@ -10,7 +10,7 @@ describe("buildWhatsAppMessage", () => {
     const message = buildWhatsAppMessage("CKRBUL", "Budi", "Tombol meja 12 tidak bersuara.");
     expect(message).toBe(
       [
-        "*LAPORAN KENDALA TABLE TALKER*",
+        "*LAPORAN KENDALA LIME*",
         "",
         "Kode Resto: CKRBUL",
         "Nama Crew: Budi",

@@ -6,7 +6,7 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), "u
 it("uses createFileRoute for the /help route with SEO metadata", () => {
   const page = source("../src/routes/help.tsx");
   expect(page).toContain('createFileRoute("/help")');
-  expect(page).toContain('{ title: "Bantuan — Table Talker" }');
+  expect(page).toContain('{ title: "Bantuan — LIME" }');
   expect(page).toContain('{ property: "og:url", content: "/help" }');
   expect(page).toContain('{ rel: "canonical", href: "/help" }');
 });

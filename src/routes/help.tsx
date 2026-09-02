@@ -12,13 +12,13 @@ import { buildWhatsAppHelpUrl } from "@/lib/help-message";
 export const Route = createFileRoute("/help")({
   head: () => ({
     meta: [
-      { title: "Bantuan — Table Talker" },
+      { title: "Bantuan — LIME" },
       {
         name: "description",
         content:
-          "Butuh bantuan atau menemukan error di Table Talker? Kirim laporan kendala langsung ke tim support via WhatsApp.",
+          "Butuh bantuan atau menemukan error di LIME? Kirim laporan kendala langsung ke tim support via WhatsApp.",
       },
-      { property: "og:title", content: "Bantuan — Table Talker" },
+      { property: "og:title", content: "Bantuan — LIME" },
       { property: "og:url", content: "/help" },
     ],
     links: [{ rel: "canonical", href: "/help" }],
@@ -61,7 +61,7 @@ function HelpPage() {
             Butuh Bantuan?
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Lagi ada error atau kendala saat pakai Table Talker? Isi form di bawah ini, laporan kamu
+            Lagi ada error atau kendala saat pakai LIME? Isi form di bawah ini, laporan kamu
             langsung dikirim ke WhatsApp tim support.
           </p>
 

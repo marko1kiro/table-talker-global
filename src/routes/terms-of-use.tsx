@@ -7,12 +7,12 @@ import { useCrewLogout } from "@/hooks/use-crew-logout";
 export const Route = createFileRoute("/terms-of-use")({
   head: () => ({
     meta: [
-      { title: "Syarat Penggunaan — Table Talker" },
+      { title: "Syarat Penggunaan — LIME" },
       {
         name: "description",
-        content: "Syarat dan ketentuan penggunaan aplikasi Table Talker untuk crew dan restoran.",
+        content: "Syarat dan ketentuan penggunaan aplikasi LIME untuk crew dan restoran.",
       },
-      { property: "og:title", content: "Syarat Penggunaan — Table Talker" },
+      { property: "og:title", content: "Syarat Penggunaan — LIME" },
       { property: "og:url", content: "/terms-of-use" },
     ],
     links: [{ rel: "canonical", href: "/terms-of-use" }],
@@ -40,8 +40,8 @@ function TermsOfUsePage() {
                 1. Penerimaan Syarat
               </h2>
               <p className="mt-2">
-                Dengan mengakses dan menggunakan Table Talker, Anda menyetujui syarat penggunaan
-                ini. Jika tidak setuju, mohon untuk tidak menggunakan aplikasi.
+                Dengan mengakses dan menggunakan LIME, Anda menyetujui syarat penggunaan ini. Jika
+                tidak setuju, mohon untuk tidak menggunakan aplikasi.
               </p>
             </section>
             <section>
@@ -79,9 +79,9 @@ function TermsOfUsePage() {
                 5. Batasan Tanggung Jawab
               </h2>
               <p className="mt-2">
-                Table Talker disediakan "sebagaimana adanya". Kami tidak bertanggung jawab atas
-                kerugian yang timbul dari penggunaan atau ketidaktersediaan layanan, termasuk namun
-                tidak terbatas pada gangguan koneksi, perangkat, atau kebijakan browser.
+                LIME disediakan "sebagaimana adanya". Kami tidak bertanggung jawab atas kerugian
+                yang timbul dari penggunaan atau ketidaktersediaan layanan, termasuk namun tidak
+                terbatas pada gangguan koneksi, perangkat, atau kebijakan browser.
               </p>
             </section>
             <section>

@@ -8,12 +8,12 @@ import { useCrewLogout } from "@/hooks/use-crew-logout";
 export const Route = createFileRoute("/contact")({
   head: () => ({
     meta: [
-      { title: "Kontak — Table Talker" },
+      { title: "Kontak — LIME" },
       {
         name: "description",
-        content: "Hubungi tim Table Talker untuk pertanyaan, kendala teknis, atau kerja sama.",
+        content: "Hubungi tim LIME untuk pertanyaan, kendala teknis, atau kerja sama.",
       },
-      { property: "og:title", content: "Kontak — Table Talker" },
+      { property: "og:title", content: "Kontak — LIME" },
       { property: "og:url", content: "/contact" },
     ],
     links: [{ rel: "canonical", href: "/contact" }],

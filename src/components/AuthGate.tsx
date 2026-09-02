@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { ArrowRight, LockKeyhole, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowRight, LockKeyhole, Loader2 } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { getOwnerLoginClientKey } from "@/lib/owner-login-client-key";
 
@@ -53,12 +53,12 @@ export function AuthGate({
         <div className="relative grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-sm lg:grid-cols-[1.1fr_0.9fr]">
           <section className="hidden flex-col justify-between p-10 lg:flex">
             <div className="flex items-center gap-3">
-              <span className="grid size-11 place-items-center rounded-xl bg-amber-400 text-slate-950">
-                <ShieldCheck className="size-5" />
-              </span>
+              <img src="/lime-logo.webp" alt="LIME" className="h-8 w-auto shrink-0 select-none" />
               <div>
-                <p className="font-black tracking-tight">TABLE TALKER</p>
-                <p className="text-xs font-semibold text-slate-400">Restaurant audio operations</p>
+                <p className="font-black tracking-tight">LIME</p>
+                <p className="text-xs font-semibold text-slate-400">
+                  Panggilan meja & operasional resto
+                </p>
               </div>
             </div>
             <div className="py-16">
@@ -66,24 +66,22 @@ export function AuthGate({
                 {ownerLogin ? "Owner Console" : "Crew Workspace"}
               </p>
               <h2 className="mt-4 max-w-md text-4xl font-black leading-tight tracking-tight">
-                Operasional audio yang cepat, jelas, dan terkendali.
+                Operasional resto yang cepat, jelas, dan terkendali.
               </h2>
               <p className="mt-5 max-w-md text-sm leading-7 text-slate-400">
                 Kelola layanan restoran dengan akses aman dan status operasional yang selalu
                 terlihat.
               </p>
             </div>
-            <p className="text-xs font-medium text-slate-500">Secure access · Table Talker</p>
+            <p className="text-xs font-medium text-slate-500">Secure access · LIME</p>
           </section>
 
           <section className="bg-white p-6 text-slate-950 sm:p-10 lg:p-12">
             <div className="mx-auto max-w-sm">
               <div className="mb-8 flex items-center gap-3 lg:hidden">
-                <span className="grid size-10 place-items-center rounded-xl bg-amber-400 text-slate-950">
-                  <ShieldCheck className="size-5" />
-                </span>
+                <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
                 <div>
-                  <p className="font-black tracking-tight">TABLE TALKER</p>
+                  <p className="font-black tracking-tight">LIME</p>
                   <p className="text-[11px] font-semibold text-slate-500">Secure access</p>
                 </div>
               </div>

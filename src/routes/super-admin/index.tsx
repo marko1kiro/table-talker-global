@@ -59,10 +59,7 @@ function OwnerDashboard() {
   if (snapshot.isLoading) {
     return (
       <OwnerPage>
-        <OwnerPageHeader
-          title="Dashboard"
-          description="Ringkasan kondisi operasional Table Talker."
-        />
+        <OwnerPageHeader title="Dashboard" description="Ringkasan kondisi operasional LIME." />
         <DashboardSkeleton />
       </OwnerPage>
     );
@@ -70,10 +67,7 @@ function OwnerDashboard() {
   if (snapshot.isError || !snapshot.data)
     return (
       <OwnerPage>
-        <OwnerPageHeader
-          title="Dashboard"
-          description="Ringkasan kondisi operasional Table Talker."
-        />
+        <OwnerPageHeader title="Dashboard" description="Ringkasan kondisi operasional LIME." />
         <OwnerPanel>
           <OwnerNotice role="alert" tone="danger">
             Dashboard tidak dapat dimuat.

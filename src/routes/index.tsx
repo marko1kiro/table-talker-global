@@ -41,13 +41,13 @@ import { validateCrewAccess } from "@/lib/playback-access.server";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Table Talker — Panggilan Meja" },
+      { title: "LIME — Panggilan Meja" },
       {
         name: "description",
         content:
           "Tap nomor meja untuk memutar panggilan pesanan otomatis. Mie Gacoan Kampung Bulu.",
       },
-      { property: "og:title", content: "Table Talker — Panggilan Meja" },
+      { property: "og:title", content: "LIME — Panggilan Meja" },
       { property: "og:url", content: "/" },
     ],
     links: [{ rel: "canonical", href: "/" }],

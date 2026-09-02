@@ -7,12 +7,12 @@ import { useCrewLogout } from "@/hooks/use-crew-logout";
 export const Route = createFileRoute("/faq")({
   head: () => ({
     meta: [
-      { title: "FAQ — Table Talker" },
+      { title: "FAQ — LIME" },
       {
         name: "description",
-        content: "Pertanyaan yang sering diajukan seputar penggunaan Table Talker.",
+        content: "Pertanyaan yang sering diajukan seputar penggunaan LIME.",
       },
-      { property: "og:title", content: "FAQ — Table Talker" },
+      { property: "og:title", content: "FAQ — LIME" },
       { property: "og:url", content: "/faq" },
     ],
     links: [{ rel: "canonical", href: "/faq" }],
@@ -22,8 +22,8 @@ export const Route = createFileRoute("/faq")({
 
 const faqs = [
   {
-    q: "Apa itu Table Talker?",
-    a: "Table Talker adalah soundboard panggilan meja berbasis web. Crew restoran cukup menekan nomor meja untuk memutar rekaman panggilan pesanan otomatis.",
+    q: "Apa itu LIME?",
+    a: "LIME adalah soundboard panggilan meja berbasis web. Crew restoran cukup menekan nomor meja untuk memutar rekaman panggilan pesanan otomatis.",
   },
   {
     q: "Bagaimana cara login sebagai crew?",
@@ -58,7 +58,7 @@ function FaqPage() {
             Pertanyaan Umum
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Jawaban singkat untuk pertanyaan yang paling sering muncul seputar Table Talker.
+            Jawaban singkat untuk pertanyaan yang paling sering muncul seputar LIME.
           </p>
 
           <div className="mt-8 space-y-3">

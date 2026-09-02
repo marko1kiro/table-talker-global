@@ -40,7 +40,7 @@ export function Footer({ className }: FooterProps) {
           By 👉 <span className="font-display text-foreground">BANG MARKO GANTENG 😏</span>
         </p>
         <p className="text-[9px] font-bold uppercase text-muted-foreground">
-          © {new Date().getFullYear()} Table Talker
+          © {new Date().getFullYear()} LIME
         </p>
       </div>
     </footer>

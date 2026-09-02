@@ -10,7 +10,7 @@ export function buildWhatsAppMessage(
   issue: string,
 ): string {
   const lines = [
-    "*LAPORAN KENDALA TABLE TALKER*",
+    "*LAPORAN KENDALA LIME*",
     "",
     `Kode Resto: ${restaurantCode}`,
     `Nama Crew: ${crewName}`,

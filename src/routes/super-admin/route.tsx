@@ -30,7 +30,7 @@ const nav = [
 export const Route = createFileRoute("/super-admin")({
   loader: () => getAuthStatus(),
   head: () => ({
-    meta: [{ title: "Owner Console - Table Talker" }, { name: "robots", content: "noindex" }],
+    meta: [{ title: "Owner Console - LIME" }, { name: "robots", content: "noindex" }],
   }),
   component: OwnerShell,
 });
@@ -64,10 +64,8 @@ function OwnerShell() {
           <Menu className="size-5" />
         </button>
         <div className="flex items-center gap-2">
-          <span className="grid size-8 place-items-center rounded-lg bg-amber-400 text-slate-950">
-            <AudioLines className="size-4" />
-          </span>
-          <span className="text-sm font-black tracking-tight">TABLE TALKER</span>
+          <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
+          <span className="text-sm font-black tracking-tight">LIME</span>
         </div>
         <span className="size-10" aria-hidden="true" />
       </header>
@@ -132,11 +130,9 @@ function Navigation({ onNavigate }: { onNavigate: () => void }) {
   return (
     <nav aria-label="Navigasi owner" className="flex h-full flex-col">
       <div className="flex items-center gap-3 px-2 py-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-400 text-slate-950 shadow-[0_0_0_4px_rgba(251,191,36,0.12)]">
-          <AudioLines className="size-5" />
-        </span>
+        <img src="/lime-logo.webp" alt="LIME" className="h-8 w-auto shrink-0 select-none" />
         <div>
-          <p className="text-base font-black tracking-tight text-white">TABLE TALKER</p>
+          <p className="text-base font-black tracking-tight text-white">LIME</p>
           <p className="mt-0.5 flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
             <ShieldCheck className="size-3" /> Owner Console
           </p>

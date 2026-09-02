@@ -8,13 +8,13 @@ import { useCrewLogout } from "@/hooks/use-crew-logout";
 export const Route = createFileRoute("/about")({
   head: () => ({
     meta: [
-      { title: "Tentang — Table Talker" },
+      { title: "Tentang — LIME" },
       {
         name: "description",
         content:
-          "Table Talker adalah soundboard panggilan meja untuk restoran. Kenali cara kerja dan tujuan aplikasi ini.",
+          "LIME adalah soundboard panggilan meja untuk restoran. Kenali cara kerja dan tujuan aplikasi ini.",
       },
-      { property: "og:title", content: "Tentang — Table Talker" },
+      { property: "og:title", content: "Tentang — LIME" },
       { property: "og:url", content: "/about" },
     ],
     links: [{ rel: "canonical", href: "/about" }],
@@ -53,10 +53,10 @@ function AboutPage() {
       <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <div className="brutal-border brutal-shadow-lg bg-card p-6 sm:p-10">
           <h1 className="font-display text-2xl uppercase leading-tight sm:text-4xl">
-            Tentang Table Talker
+            Tentang LIME
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Table Talker adalah aplikasi soundboard sederhana yang membantu crew restoran memanggil
+            LIME adalah aplikasi soundboard sederhana yang membantu crew restoran memanggil
             pelanggan mengambil pesanan hanya dengan menekan nomor meja. Tujuannya: operasional
             dapur/kasir jadi lebih cepat, rapi, dan konsisten.
           </p>
