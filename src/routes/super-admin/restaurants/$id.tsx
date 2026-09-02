@@ -5,14 +5,44 @@ import { RestaurantCredentialDialog } from "@/components/RestaurantCredentialDia
 import { getOwnerRestaurantDetail } from "@/lib/owner-restaurants.server";
 import { deactivateRestaurant } from "@/lib/admin-restaurants.server";
 import {
+  OwnerLoading,
+  OwnerPage,
+  OwnerPageHeader,
+  OwnerPanel,
+  StatusBadge,
+  ownerDangerButtonClass,
+  ownerPrimaryButtonClass,
+  ownerSecondaryButtonClass,
+} from "@/components/OwnerUi";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+const dateTimeFormat = new Intl.DateTimeFormat("id-ID", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
+function formatWaktu(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : dateTimeFormat.format(parsed);
+}
 
 export const Route = createFileRoute("/super-admin/restaurants/$id")({
   component: RestaurantDetail,
@@ -29,15 +59,25 @@ function RestaurantDetail() {
     queryKey: ["owner-restaurant", id],
     queryFn: () => getOwnerRestaurantDetail({ data: { restaurantId: id } }),
   });
-  if (detail.isLoading) return <Panel>Memuat resto...</Panel>;
+  if (detail.isLoading) return <OwnerLoading label="Memuat detail resto..." />;
   if (detail.isError || !detail.data || !detail.data.ok)
     return (
-      <Panel>
-        <p role="alert">Resto tidak dapat dimuat.</p>
-        <button type="button" onClick={() => detail.refetch()}>
-          Coba Lagi
-        </button>
-      </Panel>
+      <OwnerPage>
+        <OwnerPanel>
+          <p role="alert" className="text-sm font-bold text-red-700">
+            Resto tidak dapat dimuat.
+          </p>
+          <div className="mt-4">
+            <button
+              type="button"
+              className={ownerSecondaryButtonClass}
+              onClick={() => detail.refetch()}
+            >
+              Coba Lagi
+            </button>
+          </div>
+        </OwnerPanel>
+      </OwnerPage>
     );
   const data = detail.data.detail as {
     restaurant: { id: string; display_name: string; is_active: boolean; catalog_version: number };
@@ -65,87 +105,217 @@ function RestaurantDetail() {
     else void queryClient.invalidateQueries({ queryKey: ["owner-restaurant", id] });
   };
   return (
-    <Panel>
-      <Link to="/super-admin/restaurants">Kembali ke Resto</Link>
-      <h1 className="mt-3 font-display text-2xl uppercase">{restaurant.displayName}</h1>
-      <p>
-        {data.restaurant.is_active ? "Aktif" : "Nonaktif"} · Katalog v
-        {data.restaurant.catalog_version}
-      </p>
-      <div className="mt-4 flex gap-2">
-        <button type="button" onClick={() => setCredentialMode("view")}>
-          Lihat Kode
-        </button>
-        <button type="button" onClick={() => setCredentialMode("rotate")}>
-          Ganti Kode
-        </button>
-        <Link to="/super-admin/audio" search={{ restaurantId: id }}>
-          Kelola Audio
-        </Link>
-      </div>
-      {data.restaurant.is_active && (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <button type="button">Nonaktifkan Resto</button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogTitle>Nonaktifkan Resto</AlertDialogTitle>
-            <AlertDialogDescription>Tindakan ini mencabut akses resto.</AlertDialogDescription>
-            <h2 className="font-display uppercase">Nonaktifkan Resto</h2>
-            <input
-              aria-label="Ketik ulang Nama Resto"
-              value={displayNameConfirmation}
-              onChange={(event) => setDisplayNameConfirmation(event.target.value)}
-              placeholder="Ketik ulang Nama Resto"
-            />
-            <input
-              aria-label="Password Super Admin"
-              type="password"
-              value={superAdminPassword}
-              onChange={(event) => setSuperAdminPassword(event.target.value)}
-              placeholder="Password Super Admin"
-            />
-            <AlertDialogAction
-              disabled={displayNameConfirmation !== restaurant.displayName}
-              onClick={() => void deactivate()}
+    <OwnerPage>
+      <Link
+        to="/super-admin/restaurants"
+        className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-500 transition hover:text-slate-800"
+      >
+        ← Kembali ke Restoran
+      </Link>
+
+      <OwnerPageHeader
+        eyebrow="Detail Restoran"
+        title={restaurant.displayName}
+        description={`Katalog v${data.restaurant.catalog_version}. Kelola kredensial, audio, dan status operasional resto ini.`}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={ownerSecondaryButtonClass}
+              onClick={() => setCredentialMode("view")}
             >
-              Nonaktifkan
-            </AlertDialogAction>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            {deactivateError && <p role="alert">{deactivateError}</p>}
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
-      <Section title="Katalog">
-        <p>{data.catalog.total} item</p>
-        <List
-          values={data.catalog.items.map(
-            (item) =>
-              `${item.audio_id} · ${item.label} · ${item.category} · ${item.active ? "aktif" : "nonaktif"} · ${item.ordering}`,
-          )}
-          empty="Belum ada mapping."
-        />
-      </Section>
-      <Section title="Riwayat Sinkron">
-        <List
-          values={data.sync_history.map((item) => `${item.report_code} · ${item.occurred_at}`)}
-          empty="Belum ada riwayat sinkron."
-        />
-      </Section>
-      <Section title="Pemutaran terbaru">
-        <List
-          values={data.recent_playback.map(
-            (event) => `${event.audio_id} · ${event.status} · ${event.event_timestamp}`,
-          )}
-          empty="Belum ada pemutaran."
-        />
-      </Section>
-      <Section title="Error terbaru">
-        <List
-          values={data.recent_errors.map((error) => `${error.report_code} · ${error.occurred_at}`)}
-          empty="Belum ada error."
-        />
-      </Section>
+              Lihat Kode
+            </button>
+            <button
+              type="button"
+              className={ownerSecondaryButtonClass}
+              onClick={() => setCredentialMode("rotate")}
+            >
+              Ganti Kode
+            </button>
+            <Link
+              to="/super-admin/audio"
+              search={{ restaurantId: id }}
+              className={ownerPrimaryButtonClass}
+            >
+              Kelola Audio
+            </Link>
+            {data.restaurant.is_active && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button type="button" className={ownerDangerButtonClass}>
+                    Nonaktifkan Resto
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Nonaktifkan Resto</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Tindakan ini mencabut akses resto.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="space-y-3">
+                    <label className="block text-sm font-bold text-slate-700">
+                      Ketik ulang Nama Resto
+                      <input
+                        aria-label="Ketik ulang Nama Resto"
+                        value={displayNameConfirmation}
+                        onChange={(event) => setDisplayNameConfirmation(event.target.value)}
+                        placeholder="Ketik ulang Nama Resto"
+                        className="mt-2 min-h-11 w-full rounded-xl border-2 border-slate-200 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10"
+                      />
+                    </label>
+                    <label className="block text-sm font-bold text-slate-700">
+                      Password Super Admin
+                      <input
+                        aria-label="Password Super Admin"
+                        type="password"
+                        value={superAdminPassword}
+                        onChange={(event) => setSuperAdminPassword(event.target.value)}
+                        placeholder="Password Super Admin"
+                        className="mt-2 min-h-11 w-full rounded-xl border-2 border-slate-200 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10"
+                      />
+                    </label>
+                    {deactivateError && (
+                      <p
+                        role="alert"
+                        className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700"
+                      >
+                        {deactivateError}
+                      </p>
+                    )}
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                    <AlertDialogAction
+                      className={ownerDangerButtonClass}
+                      disabled={displayNameConfirmation !== restaurant.displayName}
+                      onClick={() => void deactivate()}
+                    >
+                      Nonaktifkan
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        }
+      />
+
+      <div className="flex items-center gap-2">
+        <StatusBadge tone={data.restaurant.is_active ? "success" : "neutral"}>
+          {data.restaurant.is_active ? "Aktif" : "Nonaktif"}
+        </StatusBadge>
+      </div>
+
+      <OwnerPanel title="Katalog" description={`${data.catalog.total} item mapping audio.`}>
+        {data.catalog.items.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Audio ID</TableHead>
+                <TableHead>Label</TableHead>
+                <TableHead>Kategori</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Urutan</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.catalog.items.map((item) => (
+                <TableRow key={item.audio_id}>
+                  <TableCell className="font-mono text-xs">{item.audio_id}</TableCell>
+                  <TableCell className="font-semibold">{item.label}</TableCell>
+                  <TableCell>{item.category}</TableCell>
+                  <TableCell>
+                    <StatusBadge tone={item.active ? "success" : "neutral"}>
+                      {item.active ? "aktif" : "nonaktif"}
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell className="text-right font-semibold">{item.ordering}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-sm text-slate-500">Belum ada mapping.</p>
+        )}
+      </OwnerPanel>
+
+      <OwnerPanel title="Riwayat Sinkron">
+        {data.sync_history.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Kode</TableHead>
+                <TableHead>Waktu</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.sync_history.map((item) => (
+                <TableRow key={`${item.report_code}-${item.occurred_at}`}>
+                  <TableCell className="font-mono text-xs">{item.report_code}</TableCell>
+                  <TableCell className="text-slate-600">{formatWaktu(item.occurred_at)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-sm text-slate-500">Belum ada riwayat sinkron.</p>
+        )}
+      </OwnerPanel>
+
+      <OwnerPanel title="Pemutaran Terbaru">
+        {data.recent_playback.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Audio ID</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Waktu</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.recent_playback.map((event) => (
+                <TableRow key={`${event.audio_id}-${event.event_timestamp}`}>
+                  <TableCell className="font-mono text-xs">{event.audio_id}</TableCell>
+                  <TableCell>{event.status}</TableCell>
+                  <TableCell className="text-slate-600">
+                    {formatWaktu(event.event_timestamp)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-sm text-slate-500">Belum ada pemutaran.</p>
+        )}
+      </OwnerPanel>
+
+      <OwnerPanel title="Error Terbaru">
+        {data.recent_errors.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Kode</TableHead>
+                <TableHead>Waktu</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.recent_errors.map((error) => (
+                <TableRow key={`${error.report_code}-${error.occurred_at}`}>
+                  <TableCell className="font-mono text-xs text-red-700">
+                    {error.report_code}
+                  </TableCell>
+                  <TableCell className="text-slate-600">{formatWaktu(error.occurred_at)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-sm text-slate-500">Belum ada error.</p>
+        )}
+      </OwnerPanel>
+
       {credentialMode && (
         <RestaurantCredentialDialog
           open
@@ -157,28 +327,6 @@ function RestaurantDetail() {
           }
         />
       )}
-    </Panel>
-  );
-}
-function Panel({ children }: { children: React.ReactNode }) {
-  return <section className="brutal-border bg-card p-6">{children}</section>;
-}
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="brutal-border mt-4 p-3">
-      <h2 className="font-display uppercase">{title}</h2>
-      {children}
-    </section>
-  );
-}
-function List({ values, empty }: { values: string[]; empty: string }) {
-  return values.length ? (
-    <ul>
-      {values.map((value) => (
-        <li key={value}>{value}</li>
-      ))}
-    </ul>
-  ) : (
-    <p>{empty}</p>
+    </OwnerPage>
   );
 }
