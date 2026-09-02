@@ -7,11 +7,11 @@ import {
 } from "../src/lib/qr-export.server";
 
 const RESTAURANT_ID = "33916a05-7e95-42fa-bc3c-050bed2402c5";
-const DOMAIN = "https://qr.xdirga.xyz";
+const DOMAIN = "https://qris-order.lihatmeja.com";
 
 describe("DEFAULT_QR_EXPORT_DOMAIN", () => {
   it("defaults to the current interceptor domain", () => {
-    expect(DEFAULT_QR_EXPORT_DOMAIN).toBe("https://qr.xdirga.xyz");
+    expect(DEFAULT_QR_EXPORT_DOMAIN).toBe("https://qris-order.lihatmeja.com");
   });
 });
 
@@ -21,8 +21,8 @@ describe("buildQrExportCsv", () => {
     const lines = csv.trim().split("\n");
     expect(lines).toHaveLength(101);
     expect(lines[0]).toBe("table_number,url");
-    expect(lines[1]).toBe(`1,https://qr.xdirga.xyz/r/${RESTAURANT_ID}/t/1`);
-    expect(lines[100]).toBe(`100,https://qr.xdirga.xyz/r/${RESTAURANT_ID}/t/100`);
+    expect(lines[1]).toBe(`1,https://qris-order.lihatmeja.com/r/${RESTAURANT_ID}/t/1`);
+    expect(lines[100]).toBe(`100,https://qris-order.lihatmeja.com/r/${RESTAURANT_ID}/t/100`);
   });
 });
 

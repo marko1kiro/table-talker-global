@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, ChevronRight, CircleAlert, Search, TriangleAlert } from "lucide-react";
+import { CheckCircle2, CircleAlert, Search, TriangleAlert } from "lucide-react";
 import { listOperationalErrors, resolveOperationalError } from "@/lib/operational-errors.server";
 import { normalizeHistoryRange } from "@/lib/owner-history-domain";
 import { listOwnerRestaurants } from "@/lib/owner-restaurants.server";
@@ -28,6 +28,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const Route = createFileRoute("/super-admin/error-log")({ component: ErrorLog });
 
@@ -244,45 +252,47 @@ function ErrorLog() {
       {!!rows.length && (
         <OwnerPanel
           title="Daftar insiden"
-          description="Pilih salah satu baris untuk membuka detail dan tindakan penyelesaian."
+          description="Pilih baris untuk membuka detail dan tindakan penyelesaian."
+          className="overflow-hidden"
         >
-          <div className="divide-y divide-slate-100">
-            {rows.map((row) => (
-              <button
-                key={row.id}
-                type="button"
-                onClick={() => {
-                  setSelected(row);
-                  setMutationError("");
-                }}
-                className="group flex w-full flex-col gap-3 py-4 text-left first:pt-0 last:pb-0 sm:flex-row sm:items-center"
-              >
-                <span
-                  className={`grid size-10 shrink-0 place-items-center rounded-xl ${row.resolved_at ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Kode</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Waktu</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer"
+                  onClick={() => {
+                    setSelected(row);
+                    setMutationError("");
+                  }}
                 >
-                  {row.resolved_at ? (
-                    <CheckCircle2 className="size-5" />
-                  ) : (
-                    <TriangleAlert className="size-5" />
-                  )}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-extrabold text-slate-950">{row.report_code}</p>
+                  <TableCell className="font-mono text-xs font-bold text-slate-900">
+                    {row.report_code}
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate text-slate-600">
+                    {row.stage}
+                    {row.detail ? ` · ${row.detail}` : ""}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-slate-600">
+                    {formatOwnerDate(row.occurred_at)}
+                  </TableCell>
+                  <TableCell>
                     <StatusBadge tone={row.resolved_at ? "success" : "danger"}>
                       {row.resolved_at ? "Selesai" : "Belum selesai"}
                     </StatusBadge>
-                  </div>
-                  <p className="mt-1 truncate text-sm text-slate-500">
-                    {row.stage}
-                    {row.detail ? ` · ${row.detail}` : ""}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-400">{formatOwnerDate(row.occurred_at)}</p>
-                </div>
-                <ChevronRight className="size-5 text-slate-300 transition group-hover:translate-x-1 group-hover:text-slate-600" />
-              </button>
-            ))}
-          </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </OwnerPanel>
       )}
       <OwnerPagination

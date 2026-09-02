@@ -10,7 +10,7 @@ import {
 } from "./r2.server";
 import { getServiceClient } from "./remote-audio.server";
 
-export const DEFAULT_QR_EXPORT_DOMAIN = "https://qr.xdirga.xyz";
+export const DEFAULT_QR_EXPORT_DOMAIN = "https://qris-order.lihatmeja.com";
 export type QrExportFormat = "xlsx" | "csv";
 export type QrGenerationScope = "all" | "selected";
 export type DynamicQrRow = { tableNumber: number; token: string };

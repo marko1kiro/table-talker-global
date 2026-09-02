@@ -49,6 +49,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 type ManifestItem = {
   audio_id: string;
@@ -490,17 +498,29 @@ function Audio() {
                 {(["table", "announcement", "custom"] as const).map((group) => (
                   <TabsContent key={group} value={group} className="mt-4">
                     {visibleItems.length && activeGroup === group ? (
-                      <div className="space-y-3">
-                        {visibleItems.map((item) => (
-                          <AudioItem
-                            key={item.audio_id}
-                            item={item}
-                            pendingItem={pendingItem}
-                            onMutate={(action) => void mutate(item.audio_id, action)}
-                            restaurantId={restaurantId}
-                          />
-                        ))}
-                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Label</TableHead>
+                            <TableHead>Audio ID</TableHead>
+                            <TableHead>Kategori</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Urutan</TableHead>
+                            <TableHead className="text-right">Aksi</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {visibleItems.map((item) => (
+                            <AudioRow
+                              key={item.audio_id}
+                              item={item}
+                              pendingItem={pendingItem}
+                              onMutate={(action) => void mutate(item.audio_id, action)}
+                              restaurantId={restaurantId}
+                            />
+                          ))}
+                        </TableBody>
+                      </Table>
                     ) : (
                       <OwnerEmpty
                         title={groups[group].length ? "Tidak ada hasil" : GROUP_META[group].title}
@@ -543,7 +563,7 @@ function Metric({ label, value, icon }: { label: string; value: string; icon?: R
   );
 }
 
-function AudioItem({
+function AudioRow({
   item,
   pendingItem,
   onMutate,
@@ -555,159 +575,154 @@ function AudioItem({
   restaurantId: string;
 }) {
   const pending = pendingItem === item.audio_id;
-  const group = classifyAudioId(item.audio_id);
 
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 sm:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700">
-          {group === "announcement" ? (
-            <Megaphone className="size-5" />
-          ) : group === "table" ? (
-            <Table2 className="size-5" />
-          ) : (
-            <FileAudio className="size-5" />
-          )}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-extrabold text-slate-950">{item.label}</h3>
-            <StatusBadge tone={item.active ? "success" : "neutral"}>
-              {item.active ? "Aktif" : "Nonaktif"}
-            </StatusBadge>
-          </div>
-          <p className="mt-1 break-all font-mono text-xs text-slate-500">{item.audio_id}</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-            <span className="rounded-lg bg-slate-100 px-2.5 py-1">{item.category}</span>
-            <span className="rounded-lg bg-slate-100 px-2.5 py-1">Urutan {item.ordering}</span>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            title={item.active ? "Nonaktifkan" : "Aktifkan"}
-            disabled={pending}
-            onClick={() =>
-              onMutate(() =>
-                toggleManifestItem({
-                  data: { restaurantId, audioId: item.audio_id, active: !item.active },
-                }),
-              )
-            }
-            className={ownerSecondaryButtonClass}
-          >
-            <Power className="size-4" /> {item.active ? "Nonaktifkan" : "Aktifkan"}
-          </button>
-          <button
-            type="button"
-            aria-label={`Naikkan ${item.label}`}
-            disabled={pending || item.ordering === 0}
-            onClick={() =>
-              onMutate(() =>
-                reorderManifestItem({
-                  data: { restaurantId, audioId: item.audio_id, ordering: item.ordering - 1 },
-                }),
-              )
-            }
-            className={ownerSecondaryButtonClass}
-          >
-            <ArrowUp className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label={`Turunkan ${item.label}`}
-            disabled={pending}
-            onClick={() =>
-              onMutate(() =>
-                reorderManifestItem({
-                  data: { restaurantId, audioId: item.audio_id, ordering: item.ordering + 1 },
-                }),
-              )
-            }
-            className={ownerSecondaryButtonClass}
-          >
-            <ArrowDown className="size-4" />
-          </button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <button
-                type="button"
-                disabled={pendingItem === item.audio_id}
-                className={ownerDangerButtonClass}
-              >
-                <Trash2 className="size-4" /> Hapus
-              </button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogTitle>Hapus audio?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Mapping audio akan dihapus. Objek R2 tetap dipertahankan untuk riwayat immutable.
-              </AlertDialogDescription>
-              <AlertDialogAction
-                disabled={pendingItem === item.audio_id}
-                onClick={() =>
-                  onMutate(() =>
-                    deleteManifestItem({ data: { restaurantId, audioId: item.audio_id } }),
-                  )
-                }
-              >
-                Hapus
-              </AlertDialogAction>
-              <AlertDialogCancel>Batal</AlertDialogCancel>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </div>
-
-      <details className="mt-4 rounded-xl bg-slate-50 open:ring-1 open:ring-slate-200">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700">
-          <PencilLine className="size-4" /> Edit metadata
-        </summary>
-        <div className="grid gap-4 border-t border-slate-200 p-4 sm:grid-cols-2">
-          <OwnerField label="Label">
-            <input
-              className={ownerControlClass}
-              aria-label={`Label ${item.audio_id}`}
-              defaultValue={item.label}
-              onBlur={(event) =>
+    <>
+      <TableRow>
+        <TableCell className="max-w-xs">
+          <p className="truncate font-extrabold text-slate-950">{item.label}</p>
+        </TableCell>
+        <TableCell className="max-w-[14rem] truncate font-mono text-xs text-slate-500">
+          {item.audio_id}
+        </TableCell>
+        <TableCell className="text-slate-600">{item.category}</TableCell>
+        <TableCell>
+          <StatusBadge tone={item.active ? "success" : "neutral"}>
+            {item.active ? "Aktif" : "Nonaktif"}
+          </StatusBadge>
+        </TableCell>
+        <TableCell className="text-right font-semibold">{item.ordering}</TableCell>
+        <TableCell>
+          <div className="flex flex-wrap justify-end gap-1.5">
+            <button
+              type="button"
+              title={item.active ? "Nonaktifkan" : "Aktifkan"}
+              disabled={pending}
+              onClick={() =>
                 onMutate(() =>
-                  updateManifestMetadata({
-                    data: {
-                      restaurantId,
-                      audioId: item.audio_id,
-                      label: event.target.value,
-                      category: item.category,
-                      active: item.active,
-                      ordering: item.ordering,
-                    },
+                  toggleManifestItem({
+                    data: { restaurantId, audioId: item.audio_id, active: !item.active },
                   }),
                 )
               }
-            />
-          </OwnerField>
-          <OwnerField label="Kategori">
-            <input
-              className={ownerControlClass}
-              aria-label={`Kategori ${item.audio_id}`}
-              defaultValue={item.category}
-              onBlur={(event) =>
+              className={ownerSecondaryButtonClass}
+            >
+              <Power className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Naikkan ${item.label}`}
+              disabled={pending || item.ordering === 0}
+              onClick={() =>
                 onMutate(() =>
-                  updateManifestMetadata({
-                    data: {
-                      restaurantId,
-                      audioId: item.audio_id,
-                      label: item.label,
-                      category: event.target.value,
-                      active: item.active,
-                      ordering: item.ordering,
-                    },
+                  reorderManifestItem({
+                    data: { restaurantId, audioId: item.audio_id, ordering: item.ordering - 1 },
                   }),
                 )
               }
-            />
-          </OwnerField>
-        </div>
-      </details>
-    </article>
+              className={ownerSecondaryButtonClass}
+            >
+              <ArrowUp className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Turunkan ${item.label}`}
+              disabled={pending}
+              onClick={() =>
+                onMutate(() =>
+                  reorderManifestItem({
+                    data: { restaurantId, audioId: item.audio_id, ordering: item.ordering + 1 },
+                  }),
+                )
+              }
+              className={ownerSecondaryButtonClass}
+            >
+              <ArrowDown className="size-4" />
+            </button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  type="button"
+                  disabled={pendingItem === item.audio_id}
+                  className={ownerDangerButtonClass}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogTitle>Hapus audio?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Mapping audio akan dihapus. Objek R2 tetap dipertahankan untuk riwayat immutable.
+                </AlertDialogDescription>
+                <AlertDialogAction
+                  disabled={pendingItem === item.audio_id}
+                  onClick={() =>
+                    onMutate(() =>
+                      deleteManifestItem({ data: { restaurantId, audioId: item.audio_id } }),
+                    )
+                  }
+                >
+                  Hapus
+                </AlertDialogAction>
+                <AlertDialogCancel>Batal</AlertDialogCancel>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </TableCell>
+      </TableRow>
+      <TableRow className="border-dashed bg-slate-50/40 hover:bg-slate-50/40">
+        <TableCell colSpan={6} className="py-2">
+          <details>
+            <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold text-slate-600">
+              <PencilLine className="size-3.5" /> Edit metadata
+            </summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <OwnerField label="Label">
+                <input
+                  className={ownerControlClass}
+                  aria-label={`Label ${item.audio_id}`}
+                  defaultValue={item.label}
+                  onBlur={(event) =>
+                    onMutate(() =>
+                      updateManifestMetadata({
+                        data: {
+                          restaurantId,
+                          audioId: item.audio_id,
+                          label: event.target.value,
+                          category: item.category,
+                          active: item.active,
+                          ordering: item.ordering,
+                        },
+                      }),
+                    )
+                  }
+                />
+              </OwnerField>
+              <OwnerField label="Kategori">
+                <input
+                  className={ownerControlClass}
+                  aria-label={`Kategori ${item.audio_id}`}
+                  defaultValue={item.category}
+                  onBlur={(event) =>
+                    onMutate(() =>
+                      updateManifestMetadata({
+                        data: {
+                          restaurantId,
+                          audioId: item.audio_id,
+                          label: item.label,
+                          category: event.target.value,
+                          active: item.active,
+                          ordering: item.ordering,
+                        },
+                      }),
+                    )
+                  }
+                />
+              </OwnerField>
+            </div>
+          </details>
+        </TableCell>
+      </TableRow>
+    </>
   );
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { HistoryIcon, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { listOwnerHistory } from "@/lib/owner-history.server";
 import { normalizeHistoryRange } from "@/lib/owner-history-domain";
 import { listOwnerRestaurants } from "@/lib/owner-restaurants.server";
@@ -19,6 +19,14 @@ import {
   StatusBadge,
   ownerControlClass,
 } from "@/components/OwnerUi";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const Route = createFileRoute("/super-admin/history")({ component: History });
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
@@ -190,40 +198,43 @@ function History() {
       )}
       {!!rows.length && (
         <OwnerPanel className="overflow-hidden" title={`${rows.length} aktivitas pada halaman ini`}>
-          <div className="divide-y divide-slate-100">
-            {rows.map((row: Record<string, unknown>) => {
-              const rowStatus = String(row.status ?? row.stage ?? "Aktivitas");
-              return (
-                <article
-                  key={String(row.id)}
-                  className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center"
-                >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
-                    <HistoryIcon className="size-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-extrabold text-slate-900">
-                      {String(row.label ?? row.report_code ?? row.audio_id ?? "Aktivitas")}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Waktu</TableHead>
+                <TableHead>Aktivitas</TableHead>
+                <TableHead className="text-right">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row: Record<string, unknown>) => {
+                const rowStatus = String(row.status ?? row.stage ?? "Aktivitas");
+                return (
+                  <TableRow key={String(row.id)}>
+                    <TableCell className="whitespace-nowrap text-slate-600">
                       {formatOwnerDate(row.event_timestamp ?? row.occurred_at)}
-                    </p>
-                  </div>
-                  <StatusBadge
-                    tone={
-                      /fail|gagal|reject|error/i.test(rowStatus)
-                        ? "danger"
-                        : /play|deliver|selesai|resolved/i.test(rowStatus)
-                          ? "success"
-                          : "neutral"
-                    }
-                  >
-                    {rowStatus}
-                  </StatusBadge>
-                </article>
-              );
-            })}
-          </div>
+                    </TableCell>
+                    <TableCell className="max-w-md truncate font-semibold text-slate-900">
+                      {String(row.label ?? row.report_code ?? row.audio_id ?? "Aktivitas")}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <StatusBadge
+                        tone={
+                          /fail|gagal|reject|error/i.test(rowStatus)
+                            ? "danger"
+                            : /play|deliver|selesai|resolved/i.test(rowStatus)
+                              ? "success"
+                              : "neutral"
+                        }
+                      >
+                        {rowStatus}
+                      </StatusBadge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </OwnerPanel>
       )}
       <OwnerPagination
