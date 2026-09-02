@@ -27,7 +27,12 @@ import {
   OwnerRetry,
   ownerPrimaryButtonClass,
 } from "@/components/OwnerUi";
-import { CrewHeader, CrewTableSection } from "@/components/CrewHeader";
+import {
+  CrewHeader,
+  CrewTableSection,
+  crewPrimaryButtonClass,
+  crewSecondaryButtonClass,
+} from "@/components/CrewHeader";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
   browserSessionStorage,
@@ -387,9 +392,14 @@ function SatgasRoute() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setEscortTable(null)}>Batal</AlertDialogCancel>
+            <AlertDialogCancel
+              className={crewSecondaryButtonClass}
+              onClick={() => setEscortTable(null)}
+            >
+              Batal
+            </AlertDialogCancel>
             <AlertDialogAction
-              className={ownerPrimaryButtonClass}
+              className={crewPrimaryButtonClass}
               onClick={() => {
                 // AlertDialogAction closes the dialog on click by default
                 // (Radix wraps it in a Dialog.Close) -- that's exactly

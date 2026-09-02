@@ -16,8 +16,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { OwnerNotice, OwnerPage, OwnerRetry, ownerPrimaryButtonClass } from "@/components/OwnerUi";
-import { CrewHeader, CrewTableSection } from "@/components/CrewHeader";
+import { OwnerNotice, OwnerPage, OwnerRetry } from "@/components/OwnerUi";
+import {
+  CrewHeader,
+  CrewTableSection,
+  crewPrimaryButtonClass,
+  crewSecondaryButtonClass,
+} from "@/components/CrewHeader";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
   browserSessionStorage,
@@ -223,9 +228,14 @@ function KasirRoute() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setConfirmTable(null)}>Batal</AlertDialogCancel>
+              <AlertDialogCancel
+                className={crewSecondaryButtonClass}
+                onClick={() => setConfirmTable(null)}
+              >
+                Batal
+              </AlertDialogCancel>
               <AlertDialogAction
-                className={ownerPrimaryButtonClass}
+                className={crewPrimaryButtonClass}
                 onClick={() => {
                   // AlertDialogAction closes the dialog on click by default
                   // (Radix wraps it in a Dialog.Close) -- that's exactly

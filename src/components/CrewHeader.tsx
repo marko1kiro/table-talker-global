@@ -17,6 +17,16 @@ const LEGEND_DOT_CLASS: Record<"emerald" | "amber" | "red", string> = {
   red: "bg-red-500",
 };
 
+// Shared crew button tokens: the plain, light crew look (rounded-xl, soft
+// slate borders, thumb-friendly min height) used by crew confirmation
+// dialogs. Not the Super Admin (owner) styles -- see
+// docs/superpowers/specs/2026-09-03-crew-dialog-restyle-design.md.
+export const crewPrimaryButtonClass =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-900/15 disabled:pointer-events-none disabled:opacity-45";
+
+export const crewSecondaryButtonClass =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200 disabled:pointer-events-none disabled:opacity-45";
+
 export function CrewHeader({
   role,
   restaurantName,

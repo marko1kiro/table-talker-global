@@ -26,14 +26,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { OwnerEmpty, OwnerNotice, OwnerPage, OwnerRetry } from "@/components/OwnerUi";
 import {
-  OwnerEmpty,
-  OwnerNotice,
-  OwnerPage,
-  OwnerRetry,
-  ownerPrimaryButtonClass,
-} from "@/components/OwnerUi";
-import { CrewHeader, CrewTableSection } from "@/components/CrewHeader";
+  CrewHeader,
+  CrewTableSection,
+  crewPrimaryButtonClass,
+  crewSecondaryButtonClass,
+} from "@/components/CrewHeader";
 import {
   browserSessionStorage,
   readRoleSessionIdentity,
@@ -243,9 +242,14 @@ function ClearUpRoute() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmTable(null)}>Batal</AlertDialogCancel>
+            <AlertDialogCancel
+              className={crewSecondaryButtonClass}
+              onClick={() => setConfirmTable(null)}
+            >
+              Batal
+            </AlertDialogCancel>
             <AlertDialogAction
-              className={ownerPrimaryButtonClass}
+              className={crewPrimaryButtonClass}
               onClick={() => {
                 // AlertDialogAction closes the dialog on click by default
                 // (Radix wraps it in a Dialog.Close) -- that's exactly
