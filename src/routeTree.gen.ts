@@ -26,6 +26,7 @@ import { Route as SuperAdminHistoryRouteImport } from './routes/super-admin/hist
 import { Route as SuperAdminEsbExportRouteImport } from './routes/super-admin/esb-export'
 import { Route as SuperAdminErrorLogRouteImport } from './routes/super-admin/error-log'
 import { Route as SuperAdminAudioRouteImport } from './routes/super-admin/audio'
+import { Route as QDeclineRouteImport } from './routes/q/decline'
 import { Route as QTokenRouteImport } from './routes/q/$token'
 import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
@@ -117,6 +118,11 @@ const SuperAdminAudioRoute = SuperAdminAudioRouteImport.update({
   path: '/audio',
   getParentRoute: () => SuperAdminRouteRoute,
 } as any)
+const QDeclineRoute = QDeclineRouteImport.update({
+  id: '/q/decline',
+  path: '/q/decline',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const QTokenRoute = QTokenRouteImport.update({
   id: '/q/$token',
   path: '/q/$token',
@@ -156,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
   '/q/$token': typeof QTokenRoute
+  '/q/decline': typeof QDeclineRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
   '/q/$token': typeof QTokenRoute
+  '/q/decline': typeof QDeclineRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
@@ -204,6 +212,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
   '/q/$token': typeof QTokenRoute
+  '/q/decline': typeof QDeclineRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms-of-use'
     | '/q/$token'
+    | '/q/decline'
     | '/super-admin/audio'
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
@@ -253,6 +263,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms-of-use'
     | '/q/$token'
+    | '/q/decline'
     | '/super-admin/audio'
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
@@ -277,6 +288,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms-of-use'
     | '/q/$token'
+    | '/q/decline'
     | '/super-admin/audio'
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
@@ -302,6 +314,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsOfUseRoute: typeof TermsOfUseRoute
   QTokenRoute: typeof QTokenRoute
+  QDeclineRoute: typeof QDeclineRoute
   ClearUpIndexRoute: typeof ClearUpIndexRoute
   KasirIndexRoute: typeof KasirIndexRoute
   SatgasIndexRoute: typeof SatgasIndexRoute
@@ -430,6 +443,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminAudioRouteImport
       parentRoute: typeof SuperAdminRouteRoute
     }
+    '/q/decline': {
+      id: '/q/decline'
+      path: '/q/decline'
+      fullPath: '/q/decline'
+      preLoaderRoute: typeof QDeclineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/q/$token': {
       id: '/q/$token'
       path: '/q/$token'
@@ -503,6 +523,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsOfUseRoute: TermsOfUseRoute,
   QTokenRoute: QTokenRoute,
+  QDeclineRoute: QDeclineRoute,
   ClearUpIndexRoute: ClearUpIndexRoute,
   KasirIndexRoute: KasirIndexRoute,
   SatgasIndexRoute: SatgasIndexRoute,

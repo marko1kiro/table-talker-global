@@ -23,7 +23,7 @@ describe("M-01 opaque QR interceptor", () => {
     expect(hash).not.toContain("198.51.100.9");
   });
 
-  it("resolves a valid opaque token, processes its durable outbox row, and redirects to ESB", async () => {
+  it("resolves a valid opaque token, processes its durable outbox row, and serves the confirmation interstitial", async () => {
     const resolveAndEnqueue = vi.fn(async () => RESOLVED);
     const processPendingScan = vi.fn(async () => {});
     const response = await handleOpaqueQrRequest(TOKEN, TRUSTED_HEADERS, {
@@ -34,20 +34,26 @@ describe("M-01 opaque QR interceptor", () => {
     });
     expect(resolveAndEnqueue).toHaveBeenCalledWith(SCAN_ID, TOKEN, hashQrScannerIp("198.51.100.9"));
     expect(processPendingScan).toHaveBeenCalledWith(SCAN_ID);
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(
-      "https://esborder.qs.esb.co.id/APP/1294/order?mode=dinein&tableNumber=7",
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("MEJA");
+    expect(html).toContain(`>7</p>`);
+    expect(html).toContain(
+      'href="https://esborder.qs.esb.co.id/APP/1294/order?mode=dinein&tableNumber=7"',
     );
+    expect(html).toContain("YA, SAYA MAU PESAN");
+    expect(html).toContain('action="/q/decline"');
+    expect(html).toContain(`value="${SCAN_ID}"`);
   });
 
-  it("redirects but does not reprocess a scan suppressed by debounce or rate limit", async () => {
+  it("serves the interstitial but does not reprocess a scan suppressed by debounce or rate limit", async () => {
     const processPendingScan = vi.fn(async () => {});
     const response = await handleOpaqueQrRequest(TOKEN, TRUSTED_HEADERS, {
       resolveAndEnqueue: vi.fn(async () => ({ ...RESOLVED, enqueued: false })),
       processPendingScan,
       generateScanId: () => SCAN_ID,
     });
-    expect(response.status).toBe(302);
+    expect(response.status).toBe(200);
     expect(processPendingScan).not.toHaveBeenCalled();
   });
 
