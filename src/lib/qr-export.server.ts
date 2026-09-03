@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { buildQrExportRows } from "./qr-export-domain";
+import { buildDynamicQrExportDocxBuffer } from "./qr-docx.server";
 import {
   deletePrivateQrExportObject,
   readPrivateQrExportObject,
@@ -11,7 +12,7 @@ import {
 import { getServiceClient } from "./remote-audio.server";
 
 export const DEFAULT_QR_EXPORT_DOMAIN = "https://qris-order.lihatmeja.com";
-export type QrExportFormat = "xlsx" | "csv";
+export type QrExportFormat = "xlsx" | "csv" | "docx";
 export type QrGenerationScope = "all" | "selected";
 export type DynamicQrRow = { tableNumber: number; token: string };
 
@@ -104,7 +105,7 @@ export type CommitQrBatchInput = {
   tableNumbers: number[];
   tokens: string[];
   r2KeyXlsx: string;
-  r2KeyCsv: string;
+  r2KeyDocx: string;
 };
 
 type GenerateQrBatchInput = {
@@ -135,7 +136,7 @@ async function defaultCommitQrBatch(input: CommitQrBatchInput): Promise<void> {
     p_table_numbers: input.tableNumbers,
     p_tokens: input.tokens,
     p_r2_key_xlsx: input.r2KeyXlsx,
-    p_r2_key_csv: input.r2KeyCsv,
+    p_r2_key_docx: input.r2KeyDocx,
   });
   if (error) throw error;
 }
@@ -165,10 +166,10 @@ export async function generateQrBatchCore(
       token: tokens[index],
     }));
     const r2KeyXlsx = qrExportKey(input.restaurantId, batchId, "xlsx");
-    const r2KeyCsv = qrExportKey(input.restaurantId, batchId, "csv");
-    const [xlsx, csv] = await Promise.all([
+    const r2KeyDocx = qrExportKey(input.restaurantId, batchId, "docx");
+    const [xlsx, docx] = await Promise.all([
       buildDynamicQrExportXlsxBuffer(rows, domain),
-      Promise.resolve(buildDynamicQrExportCsv(rows, domain)),
+      buildDynamicQrExportDocxBuffer(rows, domain),
     ]);
 
     const attemptedKeys: string[] = [];
@@ -181,7 +182,7 @@ export async function generateQrBatchCore(
       tableNumbers,
       tokens,
       r2KeyXlsx,
-      r2KeyCsv,
+      r2KeyDocx,
     };
     try {
       // Deliberately sequential: a database commit is impossible until both
@@ -192,8 +193,12 @@ export async function generateQrBatchCore(
         new Uint8Array(xlsx),
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       );
-      attemptedKeys.push(r2KeyCsv);
-      await upload(r2KeyCsv, csv, "text/csv; charset=utf-8");
+      attemptedKeys.push(r2KeyDocx);
+      await upload(
+        r2KeyDocx,
+        new Uint8Array(docx),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      );
       await commit(commitInput);
       return commitInput;
     } catch (error) {
@@ -339,14 +344,15 @@ export async function serveQrExport(
 
 export async function serveQrBatchDownload(
   batchId: string,
-  format: QrExportFormat,
+  format: "xlsx" | "docx" | "csv",
 ): Promise<Response> {
   try {
     await requireSuperAdmin();
   } catch {
     return response("Tidak diizinkan.", 401);
   }
-  if (format !== "xlsx" && format !== "csv") return response("Format export tidak dikenal.", 400);
+  if (format !== "xlsx" && format !== "docx" && format !== "csv")
+    return response("Format export tidak dikenal.", 400);
   const client = getServiceClient();
   if (!client) return response("File tidak tersedia.", 503);
   const result = await client.rpc("get_qr_export_key", {
@@ -360,7 +366,9 @@ export async function serveQrBatchDownload(
     const contentType =
       format === "xlsx"
         ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        : "text/csv; charset=utf-8";
+        : format === "docx"
+          ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          : "text/csv; charset=utf-8";
     const body = new Uint8Array(bytes.byteLength);
     body.set(bytes);
     return new Response(body.buffer, {

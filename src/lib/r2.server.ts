@@ -23,7 +23,8 @@ const R2_HEALTHCHECK_KEY = "healthcheck";
 const QR_EXPORT_MAGIC = Buffer.from("LIMEQR01", "ascii");
 const QR_EXPORT_IV_BYTES = 12;
 const QR_EXPORT_TAG_BYTES = 16;
-const QR_EXPORT_KEY_PATTERN = /^qr-exports\/[0-9a-f-]+\/[0-9a-f-]+\/qr-codes\.(xlsx|csv)$/i;
+const QR_EXPORT_KEY_PATTERN =
+  /^qr-exports\/[0-9a-f-]+\/[0-9a-f-]+\/qr-codes\.(xlsx|csv|docx)$/i;
 
 let client: S3Client | null = null;
 

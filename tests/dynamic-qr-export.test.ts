@@ -40,15 +40,15 @@ describe("M-01 QR generation and export", () => {
     expect(qrExportKey(RESTAURANT_ID, BATCH_ID, "xlsx")).toBe(
       `qr-exports/${RESTAURANT_ID}/${BATCH_ID}/qr-codes.xlsx`,
     );
-    expect(qrExportKey(RESTAURANT_ID, BATCH_ID, "csv")).toBe(
-      `qr-exports/${RESTAURANT_ID}/${BATCH_ID}/qr-codes.csv`,
+    expect(qrExportKey(RESTAURANT_ID, BATCH_ID, "docx")).toBe(
+      `qr-exports/${RESTAURANT_ID}/${BATCH_ID}/qr-codes.docx`,
     );
   });
 
   it("uploads both files before atomically committing token replacement", async () => {
     const order: string[] = [];
     const upload = vi.fn(async (key: string) => {
-      order.push(`upload:${key.endsWith(".xlsx") ? "xlsx" : "csv"}`);
+      order.push(`upload:${key.endsWith(".xlsx") ? "xlsx" : "docx"}`);
     });
     const commit = vi.fn(async () => {
       order.push("commit");
@@ -68,7 +68,7 @@ describe("M-01 QR generation and export", () => {
         commit,
       },
     );
-    expect(order).toEqual(["upload:xlsx", "upload:csv", "commit"]);
+    expect(order).toEqual(["upload:xlsx", "upload:docx", "commit"]);
     expect(result.tableNumbers).toEqual([2, 9]);
     expect(result.batchId).toBe(BATCH_ID);
     expect(commit).toHaveBeenCalledWith(
@@ -95,7 +95,7 @@ describe("M-01 QR generation and export", () => {
           generateBatchId: () => BATCH_ID,
           generateToken: () => "opaque-token",
           upload: vi.fn(async (key: string) => {
-            if (key.endsWith(".csv")) throw new Error("R2 unavailable");
+            if (key.endsWith(".docx")) throw new Error("R2 unavailable");
           }),
           remove: vi.fn(async () => {}),
           commit,
