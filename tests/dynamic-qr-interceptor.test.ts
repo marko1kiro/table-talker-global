@@ -3,11 +3,12 @@ import {
   INVALID_QR_MESSAGE,
   handleOpaqueQrRequest,
   hashQrScannerIp,
+  trustedQrScannerIp,
 } from "../src/lib/dynamic-qr.server";
 
 const TOKEN = "pQGY7kb9ucxOH0-kQtxpjSscP-tZmo4zCvV4kWJpZRQ";
 const SCAN_ID = "7359da62-dc98-4a81-9a0f-56da46f32f70";
-const TRUSTED_HEADERS = new Headers({ "x-vercel-forwarded-for": "198.51.100.9" });
+const TRUSTED_HEADERS = new Headers({ "x-forwarded-for": "198.51.100.9" });
 const RESOLVED = {
   restaurantId: "33916a05-7e95-42fa-bc3c-050bed2402c5",
   tableNumber: 7,
@@ -16,6 +17,12 @@ const RESOLVED = {
 };
 
 describe("M-01 opaque QR interceptor", () => {
+  it("trusts Vercel's canonical, platform-overwritten x-forwarded-for header", () => {
+    expect(
+      trustedQrScannerIp(new Headers({ "x-forwarded-for": "198.51.100.9, 203.0.113.7" })),
+    ).toBe("198.51.100.9");
+  });
+
   it("uses a stable SHA-256 hash rather than storing a raw scanner IP", () => {
     const hash = hashQrScannerIp("198.51.100.9");
     expect(hash).toMatch(/^[0-9a-f]{64}$/);

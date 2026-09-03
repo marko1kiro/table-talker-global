@@ -44,8 +44,8 @@ describe("M-01 security remediation", () => {
       "x-forwarded-for": "198.51.100.9",
       "x-real-ip": "192.0.2.4",
     });
-    expect(trustedQrScannerIp(trusted)).toBe("203.0.113.8");
-    expect(trustedQrScannerIp(new Headers({ "x-forwarded-for": "198.51.100.9" }))).toBeNull();
+    expect(trustedQrScannerIp(trusted)).toBe("198.51.100.9");
+    expect(trustedQrScannerIp(new Headers({ "x-vercel-forwarded-for": "203.0.113.8" }))).toBeNull();
 
     const resolveAndEnqueue = vi.fn(async () => null);
     const response = await handleOpaqueQrRequest(TOKEN, new Headers(), { resolveAndEnqueue });

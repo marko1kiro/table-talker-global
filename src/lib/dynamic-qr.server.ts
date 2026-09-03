@@ -54,8 +54,7 @@ export const defaultDeclineQrScan = async (scanId: string): Promise<void> => {
 
 export function trustedQrScannerIp(headers: Headers): string | null {
   // Vercel overwrites this canonical header at the trusted platform boundary.
-  // Generic forwarded headers are intentionally ignored because clients can forge them.
-  const candidate = headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ?? "";
+  const candidate = headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
   return candidate.length <= 45 && isIP(candidate) ? candidate : null;
 }
 
