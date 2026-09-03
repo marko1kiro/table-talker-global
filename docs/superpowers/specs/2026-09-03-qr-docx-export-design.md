@@ -86,8 +86,9 @@ generateQrExport (server fn)
 - `generateQrBatchCore`: build `docx` via the new module, upload it, drop the
   dynamic CSV build/upload. `attemptedKeys` now `[xlsx, docx]`.
 - `qrExportKey(restaurantId, batchId, format)`: the generate-side
-  `QrExportFormat` becomes `"xlsx" | "docx"` (was `"xlsx" | "csv"`); only these
-  two are ever produced for a new batch.
+  `QrExportFormat` becomes `"xlsx" | "csv" | "docx"` (superset — `csv` stays in
+  the type because the legacy `serveQrExport` compatibility path and its tests
+  still emit CSV). Only `xlsx` and `docx` are ever produced for a new batch.
 - `serveQrBatchDownload(batchId, format)`: keeps a wider accepted set
   `xlsx | docx | csv` (typed as its own union, not `QrExportFormat`) so
   pre-existing batches stay downloadable via direct URL even though no CSV button
