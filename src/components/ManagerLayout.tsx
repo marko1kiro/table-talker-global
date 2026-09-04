@@ -44,14 +44,16 @@ export function ManagerLayout({
   }));
   const headerTitle = LABELS.find((l) => l.id === active)?.label ?? "Dashboard";
   const footer = (
-    <div className="rounded-xl border border-ta-gray-200 bg-white p-4 text-center">
+    <div className="rounded-xl border border-ta-gray-200 bg-white p-4 text-center dark:border-ta-gray-700 dark:bg-ta-gray-800">
       <p className="truncate whitespace-nowrap text-[13px] font-bold uppercase text-ta-gray-900 dark:text-white">
         {restaurantName}
       </p>
       <p className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-ta-gray-400">
         lihatmeja.com <span aria-label="copyright">©</span> 2026
       </p>
-      <p className="text-[11px] font-bold uppercase tracking-wide text-ta-gray-400">XDIRGA LABS</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-ta-gray-400 dark:text-ta-gray-500">
+        XDIRGA LABS
+      </p>
     </div>
   );
   return (

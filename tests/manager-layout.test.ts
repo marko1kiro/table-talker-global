@@ -30,4 +30,9 @@ describe("ManagerLayout (TailAdmin)", () => {
     expect(text).toContain("whitespace-nowrap");
     expect(text).toContain("mt-0.5");
   });
+  it("footer card follows dark mode", () => {
+    const text = source();
+    expect(text).toContain("dark:bg-ta-gray-800");
+    expect(text).toContain("dark:border-ta-gray-700");
+  });
 });
