@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  Calendar,
   CheckCircle2,
   KeyRound,
   Loader2,
@@ -12,11 +13,13 @@ import {
   Sparkles,
   Store,
   Unlock,
+  User,
   UserCog,
   Volume2,
   Wallet,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { IconField } from "@/components/dashboard/auth";
+import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { loginToRestaurant, verifyRestaurantPin } from "@/lib/restaurants.server";
 import { normalizeCrewName } from "@/lib/remote-audio-domain";
 import {
@@ -45,10 +48,8 @@ import type { CrewSessionIdentity, RoleSessionIdentity } from "@/lib/crew-sessio
 // "Konfirmasi Resto" yes/no dialog) -> Nama & Jam Kerja -> claim_role_session
 // -> hand off.
 //
-// Theme: plain shadcn UI (white + blue/cyan + magenta gradient accents),
-// intentionally NOT neo-brutalist -- this screen is shared by all 4
-// roles including SS, before any role-specific dashboard styling kicks
-// in.
+// Theme: TailAdmin (white card + brand-blue accents + Outfit), shared by all 4
+// roles including SS, before any role-specific dashboard styling kicks in.
 //
 // Option B (unchanged from the previous flow): SS's session continues to
 // be created with crewSessionId/crewSessionToken as empty strings;
@@ -260,69 +261,65 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
   const canSubmitIdentity = name.trim().length > 0 && checkedInAt.trim().length > 0;
 
   return (
-    <main className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-white px-4 py-10 sm:px-6">
-      <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(circle_at_12%_15%,rgba(34,211,238,0.16),transparent_32%),radial-gradient(circle_at_88%_85%,rgba(217,70,239,0.14),transparent_34%)]" />
-
+    <main className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-ta-gray-50 px-4 py-10 font-outfit sm:px-6">
       <div className="relative w-full max-w-md">
-        <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <img src="/lime-logo.webp" alt="LIME" className="h-14 w-auto select-none sm:h-16" />
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Login Crew</p>
-        </div>
-
         <div className="mb-5 flex items-center justify-center gap-2">
           {STEP_ORDER.map((s, i) => (
             <span
               key={s}
               className={`h-1.5 rounded-full transition-all duration-300 ${
                 i === stepIndex
-                  ? "w-8 bg-gradient-to-r from-sky-500 via-cyan-500 to-fuchsia-500"
+                  ? "w-8 bg-brand-500"
                   : i < stepIndex
-                    ? "w-4 bg-cyan-300"
-                    : "w-4 bg-slate-200"
+                    ? "w-4 bg-brand-300"
+                    : "w-4 bg-ta-gray-200"
               }`}
             />
           ))}
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/5 sm:p-8">
+        <div className="rounded-2xl border border-ta-gray-200 bg-white p-6 shadow-theme-md sm:p-8">
+          <div className="mb-6 flex flex-col items-center gap-2 text-center">
+            <span className="grid size-16 place-items-center rounded-2xl bg-brand-50">
+              <img src="/lime-logo.webp" alt="LIME" className="h-9 w-auto select-none" />
+            </span>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-ta-gray-400">
+              Login Crew
+            </p>
+          </div>
+
           {step === "code" && (
             <>
-              <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-lg shadow-cyan-500/20">
-                <Store className="size-6" />
-              </div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">Masuk ke Resto</h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Masukkan Kode Resto yang diberikan admin.
-              </p>
-              <div className="mt-5 mb-1 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
+                Login Dulu
+              </h1>
+              <div className="mt-5 mb-1 rounded-xl border border-ta-gray-200 bg-ta-gray-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-ta-gray-500">
                   Khusus Pimpinan Shift
                 </p>
                 <Link
                   to="/manager/login"
-                  className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm transition hover:bg-slate-700"
+                  className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-brand-500 text-sm font-bold uppercase tracking-wide text-white transition hover:bg-brand-600"
                 >
                   <UserCog className="size-4" /> Login MANAGER
                 </Link>
               </div>
               <form className="mt-6 space-y-4" onSubmit={submitCode}>
-                <label className="block text-sm font-bold text-slate-700" htmlFor="restaurant-code">
-                  Kode Resto
-                </label>
-                <Input
+                <IconField
+                  icon={Store}
                   id="restaurant-code"
+                  aria-label="Kode Resto"
                   value={code}
                   onChange={(event) => setCode(event.target.value)}
                   placeholder="Masukkan Kode Resto"
                   autoComplete="organization"
                   required
                   autoFocus
-                  className="h-12 rounded-xl border-slate-200 text-base focus-visible:border-cyan-400 focus-visible:ring-cyan-500/20"
                 />
                 {codeError && (
                   <div
                     role="alert"
-                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
+                    className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
                   >
                     {codeError}
                   </div>
@@ -330,7 +327,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
                 <button
                   type="submit"
                   disabled={submittingCode}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 via-cyan-500 to-fuchsia-500 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg shadow-cyan-500/25 transition hover:opacity-90 disabled:opacity-60"
+                  className={`${taPrimaryButtonClass} w-full`}
                 >
                   {submittingCode && <Loader2 className="size-4 animate-spin" />}
                   {submittingCode ? "Memeriksa..." : "Lanjutkan"}
@@ -344,31 +341,29 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
               <button
                 type="button"
                 onClick={backToCode}
-                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-slate-400 transition hover:text-slate-600"
+                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600"
               >
                 <ArrowLeft className="size-3.5" /> Ganti Kode Resto
               </button>
 
-              <div className="mb-5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-gradient-to-r from-sky-50 to-fuchsia-50 px-3 py-1.5 ring-1 ring-inset ring-cyan-100">
-                <CheckCircle2 className="size-4 shrink-0 text-cyan-600" />
-                <span className="truncate text-sm font-extrabold text-slate-800">
-                  {login.displayName}
+              <div className="mb-5 flex justify-center">
+                <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-brand-50 px-3 py-1.5 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
+                  <CheckCircle2 className="size-4 shrink-0" />
+                  <span className="truncate">{login.displayName}</span>
                 </span>
               </div>
 
-              <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-lg shadow-cyan-500/20">
-                <KeyRound className="size-6" />
-              </div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">ID Resto</h1>
-              <p className="mt-1 text-sm text-slate-500">
+              <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
+                ID Resto
+              </h1>
+              <p className="mt-1 text-center text-sm text-ta-gray-500">
                 Masukkan ID Resto (4 digit) yang diberikan admin untuk resto ini.
               </p>
               <form className="mt-6 space-y-4" onSubmit={submitPin}>
-                <label className="block text-sm font-bold text-slate-700" htmlFor="restaurant-pin">
-                  ID Resto
-                </label>
-                <Input
+                <IconField
+                  icon={KeyRound}
                   id="restaurant-pin"
+                  aria-label="ID Resto"
                   value={pin}
                   onChange={(event) => setPin(onlyDigits(event.target.value, 4))}
                   placeholder="0000"
@@ -377,12 +372,12 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
                   maxLength={4}
                   required
                   autoFocus
-                  className="h-12 rounded-xl border-slate-200 text-center text-lg font-black tracking-[0.4em] focus-visible:border-cyan-400 focus-visible:ring-cyan-500/20"
+                  className="text-center text-lg font-black tracking-[0.4em]"
                 />
                 {pinError && (
                   <div
                     role="alert"
-                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
+                    className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
                   >
                     {pinError}
                   </div>
@@ -390,7 +385,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
                 <button
                   type="submit"
                   disabled={submittingPin || pin.length !== 4}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 via-cyan-500 to-fuchsia-500 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg shadow-cyan-500/25 transition hover:opacity-90 disabled:opacity-60"
+                  className={`${taPrimaryButtonClass} w-full`}
                 >
                   {submittingPin && <Loader2 className="size-4 animate-spin" />}
                   {submittingPin ? "Memeriksa..." : "Lanjutkan"}
@@ -404,20 +399,24 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
               <button
                 type="button"
                 onClick={backToPin}
-                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-slate-400 transition hover:text-slate-600"
+                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600"
               >
                 <ArrowLeft className="size-3.5" /> Ganti ID Resto
               </button>
 
-              <div className="mb-5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-gradient-to-r from-sky-50 to-fuchsia-50 px-3 py-1.5 ring-1 ring-inset ring-cyan-100">
-                <CheckCircle2 className="size-4 shrink-0 text-cyan-600" />
-                <span className="truncate text-sm font-extrabold text-slate-800">
-                  {login.displayName}
+              <div className="mb-5 flex justify-center">
+                <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-brand-50 px-3 py-1.5 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
+                  <CheckCircle2 className="size-4 shrink-0" />
+                  <span className="truncate">{login.displayName}</span>
                 </span>
               </div>
 
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">Pilih Station</h1>
-              <p className="mt-1 text-sm text-slate-500">Pilih station kamu untuk melanjutkan.</p>
+              <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
+                Pilih Station
+              </h1>
+              <p className="mt-1 text-center text-sm text-ta-gray-500">
+                Pilih station kamu untuk melanjutkan.
+              </p>
 
               <div className="mt-6 flex flex-col gap-3">
                 {CREW_ROLE_ORDER.map((option) => {
@@ -431,16 +430,16 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
                         setRole(option);
                         setStep("identity");
                       }}
-                      className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-md"
+                      className="group flex w-full items-center gap-3 rounded-xl border border-ta-gray-200 bg-white px-4 py-3.5 text-left shadow-theme-xs transition hover:border-brand-300 hover:bg-brand-50/40"
                     >
-                      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white">
+                      <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-white">
                         <Icon className="size-5" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-extrabold text-slate-900">
+                        <span className="block text-sm font-bold text-ta-gray-900">
                           {CREW_ROLE_LABELS[option]}
                         </span>
-                        <span className="block truncate text-xs text-slate-500">
+                        <span className="block truncate text-xs text-ta-gray-500">
                           {meta.description}
                         </span>
                       </span>
@@ -456,53 +455,51 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
               <button
                 type="button"
                 onClick={backToRole}
-                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-slate-400 transition hover:text-slate-600"
+                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600"
               >
                 <ArrowLeft className="size-3.5" /> Ganti Station
               </button>
 
-              <div className="mb-5 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+              <div className="mb-5 flex flex-wrap items-center justify-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white">
                   {CREW_ROLE_LABELS[role]}
                 </span>
-                <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-gradient-to-r from-sky-50 to-fuchsia-50 px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-inset ring-cyan-100">
+                <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-brand-50 px-2.5 py-1 text-xs font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
                   {login.displayName}
                 </span>
               </div>
 
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">Lengkapi Data</h1>
-              <p className="mt-1 text-sm text-slate-500">
+              <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
+                Lengkapi Data
+              </h1>
+              <p className="mt-1 text-center text-sm text-ta-gray-500">
                 Isi nama dan jam kerja kamu sebagai {CREW_ROLE_LABELS[role]}.
               </p>
 
               <form className="mt-6 space-y-4" onSubmit={submitIdentity}>
-                <label className="block text-sm font-bold text-slate-700" htmlFor="crew-name">
-                  Nama
-                </label>
-                <Input
+                <IconField
+                  icon={User}
                   id="crew-name"
+                  aria-label="Nama"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Nama kamu"
                   required
                   autoFocus
-                  className="h-12 rounded-xl border-slate-200 text-base focus-visible:border-cyan-400 focus-visible:ring-cyan-500/20"
                 />
-                <label className="block text-sm font-bold text-slate-700" htmlFor="checked-in-at">
-                  Tanggal &amp; Jam Kerja
-                </label>
-                <Input
+                <IconField
+                  icon={Calendar}
                   id="checked-in-at"
+                  aria-label="Tanggal & Jam Kerja"
                   type="datetime-local"
                   value={checkedInAt}
                   onChange={(event) => setCheckedInAt(event.target.value)}
                   required
-                  className="h-12 rounded-xl border-slate-200 text-base focus-visible:border-cyan-400 focus-visible:ring-cyan-500/20"
                 />
                 {identityError && (
                   <div
                     role="alert"
-                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
+                    className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
                   >
                     {identityError}
                   </div>
@@ -512,8 +509,8 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
                   disabled={!canSubmitIdentity || submittingIdentity}
                   className={
                     canSubmitIdentity
-                      ? "flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 via-cyan-500 to-fuchsia-500 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg shadow-cyan-500/25 transition hover:opacity-90 disabled:opacity-60"
-                      : "flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-100 text-sm font-extrabold uppercase tracking-wide text-slate-400"
+                      ? `${taPrimaryButtonClass} w-full`
+                      : "flex h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-ta-gray-100 text-sm font-semibold text-ta-gray-400"
                   }
                 >
                   {submittingIdentity ? (
@@ -535,7 +532,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
           )}
         </div>
 
-        <p className="mt-6 text-center text-xs leading-5 text-slate-400">
+        <p className="mt-6 text-center text-xs leading-5 text-ta-gray-400">
           Aktivitas login dapat dicatat untuk keamanan operasional.
         </p>
       </div>

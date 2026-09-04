@@ -158,3 +158,20 @@ describe("RoleLoginFlow: never shows removed remote-audio/heartbeat copy", () =>
     expect(text).not.toContain("remoteCrew.offline");
   });
 });
+
+describe("RoleLoginFlow: TailAdmin restyle (presentational only)", () => {
+  it("uses TailAdmin card + brand button + icon fields, logo inside card", () => {
+    const text = source();
+    expect(text).toContain("taPrimaryButtonClass");
+    expect(text).toContain("IconField");
+    expect(text).toContain("bg-brand-50");
+    expect(text).toContain("shadow-theme-md");
+  });
+  it("renames the code heading and drops the helper copy + hero icon boxes", () => {
+    const text = source();
+    expect(text).toContain("Login Dulu");
+    expect(text).not.toContain("Masuk ke Resto");
+    expect(text).not.toContain("Masukkan Kode Resto yang diberikan admin.");
+    expect(text).not.toContain("from-sky-500");
+  });
+});
