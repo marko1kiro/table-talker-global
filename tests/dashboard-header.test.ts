@@ -39,3 +39,12 @@ describe("ProfileMenu", () => {
     expect(s).toContain("Keluar");
   });
 });
+
+describe("RoleEmblem", () => {
+  it("renders a brand-blue uppercase pill", () => {
+    const s = src("RoleEmblem.tsx");
+    expect(s).toContain("bg-brand-500");
+    expect(s).toContain("uppercase");
+    expect(s).toContain("{label}");
+  });
+});
