@@ -14,7 +14,11 @@ describe("TailAdmin tokens", () => {
     expect(s).toContain("--color-ta-error: #f04438");
     expect(s).toContain("--shadow-theme-sm:");
     expect(s).toContain("--font-outfit:");
-    expect(s).toContain("family=Outfit");
+  });
+  it("loads Outfit via the root HTML head link (not a CSS @import)", () => {
+    const root = readFileSync(new URL("../src/routes/__root.tsx", import.meta.url), "utf8");
+    expect(root).toContain("family=Outfit");
+    expect(css()).not.toContain("@import url");
   });
   it("keeps the existing neo-brutalism tokens (crew/SS untouched)", () => {
     const s = css();

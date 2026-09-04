@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import type { ReactNode } from "react";
 import { AlertTriangle, Inbox, LoaderCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
