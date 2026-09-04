@@ -46,6 +46,7 @@ import { useNoticeQueue } from "@/hooks/use-notice-queue";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
+  cancelEscortIntent,
   confirmEscortIntent,
   createEscortIntent,
   getTableOccupancySnapshot,
@@ -82,6 +83,10 @@ function SatgasRoute() {
   const [identity, setIdentity] = useState<RoleSessionIdentity | null>(null);
   const [identityHydrated, setIdentityHydrated] = useState(false);
   const [escortTable, setEscortTable] = useState<number | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{
+    tableNumber: number;
+    intentId: string;
+  } | null>(null);
   // Tracks the table whose escort action is in flight, independent of
   // `escortTable`. The confirmation dialog is meant to close the instant
   // its button is tapped (default AlertDialogAction behaviour), which
@@ -280,6 +285,31 @@ function SatgasRoute() {
     },
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: async (target: { tableNumber: number; intentId: string }) => {
+      const result = await cancelEscortIntent({
+        data: {
+          intentId: target.intentId,
+          sessionToken: identity!.roleSessionToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+        },
+      });
+      return { result, target };
+    },
+    onSuccess: ({ result, target }) => {
+      if (!result.ok) {
+        setActionError(result.message);
+        return;
+      }
+      setActionError("");
+      setWaitlist(
+        removeEscortWaitEntry(browserSessionStorage(), identity!.roleSessionId, target.intentId),
+      );
+      void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
+    },
+    onError: () => setActionError("Gagal membatalkan escort. Coba lagi."),
+  });
+
   const logout = () => {
     removeRoleSessionIdentity(browserSessionStorage());
     void navigate({ to: "/" });
@@ -376,6 +406,9 @@ function SatgasRoute() {
             escortedTableNumbers={escortedTableNumbers}
             pendingTable={processingTable}
             onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
+            onSelectEscortedTable={(tableNumber, intentId) =>
+              setCancelTarget({ tableNumber, intentId })
+            }
           />
         ) : (
           <TableList
@@ -383,6 +416,9 @@ function SatgasRoute() {
             escortedTableNumbers={escortedTableNumbers}
             pendingTable={processingTable}
             onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
+            onSelectEscortedTable={(tableNumber, intentId) =>
+              setCancelTarget({ tableNumber, intentId })
+            }
           />
         )}
       </CrewTableSection>
@@ -427,6 +463,38 @@ function SatgasRoute() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog
+        open={cancelTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setCancelTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Batalkan Escort untuk Meja {cancelTarget?.tableNumber}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Meja akan kembali berstatus kosong dan bisa di-escort lagi.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className={crewSecondaryButtonClass} onClick={() => setCancelTarget(null)}>
+              Tidak
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={crewPrimaryButtonClass}
+              onClick={() => {
+                if (cancelTarget !== null) cancelMutation.mutate(cancelTarget);
+                setCancelTarget(null);
+              }}
+            >
+              Ya, Batalkan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </OwnerPage>
   );
 }
@@ -436,11 +504,13 @@ function TableGrid({
   escortedTableNumbers,
   pendingTable,
   onSelectEmptyTable,
+  onSelectEscortedTable,
 }: {
   tables: TableOccupancyRow[];
   escortedTableNumbers: Set<number>;
   pendingTable: number | null;
   onSelectEmptyTable: (tableNumber: number) => void;
+  onSelectEscortedTable: (tableNumber: number, intentId: string) => void;
 }) {
   return (
     <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 lg:grid-cols-10">
@@ -449,19 +519,24 @@ function TableGrid({
         const occupied = status === "terisi";
         const escorted = !occupied && escortedTableNumbers.has(tableNumber);
         const isPending = pendingTable === tableNumber;
+        const escortIntentId =
+          tables.find((t) => t.tableNumber === tableNumber)?.escortIntentId ?? null;
         return (
           <button
             key={tableNumber}
             type="button"
             aria-label={`Meja ${tableNumber}`}
-            // H-04 remediation (Fase 2, 2026-09-02): an already-escorted
-            // table must also be a tap no-op -- previously only
-            // occupied/isPending disabled it, so tapping a KOSONG table
-            // another (or this) Satgas session had already escorted
-            // could create a duplicate escort intent client-side.
-            aria-disabled={occupied || isPending || escorted}
-            disabled={occupied || isPending || escorted}
-            onClick={() => onSelectEmptyTable(tableNumber)}
+            // An escorted (yellow) table is now tappable: tapping it opens the
+            // cancel-escort dialog instead of re-escorting, so an orphaned
+            // intent from a dead session can be cleared. Occupied/pending stay
+            // disabled.
+            aria-disabled={occupied || isPending}
+            disabled={occupied || isPending}
+            onClick={() =>
+              escorted && escortIntentId
+                ? onSelectEscortedTable(tableNumber, escortIntentId)
+                : onSelectEmptyTable(tableNumber)
+            }
             className={
               occupied
                 ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 transition-colors duration-300"
@@ -485,11 +560,13 @@ function TableList({
   escortedTableNumbers,
   pendingTable,
   onSelectEmptyTable,
+  onSelectEscortedTable,
 }: {
   tables: TableOccupancyRow[];
   escortedTableNumbers: Set<number>;
   pendingTable: number | null;
   onSelectEmptyTable: (tableNumber: number) => void;
+  onSelectEscortedTable: (tableNumber: number, intentId: string) => void;
 }) {
   return (
     <div className="divide-y divide-slate-100">
@@ -498,17 +575,22 @@ function TableList({
         const occupied = status === "terisi";
         const escorted = !occupied && escortedTableNumbers.has(tableNumber);
         const isPending = pendingTable === tableNumber;
+        const escortIntentId =
+          tables.find((t) => t.tableNumber === tableNumber)?.escortIntentId ?? null;
         return (
           <button
             key={tableNumber}
             type="button"
             aria-label={`Meja ${tableNumber}`}
-            // H-04 remediation (Fase 2, 2026-09-02): see the matching
-            // note in TableGrid above -- an already-escorted table must
-            // also be a tap no-op here.
-            aria-disabled={occupied || isPending || escorted}
-            disabled={occupied || isPending || escorted}
-            onClick={() => onSelectEmptyTable(tableNumber)}
+            // See the matching note in TableGrid above: an escorted table is
+            // tappable and routes to the cancel-escort dialog.
+            aria-disabled={occupied || isPending}
+            disabled={occupied || isPending}
+            onClick={() =>
+              escorted && escortIntentId
+                ? onSelectEscortedTable(tableNumber, escortIntentId)
+                : onSelectEmptyTable(tableNumber)
+            }
             className={
               occupied
                 ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300"

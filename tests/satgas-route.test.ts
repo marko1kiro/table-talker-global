@@ -64,7 +64,7 @@ describe("Satgas route: live data via snapshot + realtime", () => {
           /accessToken: await getLiveAccessToken\(\s*getSupabaseBrowserClient\(\),\s*identity!\.accessToken,?\s*\)/g,
         ) ?? []
       ).length,
-    ).toBe(3);
+      ).toBe(4);
   });
 
   it("captures the realtime status used by the connection notice and invalidates the snapshot on events", () => {
@@ -120,9 +120,10 @@ describe("Satgas route: Escort action creates an escort intent, it never marks a
     expect(text).toContain("escortMutation.mutate(escortTable)");
   });
 
-  it("only opens the escort dialog from the empty-table tap handler, not from the occupied cell", () => {
+  it("routes an empty-table tap to escort and an escorted-table tap to cancel", () => {
     const text = source();
-    expect(text).toContain("onClick={() => onSelectEmptyTable(tableNumber)}");
+    expect(text).toContain("onSelectEmptyTable(tableNumber)");
+    expect(text).toContain("onSelectEscortedTable(");
     expect((text.match(/onSelectEmptyTable\(tableNumber\)/g) ?? []).length).toBeGreaterThanOrEqual(
       2,
     );
@@ -180,11 +181,11 @@ describe("Satgas route: 10-minute confirm prompt, scoped to this session's own i
 });
 
 describe("Satgas route: an intent resolved by an incoming QR scan before 10 minutes disappears without a prompt", () => {
-  it("clears waitlist entries whose table already became terisi via the live snapshot, without a dedicated cancel action", () => {
+  it("adds a cancel-escort action while keeping QR-scan auto-clear of the waitlist", () => {
     const text = source();
-    expect(text).toContain("snapshot.data");
+    expect(text).toContain("cancelEscortIntent(");
     expect(text).toContain("removeEscortWaitEntry(");
-    expect(text).not.toContain("cancelEscortIntent");
+    expect(text).toContain("snapshot.data");
   });
 });
 
