@@ -11,6 +11,7 @@ describe("QR DOCX export migration", () => {
   it("adds r2_key_docx without dropping csv history", () => {
     const sql = source();
     expect(sql).toContain("add column if not exists r2_key_docx");
+    expect(sql).toContain("alter column r2_key_csv drop not null");
     expect(sql).not.toContain("drop column");
   });
 

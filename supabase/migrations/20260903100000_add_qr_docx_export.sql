@@ -3,6 +3,18 @@
 
 alter table public.qr_export_batches add column if not exists r2_key_docx text;
 
+-- CSV is retired from the generate flow, so new batches leave r2_key_csv null.
+-- Relax the legacy NOT NULL constraint (existing rows keep their values).
+alter table public.qr_export_batches alter column r2_key_csv drop not null;
+
+-- Renaming the 9th parameter (p_r2_key_csv -> p_r2_key_docx) is not allowed by
+-- CREATE OR REPLACE (SQLSTATE 42P13), so drop the old signature first. The
+-- function is service_role-only and called solely via RPC, so the drop/recreate
+-- in this single transaction is safe.
+drop function if exists public.commit_qr_export_batch(
+  uuid, uuid, text, text, text, integer[], text[], text, text
+);
+
 create or replace function public.commit_qr_export_batch(
   p_batch_id uuid,
   p_restaurant_id uuid,
