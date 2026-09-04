@@ -233,8 +233,7 @@ function EsbExport() {
           <div className="mt-6 border-t border-slate-100 pt-6">
             <h3 className="text-base font-extrabold text-slate-950">Generate QR</h3>
             <p className="mt-1 text-sm text-slate-500">
-              QR lama baru dinonaktifkan setelah file XLSX dan DOCX baru berhasil
-              disimpan.
+              QR lama baru dinonaktifkan setelah file XLSX dan DOCX baru berhasil disimpan.
             </p>
             <OwnerField label="Domain untuk link QR">
               <input

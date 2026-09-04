@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildDynamicQrExportDocxBuffer,
-  sortQrRowsAscending,
-} from "../src/lib/qr-docx.server";
+import { buildDynamicQrExportDocxBuffer, sortQrRowsAscending } from "../src/lib/qr-docx.server";
 
 const DOMAIN = "https://qris-order.lihatmeja.com";
 const TOKEN = "pQGY7kb9ucxOH0-kQtxpjSscP-tZmo4zCvV4kWJpZRQ";
@@ -33,10 +30,7 @@ describe("QR DOCX builder", () => {
   });
 
   it("renders a single-table batch without error", async () => {
-    const buffer = await buildDynamicQrExportDocxBuffer(
-      [{ tableNumber: 1, token: TOKEN }],
-      DOMAIN,
-    );
+    const buffer = await buildDynamicQrExportDocxBuffer([{ tableNumber: 1, token: TOKEN }], DOMAIN);
     expect(buffer.subarray(0, 2).toString("latin1")).toBe("PK");
   });
 });

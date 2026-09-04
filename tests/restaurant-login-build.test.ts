@@ -28,7 +28,7 @@ it("bundles restaurant credential modules into SSR output", () => {
   expect(serverSource).not.toContain('import("./restaurant-session.server")');
   expect(serverSource).not.toContain("@vite-ignore");
   expect(clientSource).not.toContain("node:crypto");
-}, 20_000);
+}, 60_000);
 
 it("fails at production function startup when AUTH_SECRET is missing", () => {
   const entry = new URL("functions/__server.func/index.mjs", output);

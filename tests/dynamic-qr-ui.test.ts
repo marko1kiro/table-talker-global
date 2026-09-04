@@ -32,6 +32,6 @@ describe("M-01 UI and route contracts", () => {
     expect(source).toContain("EXPIRED");
     expect(source).toContain("SEBAGIAN AKTIF");
     expect(source).toContain("XLSX");
-    expect(source).toContain("CSV");
+    expect(source).toContain("DOCX");
   });
 });

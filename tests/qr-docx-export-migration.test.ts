@@ -19,9 +19,7 @@ describe("QR DOCX export migration", () => {
     expect(sql).toContain("create or replace function public.commit_qr_export_batch");
     expect(sql).toContain("p_r2_key_docx");
     expect(sql).toContain("r2_key_xlsx, r2_key_docx");
-    expect(sql).toContain(
-      "coalesce(cardinality(p_tokens), 0) <> cardinality(p_table_numbers)",
-    );
+    expect(sql).toContain("coalesce(cardinality(p_tokens), 0) <> cardinality(p_table_numbers)");
   });
 
   it("teaches get_qr_export_key about docx", () => {
