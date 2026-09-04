@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CrewHeader } from "@/components/CrewHeader";
+import { LogOut } from "lucide-react";
 import { ManagerLayout, type ManagerMenu } from "@/components/ManagerLayout";
-import { OwnerEmpty, OwnerNotice, OwnerRetry } from "@/components/OwnerUi";
+import { TaCard, TaNotice, TaEmpty, TaRetry, TaStatCard } from "@/components/dashboard/ui";
 import {
   browserManagerStorage,
   readManagerIdentity,
@@ -126,79 +126,86 @@ function ManagerDashboard() {
       restaurantName={identity.restaurantDisplayName}
       active={menu}
       onSelect={setMenu}
-      header={
-        <CrewHeader
-          role="Manager"
-          restaurantName={identity.restaurantDisplayName}
-          restaurantCode={identity.restaurantCode}
-          userName={identity.fullName}
-          onLogout={logout}
-          notice={notices.current}
-          stackedRestaurant
-        />
+      notice={notices.current}
+      headerRight={
+        <button
+          type="button"
+          onClick={logout}
+          aria-label="Keluar"
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-ta-gray-300 bg-white px-3 text-sm font-semibold text-ta-gray-700 hover:bg-ta-gray-50"
+        >
+          <LogOut className="size-4" /> Keluar
+        </button>
       }
     >
       {realtimeStatus !== "SUBSCRIBED" && (
-        <OwnerNotice role="status" tone="warning">
+        <TaNotice role="status" tone="warning">
           Menunggu koneksi realtime -- data tetap diperbarui otomatis.
-        </OwnerNotice>
+        </TaNotice>
       )}
 
       {reminder && (
-        <div className="mb-4 overflow-hidden rounded-xl bg-red-600 px-3 py-2 text-white">
+        <div className="mb-4 overflow-hidden rounded-xl bg-ta-error px-3 py-2 text-white">
           <p className="truncate text-sm font-extrabold uppercase tracking-wide">{reminder}</p>
         </div>
       )}
 
       {menu === "tables" && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-4 text-[11px] font-bold uppercase">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-emerald-500" />
-              MEJA KOSONG
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-red-500" />
-              MEJA TERISI
-            </span>
+        <>
+          <div className="mb-4 grid grid-cols-3 gap-3">
+            <TaStatCard label="Terisi" value={tables.filter((t) => t.status === "terisi").length} />
+            <TaStatCard label="Kosong" value={tables.filter((t) => t.status === "kosong").length} />
+            <TaStatCard label="Perlu Dicek" value={reminders.length} />
           </div>
-          {snapshot.isLoading ? (
-            <p className="text-sm text-slate-500">Memuat status meja...</p>
-          ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
-            <>
-              <OwnerNotice role="alert" tone="danger">
-                Status meja tidak dapat dimuat.
-              </OwnerNotice>
-              <div className="mt-3">
-                <OwnerRetry onClick={() => snapshot.refetch()} />
-              </div>
-            </>
-          ) : (
-            <ul className="mx-auto grid w-fit grid-cols-5 gap-2 md:w-full md:grid-cols-10">
-              {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((n) => {
-                const terisi = statusByNumber.get(n) === "terisi";
-                return (
-                  <li key={n} className="flex items-center justify-center">
-                    <span
-                      className={`grid size-10 place-items-center rounded-lg text-base font-black ${
-                        terisi
-                          ? "border-2 border-red-300 bg-red-50 text-red-700 md:border-0 md:bg-red-500 md:text-white"
-                          : "border-2 border-emerald-300 bg-emerald-50 text-emerald-700 md:border-0 md:bg-emerald-500 md:text-white"
-                      }`}
-                    >
-                      {n}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+          <TaCard>
+            <div className="mb-3 flex items-center gap-4 text-[11px] font-bold uppercase text-ta-gray-500">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-ta-success" />
+                MEJA KOSONG
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-ta-error" />
+                MEJA TERISI
+              </span>
+            </div>
+            {snapshot.isLoading ? (
+              <p className="text-sm text-ta-gray-500">Memuat status meja...</p>
+            ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
+              <>
+                <TaNotice role="alert" tone="danger">
+                  Status meja tidak dapat dimuat.
+                </TaNotice>
+                <div className="mt-3">
+                  <TaRetry onClick={() => snapshot.refetch()} />
+                </div>
+              </>
+            ) : (
+              <ul className="mx-auto grid w-fit grid-cols-5 gap-2 md:w-full md:grid-cols-10">
+                {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((n) => {
+                  const terisi = statusByNumber.get(n) === "terisi";
+                  return (
+                    <li key={n} className="flex items-center justify-center">
+                      <span
+                        className={`grid size-10 place-items-center rounded-lg text-base font-black ${
+                          terisi
+                            ? "border-2 border-ta-error/30 bg-ta-error/10 text-ta-error md:border-0 md:bg-ta-error md:text-white"
+                            : "border-2 border-ta-success/30 bg-ta-success/10 text-ta-success md:border-0 md:bg-ta-success md:text-white"
+                        }`}
+                      >
+                        {n}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </TaCard>
+        </>
       )}
 
       {menu === "crew" && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          {crew.isLoading && <p className="text-sm text-slate-500">Memuat crew...</p>}
+        <TaCard>
+          {crew.isLoading && <p className="text-sm text-ta-gray-500">Memuat crew...</p>}
           {crew.data &&
             crew.data.ok &&
             (() => {
@@ -222,7 +229,7 @@ function ManagerDashboard() {
                             </th>
                           ))}
                         </tr>
-                        <tr className="text-[11px] uppercase text-slate-400">
+                        <tr className="text-[11px] uppercase text-ta-gray-400">
                           {groups.map((g) => (
                             <Fragment key={g.label}>
                               <th className="border border-black/10 px-3 py-1 text-center">
@@ -242,10 +249,10 @@ function ManagerDashboard() {
                               const m = g.members[r];
                               return (
                                 <Fragment key={g.label}>
-                                  <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-slate-800">
+                                  <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-ta-gray-800">
                                     {m?.displayName ?? ""}
                                   </td>
-                                  <td className="border border-black/10 px-3 py-2 text-center text-slate-600">
+                                  <td className="border border-black/10 px-3 py-2 text-center text-ta-gray-600">
                                     {m ? formatWibClock(m.checkedInAt) : ""}
                                   </td>
                                 </Fragment>
@@ -265,7 +272,7 @@ function ManagerDashboard() {
                           type="button"
                           onClick={() => setActiveStation(gi)}
                           className={`min-h-11 rounded-xl px-3 py-2 text-xs font-black uppercase text-white transition ${
-                            activeStation === gi ? STATION_BG[gi] : "bg-slate-300"
+                            activeStation === gi ? STATION_BG[gi] : "bg-ta-gray-300"
                           }`}
                         >
                           {g.label}
@@ -274,7 +281,7 @@ function ManagerDashboard() {
                     </div>
                     <table className="mt-3 w-full border-collapse text-sm">
                       <thead>
-                        <tr className="text-[11px] uppercase text-slate-400">
+                        <tr className="text-[11px] uppercase text-ta-gray-400">
                           <th className="border border-black/10 px-3 py-1 text-center">
                             Nama Crew
                           </th>
@@ -287,10 +294,10 @@ function ManagerDashboard() {
                         {current && current.members.length > 0 ? (
                           current.members.map((m, i) => (
                             <tr key={`${m.displayName}-${i}`}>
-                              <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-slate-800">
+                              <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-ta-gray-800">
                                 {m.displayName}
                               </td>
-                              <td className="border border-black/10 px-3 py-2 text-center text-slate-600">
+                              <td className="border border-black/10 px-3 py-2 text-center text-ta-gray-600">
                                 {formatWibClock(m.checkedInAt)}
                               </td>
                             </tr>
@@ -299,7 +306,7 @@ function ManagerDashboard() {
                           <tr>
                             <td
                               colSpan={2}
-                              className="border border-black/10 px-3 py-3 text-center text-xs text-slate-400"
+                              className="border border-black/10 px-3 py-3 text-center text-xs text-ta-gray-400"
                             >
                               Tidak ada crew aktif.
                             </td>
@@ -311,33 +318,32 @@ function ManagerDashboard() {
                 </>
               );
             })()}
-        </section>
+        </TaCard>
       )}
 
       {menu === "log" && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-3 text-sm font-black uppercase text-slate-900">Log Aktivitas Crew</h3>
+        <TaCard title="Log Aktivitas Crew">
           {log.length === 0 ? (
-            <OwnerEmpty
+            <TaEmpty
               title="Belum ada aktivitas"
               description="Aktivitas perubahan status meja akan muncul di sini selama halaman terbuka."
             />
           ) : (
-            <ul className="divide-y divide-slate-300">
+            <ul className="divide-y divide-ta-gray-200">
               {log.map((n, i) => (
                 <li
                   key={`${n.line1}-${i}`}
                   className="flex items-center justify-between py-2 text-sm"
                 >
-                  <span className="font-bold uppercase text-slate-800">{n.line1}</span>
-                  <span className="rounded-full bg-cyan-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                  <span className="font-bold uppercase text-ta-gray-800">{n.line1}</span>
+                  <span className="rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
                     {n.roleLabel}
                   </span>
                 </li>
               ))}
             </ul>
           )}
-        </section>
+        </TaCard>
       )}
     </ManagerLayout>
   );
