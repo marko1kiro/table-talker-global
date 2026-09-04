@@ -71,22 +71,40 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1" },
-      { title: "LIME — Panggilan Meja Restoran" },
+      { title: "LIME — Sistem Panggilan & Status Meja Restoran" },
       {
         name: "description",
         content:
-          "Soundboard panggilan meja untuk restoran. Tap nomor meja, suara panggilan otomatis diputar.",
+          "LIME membantu operasional restoran: panggil pelanggan lewat nomor meja, pantau status meja terisi/kosong secara realtime, catat aktivitas crew per station, dan dashboard monitoring untuk manager. Multi-cabang, aman, tanpa instalasi.",
+      },
+      { name: "application-name", content: "LIME" },
+      { name: "author", content: "XDIRGA LABS" },
+      {
+        name: "keywords",
+        content:
+          "panggilan meja restoran, status meja realtime, sistem okupansi meja, dashboard manager restoran, crew kasir satgas clear up, QR meja, lihatmeja",
       },
       { name: "theme-color", content: "#f5f2e8" },
       { name: "robots", content: "noindex, nofollow" },
-      { property: "og:title", content: "LIME — Panggilan Meja Restoran" },
+      { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "LIME" },
+      { property: "og:locale", content: "id_ID" },
+      { property: "og:url", content: "https://tes.lihatmeja.com/" },
+      { property: "og:title", content: "LIME — Sistem Panggilan & Status Meja Restoran" },
       {
         property: "og:description",
         content:
-          "Soundboard panggilan meja untuk restoran. Tap nomor meja, suara panggilan otomatis diputar.",
+          "Panggil pelanggan lewat nomor meja, pantau status terisi/kosong realtime, dan monitor operasional lewat dashboard manager. Satu platform untuk seluruh station restoran.",
       },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
+      { property: "og:image", content: "https://tes.lihatmeja.com/lime-logo.webp" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "LIME — Sistem Panggilan & Status Meja Restoran" },
+      {
+        name: "twitter:description",
+        content:
+          "Panggil pelanggan lewat nomor meja, pantau status terisi/kosong realtime, dan monitor operasional lewat dashboard manager.",
+      },
+      { name: "twitter:image", content: "https://tes.lihatmeja.com/lime-logo.webp" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
