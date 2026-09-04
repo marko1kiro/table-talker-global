@@ -213,6 +213,54 @@ export const confirmEscortIntent = createServerFn({ method: "POST" })
   });
 
 // ---------------------------------------------------------------------------
+// cancel_escort_intent
+// ---------------------------------------------------------------------------
+
+export const cancelEscortIntentInputSchema = z.object({
+  intentId: z.string().uuid(),
+  sessionToken: z.string().min(1),
+  accessToken: z.string().min(1),
+});
+type CancelEscortIntentRpcInput = Omit<
+  z.infer<typeof cancelEscortIntentInputSchema>,
+  "accessToken"
+>;
+
+const CANCEL_ESCORT_INTENT_ERRORS = ["INVALID_SESSION"] as const;
+export type CancelEscortIntentResult =
+  | { ok: true; cancelled: boolean }
+  | {
+      ok: false;
+      code: (typeof CANCEL_ESCORT_INTENT_ERRORS)[number] | "UNAVAILABLE";
+      message: string;
+    };
+
+export async function cancelEscortIntentCore(
+  data: CancelEscortIntentRpcInput,
+  rpc: RpcCaller,
+): Promise<CancelEscortIntentResult> {
+  try {
+    const { data: cancelled, error } = await rpc("cancel_escort_intent", {
+      p_intent_id: data.intentId,
+      p_session_token: data.sessionToken,
+    });
+    if (error) return mapError(error.message, CANCEL_ESCORT_INTENT_ERRORS);
+    return { ok: true, cancelled: Boolean(cancelled) };
+  } catch {
+    return unavailable();
+  }
+}
+
+export const cancelEscortIntent = createServerFn({ method: "POST" })
+  .validator(cancelEscortIntentInputSchema)
+  .handler(async ({ data }): Promise<CancelEscortIntentResult> => {
+    const client = getAnonAuthedSupabaseClient(data.accessToken);
+    if (!client) return unavailable();
+    const { accessToken: _accessToken, ...rpcData } = data;
+    return cancelEscortIntentCore(rpcData, async (fn, params) => client.rpc(fn, params));
+  });
+
+// ---------------------------------------------------------------------------
 // get_table_occupancy_snapshot
 // ---------------------------------------------------------------------------
 
