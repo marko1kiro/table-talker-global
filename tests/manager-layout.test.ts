@@ -11,14 +11,20 @@ describe("ManagerLayout", () => {
     expect(text).toContain("LIHAT CREW AKTIF");
     expect(text).toContain("LOG AKTIVITAS CREW");
   });
-  it("renders the footer branding", () => {
+  it("renders the footer branding with a copyright glyph", () => {
     const text = source();
-    expect(text).toContain("lihatmeja.com (c)2026");
+    expect(text).toContain("©");
     expect(text).toContain("XDIRGA LABS");
   });
   it("is responsive (mobile drawer + desktop rail)", () => {
     const text = source();
     expect(text).toContain("md:hidden");
     expect(text).toContain("hidden md:");
+  });
+  it("styles the desktop rail: cyan active item, sticky aside, styled title", () => {
+    const text = source();
+    expect(text).toContain("bg-cyan-500");
+    expect(text).toContain("md:sticky");
+    expect(text).toContain("Dashboard Manager");
   });
 });

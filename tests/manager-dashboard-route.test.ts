@@ -23,4 +23,10 @@ describe("manager dashboard route", () => {
     expect(text()).toContain("formatOccupancyNotice");
     expect(text()).toContain("roleLabel");
   });
+  it("shows full table status text on desktop (short on mobile)", () => {
+    expect(text()).toContain("SIAP DIGUNAKAN");
+    expect(text()).toContain("PERLU DIBERSIHKAN");
+    expect(text()).toContain("md:hidden");
+    expect(text()).toContain("hidden md:inline");
+  });
 });

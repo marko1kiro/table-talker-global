@@ -172,17 +172,22 @@ function ManagerDashboard() {
             </>
           ) : (
             <ul className="grid grid-cols-2 gap-2">
-              {tables.map((t) => (
-                <li key={t.tableNumber} className="rounded-xl border border-slate-100 px-4 py-3">
-                  <span
-                    className={`text-sm font-extrabold uppercase ${
-                      t.status === "terisi" ? "text-red-600" : "text-emerald-600"
-                    }`}
-                  >
-                    MEJA {t.tableNumber}
-                  </span>
-                </li>
-              ))}
+              {tables.map((t) => {
+                const color = t.status === "terisi" ? "text-red-600" : "text-emerald-600";
+                return (
+                  <li key={t.tableNumber} className="rounded-xl border border-slate-100 px-4 py-3">
+                    <span className={`text-sm font-extrabold uppercase md:hidden ${color}`}>
+                      MEJA {t.tableNumber}
+                    </span>
+                    <span className={`hidden md:inline text-sm font-extrabold uppercase ${color}`}>
+                      MEJA {t.tableNumber}{" "}
+                      {t.status === "terisi"
+                        ? "TERISI | PERLU DIBERSIHKAN"
+                        : "KOSONG | SIAP DIGUNAKAN"}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
