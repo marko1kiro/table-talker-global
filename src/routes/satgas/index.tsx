@@ -42,6 +42,8 @@ import {
 } from "@/lib/crew-session-identity";
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
+import { useNoticeQueue } from "@/hooks/use-notice-queue";
+import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   confirmEscortIntent,
@@ -135,12 +137,18 @@ function SatgasRoute() {
     // Realtime is primary; the hook also owns the visible-only 12-second safety net.
     refetchOnWindowFocus: true,
   });
+  const notices = useNoticeQueue();
   const realtimeStatus = useTableOccupancyRealtime(
     restaurantId,
     identity?.roleSessionToken ?? "",
     snapshot.data?.ok ? snapshot.data.revision : null,
     () => {
       void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
+    },
+    identity?.roleSessionId ?? null,
+    (broadcast) => {
+      const notice = formatOccupancyNotice(broadcast);
+      if (notice) notices.push(notice);
     },
   );
 
@@ -284,8 +292,10 @@ function SatgasRoute() {
       <CrewHeader
         role="Satgas"
         restaurantName={identity.restaurantDisplayName}
+        restaurantCode={identity.restaurantCode}
         userName={identity.displayName}
         onLogout={logout}
+        notice={notices.current}
       />
 
       {realtimeStatus !== "SUBSCRIBED" && (

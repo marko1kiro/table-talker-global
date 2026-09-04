@@ -32,6 +32,8 @@ import {
 } from "@/lib/crew-session-identity";
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
+import { useNoticeQueue } from "@/hooks/use-notice-queue";
+import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   getTableOccupancySnapshot,
@@ -70,6 +72,7 @@ function KasirRoute() {
   const [processingTable, setProcessingTable] = useState<number | null>(null);
   const [actionError, setActionError] = useState("");
   const { layoutPreference, setLayoutPreference } = useLayoutPreference("kasir");
+  const notices = useNoticeQueue();
 
   // Client-only hydration, same pattern as src/routes/index.tsx: reading
   // sessionStorage during SSR would always return null and mismatch the
@@ -105,6 +108,11 @@ function KasirRoute() {
     snapshot.data?.ok ? snapshot.data.revision : null,
     () => {
       void queryClient.invalidateQueries({ queryKey: snapshotQueryKey(restaurantId) });
+    },
+    identity?.roleSessionId ?? null,
+    (broadcast) => {
+      const notice = formatOccupancyNotice(broadcast);
+      if (notice) notices.push(notice);
     },
   );
 
@@ -154,8 +162,10 @@ function KasirRoute() {
         <CrewHeader
           role="Kasir"
           restaurantName={identity.restaurantDisplayName}
+          restaurantCode={identity.restaurantCode}
           userName={identity.displayName}
           onLogout={logout}
+          notice={notices.current}
         />
 
         {realtimeStatus !== "SUBSCRIBED" && (
