@@ -480,7 +480,10 @@ function SatgasRoute() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className={crewSecondaryButtonClass} onClick={() => setCancelTarget(null)}>
+            <AlertDialogCancel
+              className={crewSecondaryButtonClass}
+              onClick={() => setCancelTarget(null)}
+            >
               Tidak
             </AlertDialogCancel>
             <AlertDialogAction

@@ -64,7 +64,7 @@ describe("Satgas route: live data via snapshot + realtime", () => {
           /accessToken: await getLiveAccessToken\(\s*getSupabaseBrowserClient\(\),\s*identity!\.accessToken,?\s*\)/g,
         ) ?? []
       ).length,
-      ).toBe(4);
+    ).toBe(4);
   });
 
   it("captures the realtime status used by the connection notice and invalidates the snapshot on events", () => {
