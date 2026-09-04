@@ -26,4 +26,7 @@ describe("TailAdmin tokens", () => {
     expect(s).toContain("--font-display");
     expect(s).toContain("brutal-border");
   });
+  it("uses a class-based dark variant that matches the .dark element itself", () => {
+    expect(css()).toContain("@custom-variant dark (&:where(.dark, .dark *));");
+  });
 });
