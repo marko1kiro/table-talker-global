@@ -31,6 +31,7 @@ export type CrewIdentity = CrewSessionIdentity & { audioReady: boolean };
 export type RoleSessionIdentity = {
   restaurantId: string;
   restaurantDisplayName: string;
+  restaurantCode: string;
   tenantToken: string;
   role: CrewRole;
   displayName: string;
@@ -154,6 +155,7 @@ export function readRoleSessionIdentity(storage: StorageLike | null): RoleSessio
     const value = JSON.parse(raw) as {
       restaurantId?: unknown;
       restaurantDisplayName?: unknown;
+      restaurantCode?: unknown;
       tenantToken?: unknown;
       role?: unknown;
       displayName?: unknown;
@@ -181,9 +183,10 @@ export function readRoleSessionIdentity(storage: StorageLike | null): RoleSessio
       return null;
     }
     return {
-      restaurantId: value.restaurantId,
-      restaurantDisplayName: value.restaurantDisplayName,
-      tenantToken: value.tenantToken,
+      restaurantId: value.restaurantId as string,
+      restaurantDisplayName: value.restaurantDisplayName as string,
+      restaurantCode: typeof value.restaurantCode === "string" ? value.restaurantCode : "",
+      tenantToken: value.tenantToken as string,
       role: value.role as CrewRole,
       displayName: value.displayName,
       checkedInAt: value.checkedInAt,

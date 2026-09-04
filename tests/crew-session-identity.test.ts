@@ -102,6 +102,7 @@ describe("role session identity", () => {
   const roleFields = {
     restaurantId: "test-restaurant-id",
     restaurantDisplayName: "Mie Gacoan Kampung Bulu",
+    restaurantCode: "CKRBUL",
     tenantToken: "signed-tenant-session",
     role: "kasir" as const,
     displayName: "Budi",
@@ -116,6 +117,15 @@ describe("role session identity", () => {
     expect(writeRoleSessionIdentity(session, roleFields)).toEqual(roleFields);
     expect(readRoleSessionIdentity(session)).toEqual(roleFields);
     expect(session.getItem("table-talker.crew-identity")).toBeNull();
+  });
+
+  it("defaults restaurantCode to empty for pre-existing sessions", () => {
+    const stored = { ...roleFields } as Record<string, unknown>;
+    delete stored.restaurantCode;
+    const session = storage({ "table-talker.role-identity": JSON.stringify(stored) });
+    const read = readRoleSessionIdentity(session);
+    expect(read).not.toBeNull();
+    expect(read?.restaurantCode).toBe("");
   });
 
   it("removes malformed or invalid stored role identity", () => {
