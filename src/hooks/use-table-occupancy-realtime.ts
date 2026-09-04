@@ -211,10 +211,12 @@ export function useTableOccupancyRealtime(
   const revisionRef = useRef(revision);
   const onNoticeRef = useRef(onNotice);
   const selfRoleSessionIdRef = useRef(selfRoleSessionId);
+  const bindRpcRef = useRef(bindRpc);
   refetchRef.current = refetch;
   revisionRef.current = revision;
   onNoticeRef.current = onNotice;
   selfRoleSessionIdRef.current = selfRoleSessionId;
+  bindRpcRef.current = bindRpc;
 
   useEffect(() => {
     const client = getSupabaseBrowserClient() as unknown as SupabaseClientLike | null;
@@ -228,7 +230,7 @@ export function useTableOccupancyRealtime(
       visibility: browserVisibilitySource(),
       selfRoleSessionId: selfRoleSessionIdRef.current ?? null,
       onNotice: (broadcast) => onNoticeRef.current?.(broadcast),
-      bindRpc,
+      bindRpc: bindRpcRef.current,
     });
     return () => controller.dispose();
   }, [restaurantId, sessionToken]);
