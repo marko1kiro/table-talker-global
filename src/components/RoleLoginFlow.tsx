@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -11,6 +12,7 @@ import {
   Sparkles,
   Store,
   Unlock,
+  UserCog,
   Volume2,
   Wallet,
 } from "lucide-react";
@@ -292,6 +294,17 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
               <p className="mt-1 text-sm text-slate-500">
                 Masukkan Kode Resto yang diberikan admin.
               </p>
+              <div className="mt-5 mb-1 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Khusus Pimpinan Shift
+                </p>
+                <Link
+                  to="/manager/login"
+                  className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm transition hover:bg-slate-700"
+                >
+                  <UserCog className="size-4" /> Login MANAGER
+                </Link>
+              </div>
               <form className="mt-6 space-y-4" onSubmit={submitCode}>
                 <label className="block text-sm font-bold text-slate-700" htmlFor="restaurant-code">
                   Kode Resto
