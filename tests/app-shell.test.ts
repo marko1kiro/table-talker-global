@@ -22,4 +22,12 @@ describe("AppShell", () => {
     expect(s).toContain("md:flex");
     expect(s).toContain("md:hidden");
   });
+  it("owns theme state, provides context, and flips the .dark class on its root", () => {
+    const s = src();
+    expect(s).toContain("useTheme");
+    expect(s).toContain("ThemeContext.Provider");
+    expect(s).toContain('isDark && "dark"');
+    expect(s).toContain("dark:bg-ta-gray-900");
+    expect(s).toContain("dark:border-ta-gray-700");
+  });
 });
