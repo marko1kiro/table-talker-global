@@ -30,4 +30,21 @@ describe("manager register route", () => {
     expect(text()).toContain('navigate({ to: "/manager/login" })');
     expect(text()).not.toContain('navigate({ to: "/manager" })');
   });
+  it("shows a loading state while resolving the resto code", () => {
+    expect(text()).toContain("looking");
+    expect(text()).toContain("animate-spin");
+  });
+  it("shows a checkmark once the resto name resolves", () => {
+    expect(text()).toContain("restoValid");
+    expect(text()).toContain("CheckCircle2");
+  });
+  it("offers a show/hide password toggle", () => {
+    expect(text()).toContain("showPassword");
+    expect(text()).toContain("EyeOff");
+  });
+  it("hardens submit: disabled until valid + confirm mismatch reminder", () => {
+    expect(text()).toContain("canSubmit");
+    expect(text()).toContain("disabled={!canSubmit || busy}");
+    expect(text()).toContain("tidak cocok");
+  });
 });

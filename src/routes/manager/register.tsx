@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { registerManager } from "@/lib/manager-auth.server";
 import { loginToRestaurant } from "@/lib/restaurants.server";
@@ -18,35 +18,64 @@ function ManagerRegisterPage() {
   const [idManager, setIdManager] = useState("");
   const [code, setCode] = useState("");
   const [restoName, setRestoName] = useState("");
+  const [restoValid, setRestoValid] = useState(false);
+  const [looking, setLooking] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function lookupResto() {
-    if (!code.trim()) {
+  // Debounced resto-code lookup: shows a loading state, then a checkmark once
+  // the code resolves to a registered restaurant.
+  useEffect(() => {
+    const trimmed = code.trim();
+    if (!trimmed) {
       setRestoName("");
+      setRestoValid(false);
+      setLooking(false);
       return;
     }
-    try {
-      const result = await loginToRestaurant({ data: { code } });
-      setRestoName("error" in result ? "" : result.displayName);
-    } catch {
-      setRestoName("");
-    }
-  }
+    setLooking(true);
+    setRestoName("");
+    setRestoValid(false);
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await loginToRestaurant({ data: { code: trimmed } });
+          if ("error" in result) {
+            setRestoName("");
+            setRestoValid(false);
+          } else {
+            setRestoName(result.displayName);
+            setRestoValid(true);
+          }
+        } catch {
+          setRestoName("");
+          setRestoValid(false);
+        } finally {
+          setLooking(false);
+        }
+      })();
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [code]);
+
+  const passwordWeak = password.length > 0 && password.length < 8;
+  const confirmMismatch = confirm.length > 0 && password !== confirm;
+  const canSubmit =
+    fullName.trim().length > 0 &&
+    idManager.trim().length >= 3 &&
+    code.trim().length > 0 &&
+    restoValid &&
+    password.length >= 8 &&
+    confirm.length > 0 &&
+    password === confirm;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    if (password.length < 8) {
-      setError("Password minimal 8 karakter.");
-      return;
-    }
-    if (password !== confirm) {
-      setError("Ketik ulang password tidak cocok.");
-      return;
-    }
+    if (!canSubmit) return;
     setBusy(true);
     try {
       const result = await registerManager({
@@ -107,33 +136,70 @@ function ManagerRegisterPage() {
             id="r-code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            onBlur={lookupResto}
             required
             className="h-12 rounded-xl"
           />
-          {restoName && <p className="text-sm font-semibold text-cyan-700">{restoName}</p>}
+          <div className="min-h-[1.25rem] text-sm">
+            {looking ? (
+              <p className="flex items-center gap-2 font-semibold text-slate-500">
+                <Loader2 className="size-4 animate-spin" /> Memeriksa kode resto...
+              </p>
+            ) : restoValid ? (
+              <p className="flex items-center gap-1.5 font-semibold text-emerald-600">
+                {restoName} <CheckCircle2 className="size-4 shrink-0" />
+              </p>
+            ) : code.trim() ? (
+              <p className="font-semibold text-red-500">Kode Resto tidak ditemukan.</p>
+            ) : null}
+          </div>
           <label className="block text-sm font-bold text-slate-700" htmlFor="r-pw">
             Password
           </label>
-          <Input
-            id="r-pw"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="h-12 rounded-xl"
-          />
+          <div className="relative">
+            <Input
+              id="r-pw"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="h-12 rounded-xl pr-12"
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-400 transition hover:text-slate-600"
+            >
+              {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+            </button>
+          </div>
+          {passwordWeak && (
+            <p className="text-xs font-semibold text-red-500">Password minimal 8 karakter.</p>
+          )}
           <label className="block text-sm font-bold text-slate-700" htmlFor="r-confirm">
             Ketik Ulang Password
           </label>
-          <Input
-            id="r-confirm"
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            required
-            className="h-12 rounded-xl"
-          />
+          <div className="relative">
+            <Input
+              id="r-confirm"
+              type={showPassword ? "text" : "password"}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              required
+              className="h-12 rounded-xl pr-12"
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-400 transition hover:text-slate-600"
+            >
+              {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+            </button>
+          </div>
+          {confirmMismatch && (
+            <p className="text-xs font-semibold text-red-500">Ketik ulang password tidak cocok.</p>
+          )}
           {error && (
             <p
               role="alert"
@@ -144,8 +210,8 @@ function ManagerRegisterPage() {
           )}
           <button
             type="submit"
-            disabled={busy}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-extrabold uppercase text-white disabled:opacity-60"
+            disabled={!canSubmit || busy}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-extrabold uppercase text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
             {busy ? "Menyimpan..." : "Submit"}
