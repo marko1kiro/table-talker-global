@@ -58,6 +58,15 @@ it("renders the TailAdmin AppShell with a light brand-blue sidebar", () => {
   expect(source).not.toContain("bg-slate-950");
 });
 
+it("header has a theme toggle alongside the existing logout", () => {
+  const source = readFileSync(
+    new URL("../src/routes/super-admin/route.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(source).toContain("ThemeToggle");
+  expect(source).toContain("@/components/dashboard/ThemeToggle");
+});
+
 it("keeps every owner route query namespace logout-purgeable", () => {
   for (const path of [
     "../src/routes/super-admin/audio.tsx",

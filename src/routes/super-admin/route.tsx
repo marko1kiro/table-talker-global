@@ -22,6 +22,7 @@ import { getAuthStatus, loginSuperAdmin, logout } from "@/lib/auth";
 import { isOwnerQueryKey } from "@/lib/owner-query-cache";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
 import { taSecondaryButtonClass } from "@/components/dashboard/ui";
+import { ThemeToggle } from "@/components/dashboard/ThemeToggle";
 
 const nav = [
   { label: "Dashboard", to: "/super-admin", icon: CircleGauge, exact: true },
@@ -113,14 +114,17 @@ function OwnerShell() {
       navItems={navItems}
       headerTitle="Owner Console"
       headerRight={
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className={taSecondaryButtonClass}
-        >
-          {loggingOut ? "Keluar..." : "Keluar"}
-        </button>
+        <>
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className={taSecondaryButtonClass}
+          >
+            {loggingOut ? "Keluar..." : "Keluar"}
+          </button>
+        </>
       }
     >
       {logoutError && (
