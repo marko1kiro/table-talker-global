@@ -207,9 +207,11 @@ export function useTableOccupancyRealtime(
   const refetchRef = useRef(refetch);
   const revisionRef = useRef(revision);
   const onNoticeRef = useRef(onNotice);
+  const selfRoleSessionIdRef = useRef(selfRoleSessionId);
   refetchRef.current = refetch;
   revisionRef.current = revision;
   onNoticeRef.current = onNotice;
+  selfRoleSessionIdRef.current = selfRoleSessionId;
 
   useEffect(() => {
     const client = getSupabaseBrowserClient() as unknown as SupabaseClientLike | null;
@@ -221,7 +223,7 @@ export function useTableOccupancyRealtime(
       getCurrentRevision: () => revisionRef.current,
       onStatusChange: setStatus,
       visibility: browserVisibilitySource(),
-      selfRoleSessionId: selfRoleSessionId ?? null,
+      selfRoleSessionId: selfRoleSessionIdRef.current ?? null,
       onNotice: (broadcast) => onNoticeRef.current?.(broadcast),
     });
     return () => controller.dispose();
