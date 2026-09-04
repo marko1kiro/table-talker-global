@@ -6,7 +6,7 @@ export const Route = createFileRoute("/api/super-admin/qr-export/$batchId/$forma
     handlers: {
       GET: async ({ params }) => {
         const { serveQrBatchDownload } = await import("@/lib/qr-export.server");
-        return serveQrBatchDownload(params.batchId, params.format as "xlsx" | "csv");
+        return serveQrBatchDownload(params.batchId, params.format as "xlsx" | "docx" | "csv");
       },
     },
   },

@@ -21,3 +21,8 @@ it("does not accept a mutable domain query when serving archived files", () => {
   expect(file).not.toContain("searchParams");
   expect(file).not.toContain('searchParams.get("domain")');
 });
+
+it("forwards the docx format to the batch downloader", () => {
+  const file = source();
+  expect(file).toContain('"xlsx" | "docx" | "csv"');
+});
