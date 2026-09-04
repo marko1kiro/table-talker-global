@@ -19,4 +19,7 @@ describe("CrewHeader compact layout + notice slot", () => {
   it("keeps the header sticky", () => {
     expect(source()).toContain("sticky top-0");
   });
+  it("shows a placeholder when there is no notice", () => {
+    expect(source()).toContain("Informasi Update Status Meja Akan Muncul Disini Ya");
+  });
 });

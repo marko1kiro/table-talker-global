@@ -57,7 +57,7 @@ describe("formatOccupancyNotice", () => {
   it("clear up cleaned", () => {
     expect(
       formatOccupancyNotice({ ...b, kind: "cleared", actor_role: "clear_up", actor_name: "Sari" }),
-    ).toEqual({ line1: "MEJA 5 SUDAH DIBERSIHKAN", roleLabel: "C.U", actorName: "Sari" });
+    ).toEqual({ line1: "MEJA 5 SUDAH DIBERSIHKAN", roleLabel: "CLEAR UP", actorName: "Sari" });
   });
   it("satgas escorted", () => {
     expect(

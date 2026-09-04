@@ -21,7 +21,7 @@ const KIND_LINE1: Record<OccupancyKind, string> = {
 
 export const ROLE_PILL_LABEL: Record<OccupancyActorRole, string> = {
   kasir: "KASIR",
-  clear_up: "C.U",
+  clear_up: "CLEAR UP",
   satgas: "SATGAS",
   qr_scan: "SCAN QR",
 };

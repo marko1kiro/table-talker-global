@@ -94,7 +94,11 @@ export function CrewHeader({
                 {notice.actorName ? <span>: {notice.actorName}</span> : null}
               </p>
             </>
-          ) : null}
+          ) : (
+            <p className="text-center text-xs font-semibold text-fuchsia-400">
+              Informasi Update Status Meja Akan Muncul Disini Ya.
+            </p>
+          )}
         </div>
       </div>
     </header>
