@@ -173,30 +173,23 @@ function ManagerDashboard() {
               </div>
             </>
           ) : (
-            <ul className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+            <ul className="grid grid-cols-2 gap-2 md:grid-cols-10">
               {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((n) => {
                 const terisi = statusByNumber.get(n) === "terisi";
                 return (
                   <li
                     key={n}
-                    className="flex items-center gap-3 rounded-xl border border-slate-100 px-4 py-3"
+                    className="flex items-center gap-3 rounded-xl border border-slate-100 px-4 py-3 md:border-0 md:justify-center md:p-0"
                   >
                     <span
                       className={`text-sm font-extrabold uppercase md:hidden ${terisi ? "text-red-600" : "text-emerald-600"}`}
                     >
                       MEJA {n}
                     </span>
-                    <span className="hidden md:flex items-center gap-3">
-                      <span
-                        className={`grid size-10 shrink-0 place-items-center rounded-lg text-base font-black text-white ${terisi ? "bg-red-500" : "bg-emerald-500"}`}
-                      >
-                        {n}
-                      </span>
-                      <span
-                        className={`text-sm font-extrabold uppercase ${terisi ? "text-red-600" : "text-emerald-600"}`}
-                      >
-                        {terisi ? "PERLU DIBERSIHKAN" : "SIAP DIGUNAKAN"}
-                      </span>
+                    <span
+                      className={`hidden md:grid size-10 place-items-center rounded-lg text-base font-black text-white ${terisi ? "bg-red-500" : "bg-emerald-500"}`}
+                    >
+                      {n}
                     </span>
                   </li>
                 );
@@ -214,16 +207,17 @@ function ManagerDashboard() {
             (() => {
               const groups = groupActiveCrewByStation(crew.data.crew);
               const maxRows = Math.max(1, ...groups.map((g) => g.members.length));
+              const STATION_BG = ["bg-sky-500", "bg-amber-500", "bg-violet-500", "bg-emerald-500"];
               return (
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-sm">
                     <thead>
-                      <tr className="bg-slate-50 text-[11px] uppercase text-slate-500">
-                        {groups.map((g) => (
+                      <tr className="text-[11px] uppercase">
+                        {groups.map((g, gi) => (
                           <th
                             key={g.label}
                             colSpan={2}
-                            className="border border-black/10 px-3 py-2 text-center font-black"
+                            className={`border border-black/10 px-3 py-2 text-center font-black text-white ${STATION_BG[gi]}`}
                           >
                             {g.label}
                           </th>
@@ -249,7 +243,7 @@ function ManagerDashboard() {
                             const m = g.members[r];
                             return (
                               <Fragment key={g.label}>
-                                <td className="border border-black/10 px-3 py-2 text-center font-bold text-slate-800">
+                                <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-slate-800">
                                   {m?.displayName ?? ""}
                                 </td>
                                 <td className="border border-black/10 px-3 py-2 text-center text-slate-600">
@@ -277,7 +271,7 @@ function ManagerDashboard() {
               description="Aktivitas perubahan status meja akan muncul di sini selama halaman terbuka."
             />
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-slate-300">
               {log.map((n, i) => (
                 <li
                   key={`${n.line1}-${i}`}

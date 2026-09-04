@@ -27,15 +27,25 @@ describe("manager dashboard route", () => {
     expect(text()).toContain("formatOccupancyNotice");
     expect(text()).toContain("roleLabel");
   });
-  it("shows full table status text on desktop (short on mobile)", () => {
-    expect(text()).toContain("SIAP DIGUNAKAN");
-    expect(text()).toContain("PERLU DIBERSIHKAN");
+  it("shows only the table number on desktop, 10 per row, no cell border", () => {
+    expect(text()).toContain("md:grid-cols-10");
+    expect(text()).toContain("md:border-0");
+    expect(text()).toContain("hidden md:grid");
     expect(text()).toContain("md:hidden");
-    expect(text()).toContain("hidden md:flex");
+    expect(text()).not.toContain("SIAP DIGUNAKAN");
+    expect(text()).not.toContain("PERLU DIBERSIHKAN");
   });
-  it("renders active crew as one horizontal table grouped by station", () => {
+  it("renders active crew as one horizontal table, uppercase names, per-role header bg", () => {
     expect(text()).toContain("colSpan");
     expect(text()).toContain("Nama Crew");
     expect(text()).toContain("Jam Masuk");
+    expect(text()).toContain("font-bold uppercase");
+    expect(text()).toContain("bg-sky-500");
+    expect(text()).toContain("bg-amber-500");
+    expect(text()).toContain("bg-violet-500");
+    expect(text()).toContain("bg-emerald-500");
+  });
+  it("uses a stronger but still thin divider in the activity log", () => {
+    expect(text()).toContain("divide-slate-300");
   });
 });
