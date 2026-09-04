@@ -27,6 +27,11 @@ describe("manager dashboard route", () => {
     expect(text()).toContain("SIAP DIGUNAKAN");
     expect(text()).toContain("PERLU DIBERSIHKAN");
     expect(text()).toContain("md:hidden");
-    expect(text()).toContain("hidden md:inline");
+    expect(text()).toContain("hidden md:flex");
+  });
+  it("renders active crew as one horizontal table grouped by station", () => {
+    expect(text()).toContain("colSpan");
+    expect(text()).toContain("Nama Crew");
+    expect(text()).toContain("Jam Masuk");
   });
 });

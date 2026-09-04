@@ -93,17 +93,14 @@ export function ManagerLayout({
         )}
 
         <aside className="hidden md:flex md:sticky md:top-0 md:h-[100svh] w-72 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white p-4">
-          <div className="mb-6 flex h-14 items-center rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-500 px-4 shadow-sm">
-            <span className="text-sm font-black uppercase tracking-wide text-white">
-              Dashboard Manager
+          <div className="mb-6 flex h-14 items-center justify-center">
+            <span className="text-lg font-black uppercase tracking-[0.25em] text-cyan-300 [text-shadow:0_0_10px_rgba(34,211,238,0.9)]">
+              DASHBOARD
             </span>
           </div>
           <NavList active={active} onSelect={pick} activeClass="bg-cyan-500 text-white shadow-sm" />
           <div className="mt-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center">
-            <p className="text-sm font-extrabold uppercase text-slate-900">
-              MIE GACOAN {restaurantCode}
-            </p>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">{restaurantName}</p>
+            <p className="text-sm font-extrabold uppercase text-slate-900">{restaurantName}</p>
             <p className="mt-3 flex items-center justify-center gap-1 text-[11px] text-slate-400">
               lihatmeja.com <span aria-label="copyright">©</span> 2026
             </p>

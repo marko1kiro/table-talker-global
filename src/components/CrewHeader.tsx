@@ -80,7 +80,7 @@ export function CrewHeader({
       </div>
 
       <div className="px-5 pb-2 sm:px-6">
-        <div className="flex min-h-[2.75rem] flex-col justify-center rounded-xl bg-fuchsia-50 px-3 py-1.5 ring-1 ring-inset ring-fuchsia-200">
+        <div className="flex min-h-[3.75rem] flex-col justify-center rounded-xl bg-fuchsia-50 px-3 py-1.5 ring-1 ring-inset ring-fuchsia-200">
           {notice ? (
             <>
               <p className="truncate text-sm font-extrabold uppercase text-fuchsia-900">

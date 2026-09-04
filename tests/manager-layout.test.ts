@@ -21,10 +21,12 @@ describe("ManagerLayout", () => {
     expect(text).toContain("md:hidden");
     expect(text).toContain("hidden md:");
   });
-  it("styles the desktop rail: cyan active item, sticky aside, styled title", () => {
+  it("styles the desktop rail: cyan active item, sticky aside, neon centered title", () => {
     const text = source();
     expect(text).toContain("bg-cyan-500");
     expect(text).toContain("md:sticky");
-    expect(text).toContain("Dashboard Manager");
+    expect(text).toContain("DASHBOARD");
+    expect(text).toContain("text-shadow");
+    expect(text).toContain("justify-center");
   });
 });

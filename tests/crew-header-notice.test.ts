@@ -22,4 +22,7 @@ describe("CrewHeader compact layout + notice slot", () => {
   it("shows a placeholder when there is no notice", () => {
     expect(source()).toContain("Informasi Update Status Meja Akan Muncul Disini Ya");
   });
+  it("reserves enough notice height so the layout does not shift when a toast appears", () => {
+    expect(source()).toContain("min-h-[3.75rem]");
+  });
 });
