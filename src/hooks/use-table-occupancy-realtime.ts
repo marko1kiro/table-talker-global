@@ -78,6 +78,7 @@ export function createTableOccupancyRealtimeController({
   visibility = ALWAYS_VISIBLE,
   selfRoleSessionId = null,
   onNotice,
+  bindRpc = "bind_role_session_realtime",
 }: {
   client: SupabaseClientLike | null;
   restaurantId: string;
@@ -91,6 +92,7 @@ export function createTableOccupancyRealtimeController({
   visibility?: VisibilitySource;
   selfRoleSessionId?: string | null;
   onNotice?: (broadcast: OccupancyBroadcast) => void;
+  bindRpc?: string;
 }): TableOccupancyRealtimeController {
   let lastRefetchAt = -Infinity;
   let pollHandle: ReturnType<typeof setInterval> | null = null;
@@ -164,7 +166,7 @@ export function createTableOccupancyRealtimeController({
 
   if (client && restaurantId && sessionToken) {
     void client
-      .rpc("bind_role_session_realtime", {
+      .rpc(bindRpc, {
         p_restaurant_id: restaurantId,
         p_session_token: sessionToken,
       })
@@ -202,6 +204,7 @@ export function useTableOccupancyRealtime(
   refetch: () => void,
   selfRoleSessionId?: string | null,
   onNotice?: (broadcast: OccupancyBroadcast) => void,
+  bindRpc?: string,
 ) {
   const [status, setStatus] = useState<TableOccupancyRealtimeStatus>("SUBSCRIBING");
   const refetchRef = useRef(refetch);
@@ -225,6 +228,7 @@ export function useTableOccupancyRealtime(
       visibility: browserVisibilitySource(),
       selfRoleSessionId: selfRoleSessionIdRef.current ?? null,
       onNotice: (broadcast) => onNoticeRef.current?.(broadcast),
+      bindRpc,
     });
     return () => controller.dispose();
   }, [restaurantId, sessionToken]);
