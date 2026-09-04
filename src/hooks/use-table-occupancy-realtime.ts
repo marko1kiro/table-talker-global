@@ -3,6 +3,7 @@
 // role-session RPC, and visible pages keep the 12-second polling safety net.
 import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase-browser";
+import { parseOccupancyBroadcast, type OccupancyBroadcast } from "../lib/occupancy-notice";
 
 export type TableOccupancyRealtimeStatus =
   | "SUBSCRIBING"
@@ -75,6 +76,8 @@ export function createTableOccupancyRealtimeController({
   setIntervalFn = (handler: () => void, ms: number) => setInterval(handler, ms),
   clearIntervalFn = (handle: ReturnType<typeof setInterval>) => clearInterval(handle),
   visibility = ALWAYS_VISIBLE,
+  selfRoleSessionId = null,
+  onNotice,
 }: {
   client: SupabaseClientLike | null;
   restaurantId: string;
@@ -86,6 +89,8 @@ export function createTableOccupancyRealtimeController({
   setIntervalFn?: (handler: () => void, ms: number) => ReturnType<typeof setInterval>;
   clearIntervalFn?: (handle: ReturnType<typeof setInterval>) => void;
   visibility?: VisibilitySource;
+  selfRoleSessionId?: string | null;
+  onNotice?: (broadcast: OccupancyBroadcast) => void;
 }): TableOccupancyRealtimeController {
   let lastRefetchAt = -Infinity;
   let pollHandle: ReturnType<typeof setInterval> | null = null;
@@ -126,6 +131,10 @@ export function createTableOccupancyRealtimeController({
   };
 
   const handleInvalidate = (message: unknown) => {
+    const broadcast = parseOccupancyBroadcast(message);
+    if (broadcast && broadcast.actor_role_session_id !== selfRoleSessionId) {
+      onNotice?.(broadcast);
+    }
     if (!message || typeof message !== "object") {
       rateLimitedRefetch();
       return;
@@ -191,12 +200,16 @@ export function useTableOccupancyRealtime(
   sessionToken: string,
   revision: number | null,
   refetch: () => void,
+  selfRoleSessionId?: string | null,
+  onNotice?: (broadcast: OccupancyBroadcast) => void,
 ) {
   const [status, setStatus] = useState<TableOccupancyRealtimeStatus>("SUBSCRIBING");
   const refetchRef = useRef(refetch);
   const revisionRef = useRef(revision);
+  const onNoticeRef = useRef(onNotice);
   refetchRef.current = refetch;
   revisionRef.current = revision;
+  onNoticeRef.current = onNotice;
 
   useEffect(() => {
     const client = getSupabaseBrowserClient() as unknown as SupabaseClientLike | null;
@@ -208,6 +221,8 @@ export function useTableOccupancyRealtime(
       getCurrentRevision: () => revisionRef.current,
       onStatusChange: setStatus,
       visibility: browserVisibilitySource(),
+      selfRoleSessionId: selfRoleSessionId ?? null,
+      onNotice: (broadcast) => onNoticeRef.current?.(broadcast),
     });
     return () => controller.dispose();
   }, [restaurantId, sessionToken]);

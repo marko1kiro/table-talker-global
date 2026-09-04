@@ -30,6 +30,7 @@ function fakeChannel() {
     channel,
     emitInvalidate: (revision?: number) =>
       broadcastCallback?.(revision === undefined ? undefined : { payload: { revision } }),
+    emitRaw: (message: unknown) => broadcastCallback?.(message),
     emitStatus: (status: string) => statusCallback?.(status),
   };
 }
@@ -420,5 +421,69 @@ describe("useTableOccupancyRealtime hook source contract", () => {
     const block = hookSource.slice(start);
     expect(block).toContain("revisionRef.current = revision");
     expect(block).toContain("getCurrentRevision: () => revisionRef.current");
+  });
+});
+
+describe("occupancy notice emission", () => {
+  const enriched = (over: Record<string, unknown> = {}) => ({
+    payload: {
+      table_number: 5,
+      revision: 99,
+      kind: "occupied",
+      actor_role: "kasir",
+      actor_name: "Budi",
+      actor_role_session_id: "sess-budi",
+      ...over,
+    },
+  });
+
+  it("calls onNotice for a non-self status change and still refetches", () => {
+    const { client, channels } = fakeClient();
+    const refetch = vi.fn();
+    const onNotice = vi.fn();
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch,
+      selfRoleSessionId: "sess-me",
+      onNotice,
+    });
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitRaw(enriched());
+    expect(onNotice).toHaveBeenCalledTimes(1);
+    expect(onNotice.mock.calls[0][0]).toMatchObject({ kind: "occupied", actor_role: "kasir" });
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("suppresses the notice for the actor's own session but still refetches", () => {
+    const { client, channels } = fakeClient();
+    const refetch = vi.fn();
+    const onNotice = vi.fn();
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch,
+      selfRoleSessionId: "sess-budi",
+      onNotice,
+    });
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitRaw(enriched());
+    expect(onNotice).not.toHaveBeenCalled();
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("never calls onNotice for a legacy invalidate hint", () => {
+    const { client, channels } = fakeClient();
+    const onNotice = vi.fn();
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch: vi.fn(),
+      selfRoleSessionId: "sess-me",
+      onNotice,
+    });
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitInvalidate(7);
+    expect(onNotice).not.toHaveBeenCalled();
   });
 });
