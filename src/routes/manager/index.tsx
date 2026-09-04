@@ -1,9 +1,12 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LogOut } from "lucide-react";
 import { ManagerLayout, type ManagerMenu } from "@/components/ManagerLayout";
 import { TaCard, TaNotice, TaEmpty, TaRetry, TaStatCard } from "@/components/dashboard/ui";
+import { RoleEmblem } from "@/components/dashboard/RoleEmblem";
+import { ThemeToggle } from "@/components/dashboard/ThemeToggle";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
 import {
   browserManagerStorage,
   readManagerIdentity,
@@ -14,7 +17,7 @@ import { getManagerSnapshot, getManagerActiveCrew } from "@/lib/manager-dashboar
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
 import { useNoticeQueue } from "@/hooks/use-notice-queue";
 import { formatOccupancyNotice, type OccupancyNotice } from "@/lib/occupancy-notice";
-import { buildStaleReminders, rotateIndex } from "@/lib/manager-reminder";
+import { buildStaleNotices } from "@/lib/manager-reminder";
 import { groupActiveCrewByStation, formatWibClock } from "@/lib/manager-crew-groups";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { TABLE_COUNT } from "@/lib/audio";
@@ -34,9 +37,9 @@ function snapshotKey(id: string) {
 // when a live notice arrives. Mobile keeps the AppShell header banner (md:hidden).
 function ToastSlot({ notice }: { notice: OccupancyNotice | null }) {
   return (
-    <div className="mb-4 hidden min-h-[3.5rem] items-center rounded-xl border border-brand-100 bg-brand-50/60 px-4 md:flex">
+    <div className="mb-4 hidden min-h-[3.5rem] items-center rounded-xl border border-brand-100 bg-brand-50/60 px-4 md:flex dark:border-ta-gray-700 dark:bg-brand-500/10">
       {notice ? (
-        <p className="truncate text-sm font-semibold uppercase text-brand-700">
+        <p className="truncate text-sm font-semibold uppercase text-brand-700 dark:text-brand-300">
           {notice.line1}
           <span className="ml-2 rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold text-white">
             {notice.roleLabel}
@@ -59,7 +62,6 @@ function ManagerDashboard() {
   const [menu, setMenu] = useState<ManagerMenu>("tables");
   const [activeStation, setActiveStation] = useState(0);
   const [now, setNow] = useState(() => Date.now());
-  const [tick, setTick] = useState(0);
   const [log, setLog] = useState<OccupancyNotice[]>([]);
   const notices = useNoticeQueue();
 
@@ -73,14 +75,10 @@ function ManagerDashboard() {
     setHydrated(true);
   }, [navigate]);
 
-  // 1s tick recomputes reminder ages locally; 7s tick rotates the reminder line.
+  // 1s tick recomputes stale-table ages locally.
   useEffect(() => {
     const a = setInterval(() => setNow(Date.now()), 1_000);
-    const b = setInterval(() => setTick((t) => t + 1), 7_000);
-    return () => {
-      clearInterval(a);
-      clearInterval(b);
-    };
+    return () => clearInterval(a);
   }, []);
 
   const restaurantId = identity?.restaurantId ?? "";
@@ -126,11 +124,10 @@ function ManagerDashboard() {
     "bind_manager_session_realtime",
   );
 
-  const reminders = useMemo(() => {
+  const staleNotices = useMemo(() => {
     const tables = snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
-    return buildStaleReminders(tables, now);
+    return buildStaleNotices(tables, now);
   }, [snapshot.data, now]);
-  const reminder = reminders.length ? reminders[rotateIndex(reminders.length, tick)] : "";
 
   const logout = () => {
     removeManagerIdentity(browserManagerStorage());
@@ -149,26 +146,18 @@ function ManagerDashboard() {
       onSelect={setMenu}
       notice={notices.current}
       headerRight={
-        <button
-          type="button"
-          onClick={logout}
-          aria-label="Keluar"
-          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-ta-gray-300 bg-white px-3 text-sm font-semibold text-ta-gray-700 hover:bg-ta-gray-50"
-        >
-          <LogOut className="size-4" /> Keluar
-        </button>
+        <>
+          <RoleEmblem label="MANAGER" />
+          <ThemeToggle />
+          <NotificationBell items={staleNotices} />
+          <ProfileMenu name={identity.fullName} onLogout={logout} />
+        </>
       }
     >
       {realtimeStatus !== "SUBSCRIBED" && (
         <TaNotice role="status" tone="warning">
           Menunggu koneksi realtime -- data tetap diperbarui otomatis.
         </TaNotice>
-      )}
-
-      {reminder && (
-        <div className="mb-4 overflow-hidden rounded-xl bg-ta-error px-3 py-2 text-white">
-          <p className="truncate text-sm font-extrabold uppercase tracking-wide">{reminder}</p>
-        </div>
       )}
 
       {menu === "tables" && (
@@ -184,11 +173,11 @@ function ManagerDashboard() {
               label="Kosong"
               value={tables.filter((t) => t.status === "kosong").length}
             />
-            <TaStatCard compact label="Perlu Dicek" value={reminders.length} />
+            <TaStatCard compact label="Perlu Dicek" value={staleNotices.length} />
           </div>
           <ToastSlot notice={notices.current} />
           <TaCard>
-            <div className="mb-3 flex items-center gap-4 text-[11px] font-bold uppercase text-ta-gray-500">
+            <div className="mb-3 flex items-center gap-4 text-[11px] font-bold uppercase text-ta-gray-500 dark:text-ta-gray-400">
               <span className="inline-flex items-center gap-1.5">
                 <span className="size-2 rounded-full bg-ta-success" />
                 MEJA KOSONG
@@ -199,7 +188,7 @@ function ManagerDashboard() {
               </span>
             </div>
             {snapshot.isLoading ? (
-              <p className="text-sm text-ta-gray-500">Memuat status meja...</p>
+              <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">Memuat status meja...</p>
             ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
               <>
                 <TaNotice role="alert" tone="danger">
@@ -237,7 +226,9 @@ function ManagerDashboard() {
         <>
           <ToastSlot notice={notices.current} />
           <TaCard>
-            {crew.isLoading && <p className="text-sm text-ta-gray-500">Memuat crew...</p>}
+            {crew.isLoading && (
+              <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">Memuat crew...</p>
+            )}
             {crew.data &&
               crew.data.ok &&
               (() => {
@@ -286,10 +277,10 @@ function ManagerDashboard() {
                                 const m = g.members[r];
                                 return (
                                   <Fragment key={g.label}>
-                                    <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-ta-gray-800">
+                                    <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-ta-gray-800 dark:text-ta-gray-100">
                                       {m?.displayName ?? ""}
                                     </td>
-                                    <td className="border border-black/10 px-3 py-2 text-center text-ta-gray-600">
+                                    <td className="border border-black/10 px-3 py-2 text-center text-ta-gray-600 dark:text-ta-gray-300">
                                       {m ? formatWibClock(m.checkedInAt) : ""}
                                     </td>
                                   </Fragment>
@@ -331,10 +322,10 @@ function ManagerDashboard() {
                           {current && current.members.length > 0 ? (
                             current.members.map((m, i) => (
                               <tr key={`${m.displayName}-${i}`}>
-                                <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-ta-gray-800">
+                                <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-ta-gray-800 dark:text-ta-gray-100">
                                   {m.displayName}
                                 </td>
-                                <td className="border border-black/10 px-3 py-2 text-center text-ta-gray-600">
+                                <td className="border border-black/10 px-3 py-2 text-center text-ta-gray-600 dark:text-ta-gray-300">
                                   {formatWibClock(m.checkedInAt)}
                                 </td>
                               </tr>
@@ -369,13 +360,15 @@ function ManagerDashboard() {
                 description="Aktivitas perubahan status meja akan muncul di sini selama halaman terbuka."
               />
             ) : (
-              <ul className="divide-y divide-ta-gray-200">
+              <ul className="divide-y divide-ta-gray-200 dark:divide-ta-gray-700">
                 {log.map((n, i) => (
                   <li
                     key={`${n.line1}-${i}`}
                     className="flex items-center justify-between py-2 text-sm"
                   >
-                    <span className="font-bold uppercase text-ta-gray-800">{n.line1}</span>
+                    <span className="font-bold uppercase text-ta-gray-800 dark:text-ta-gray-100">
+                      {n.line1}
+                    </span>
                     <span className="rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
                       {n.roleLabel}
                     </span>
