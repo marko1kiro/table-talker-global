@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Activity,
-  ArrowUpRight,
   Building2,
   CircleCheck,
   CircleX,
@@ -18,13 +17,14 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { getOwnerDashboardSnapshot } from "@/lib/owner-dashboard.server";
 import { mergeDashboardHealth, type HealthStatus } from "@/lib/owner-dashboard-domain";
 import {
-  OwnerNotice,
-  OwnerPage,
-  OwnerPageHeader,
-  OwnerPanel,
-  OwnerRetry,
-  ownerSecondaryButtonClass,
-} from "@/components/OwnerUi";
+  TaNotice,
+  TaPage,
+  TaPageHeader,
+  TaCard,
+  TaStatCard,
+  TaRetry,
+  taSecondaryButtonClass,
+} from "@/components/dashboard/ui";
 
 const key = ["owner-dashboard"] as const;
 
@@ -58,25 +58,25 @@ function OwnerDashboard() {
 
   if (snapshot.isLoading) {
     return (
-      <OwnerPage>
-        <OwnerPageHeader title="Dashboard" description="Ringkasan kondisi operasional LIME." />
+      <TaPage>
+        <TaPageHeader title="Dashboard" description="Ringkasan kondisi operasional LIME." />
         <DashboardSkeleton />
-      </OwnerPage>
+      </TaPage>
     );
   }
   if (snapshot.isError || !snapshot.data)
     return (
-      <OwnerPage>
-        <OwnerPageHeader title="Dashboard" description="Ringkasan kondisi operasional LIME." />
-        <OwnerPanel>
-          <OwnerNotice role="alert" tone="danger">
+      <TaPage>
+        <TaPageHeader title="Dashboard" description="Ringkasan kondisi operasional LIME." />
+        <TaCard>
+          <TaNotice role="alert" tone="danger">
             Dashboard tidak dapat dimuat.
-          </OwnerNotice>
+          </TaNotice>
           <div className="mt-4">
-            <OwnerRetry onClick={() => snapshot.refetch()} />
+            <TaRetry onClick={() => snapshot.refetch()} />
           </div>
-        </OwnerPanel>
-      </OwnerPage>
+        </TaCard>
+      </TaPage>
     );
 
   const { health, aggregates } = snapshot.data;
@@ -105,7 +105,7 @@ function OwnerDashboard() {
           value: aggregates.plays_today,
           to: "/super-admin/history",
           icon: Volume2,
-          tone: "bg-amber-50 text-amber-700",
+          tone: "bg-brand-50 text-brand-500",
         },
         {
           label: "Gagal Sinkron",
@@ -127,8 +127,8 @@ function OwnerDashboard() {
     : [];
 
   return (
-    <OwnerPage>
-      <OwnerPageHeader
+    <TaPage>
+      <TaPageHeader
         eyebrow="Pusat Operasional"
         title="Dashboard"
         description="Pantau kesehatan layanan dan aktivitas seluruh restoran dari satu tempat."
@@ -136,7 +136,7 @@ function OwnerDashboard() {
           <button
             type="button"
             onClick={() => snapshot.refetch()}
-            className={ownerSecondaryButtonClass}
+            className={taSecondaryButtonClass}
             disabled={snapshot.isFetching}
           >
             <RefreshCw className={`size-4 ${snapshot.isFetching ? "animate-spin" : ""}`} />
@@ -151,29 +151,18 @@ function OwnerDashboard() {
           className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5"
         >
           {metrics.map(({ label, value, to, icon: Icon, tone }) => (
-            <Link
-              key={label}
-              to={to}
-              className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span className={`grid size-10 place-items-center rounded-xl ${tone}`}>
-                  <Icon className="size-5" />
-                </span>
-                <ArrowUpRight className="size-4 text-slate-300 transition group-hover:text-slate-700" />
-              </div>
-              <p className="mt-4 text-3xl font-black tracking-tight text-slate-950">{value}</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">{label}</p>
+            <Link key={label} to={to} className="group block">
+              <TaStatCard label={label} value={value} icon={Icon} tone={tone} />
             </Link>
           ))}
         </section>
       ) : (
-        <OwnerNotice role="status">
+        <TaNotice role="status">
           Agregat database tidak tersedia. Status layanan tetap dapat dipantau.
-        </OwnerNotice>
+        </TaNotice>
       )}
 
-      <OwnerPanel
+      <TaCard
         title="Kesehatan layanan"
         description="Status koneksi sistem diperbarui otomatis setiap 30 detik."
       >
@@ -216,9 +205,9 @@ function OwnerDashboard() {
             );
           })}
         </div>
-      </OwnerPanel>
+      </TaCard>
 
-      <OwnerPanel className="overflow-hidden bg-slate-950 text-white">
+      <TaCard className="overflow-hidden bg-slate-950 text-white">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <span className="grid size-10 place-items-center rounded-xl bg-amber-400 text-slate-950">
@@ -235,8 +224,8 @@ function OwnerDashboard() {
             <CircleCheck className="size-4" /> Live
           </span>
         </div>
-      </OwnerPanel>
-    </OwnerPage>
+      </TaCard>
+    </TaPage>
   );
 }
 

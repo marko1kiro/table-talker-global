@@ -1,6 +1,11 @@
+/* eslint-disable react-refresh/only-export-components */
 import type { ReactNode } from "react";
 import { AlertTriangle, Inbox, LoaderCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Re-exported so super-admin pages can import the whole UI surface (incl. this
+// pure date util) from one module after the OwnerUi -> dashboard/ui migration.
+export { formatOwnerDate } from "@/components/OwnerUi";
 
 export const taControlClass =
   "mt-1.5 min-h-11 w-full rounded-lg border border-ta-gray-300 bg-white px-3.5 py-2.5 text-sm text-ta-gray-900 outline-none transition placeholder:text-ta-gray-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/12 disabled:cursor-not-allowed disabled:bg-ta-gray-100 disabled:text-ta-gray-400";

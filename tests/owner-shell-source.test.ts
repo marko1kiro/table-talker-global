@@ -38,12 +38,12 @@ it("keeps dashboard server-only, protected, bounded, and independently degraded"
   expect(server).toContain('rpc("owner_dashboard_snapshot", { p_since })');
 });
 
-it("uses accessible Sheet navigation and indexed dashboard predicates", () => {
+it("uses the TailAdmin AppShell navigation and indexed dashboard predicates", () => {
   const shell = source("../src/routes/super-admin/route.tsx");
   const migration = source("../supabase/migrations/20260824001000_owner_dashboard_rpc.sql");
-  expect(shell).toContain('from "@/components/ui/sheet"');
-  expect(shell).toContain("<Sheet");
-  expect(shell).not.toContain('role="dialog"');
+  expect(shell).toContain('from "@/components/dashboard/AppShell"');
+  expect(shell).toContain("<AppShell");
+  expect(shell).not.toContain("bg-slate-950");
   expect(migration).toContain("playback_events (status, event_timestamp desc)");
   expect(migration).toContain("crew_sessions (connection_state, visibility_state, last_seen desc)");
   expect(migration).toContain(

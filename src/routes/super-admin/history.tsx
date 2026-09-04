@@ -7,18 +7,18 @@ import { normalizeHistoryRange } from "@/lib/owner-history-domain";
 import { listOwnerRestaurants } from "@/lib/owner-restaurants.server";
 import {
   formatOwnerDate,
-  OwnerEmpty,
-  OwnerField,
-  OwnerLoading,
-  OwnerNotice,
-  OwnerPage,
-  OwnerPageHeader,
-  OwnerPagination,
-  OwnerPanel,
-  OwnerRetry,
-  StatusBadge,
-  ownerControlClass,
-} from "@/components/OwnerUi";
+  TaEmpty,
+  TaField,
+  TaLoading,
+  TaNotice,
+  TaPage,
+  TaPageHeader,
+  TaPagination,
+  TaCard,
+  TaRetry,
+  TaBadge,
+  taControlClass,
+} from "@/components/dashboard/ui";
 import {
   Table,
   TableBody,
@@ -66,20 +66,20 @@ function History() {
   const resetPage = () => setPage(1);
 
   return (
-    <OwnerPage>
-      <OwnerPageHeader
+    <TaPage>
+      <TaPageHeader
         eyebrow="Audit Aktivitas"
         title="Riwayat"
         description="Telusuri playback dan sinkronisasi. Default 7 hari terakhir, maksimal 30 hari."
       />
-      <OwnerPanel
+      <TaCard
         title="Filter riwayat"
         description="Persempit data berdasarkan restoran, aktivitas, status, atau tanggal."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <OwnerField label="Restoran">
+          <TaField label="Restoran">
             <select
-              className={ownerControlClass}
+              className={taControlClass}
               value={restaurantId}
               onChange={(e) => {
                 setRestaurantId(e.target.value);
@@ -94,10 +94,10 @@ function History() {
                   </option>
                 ))}
             </select>
-          </OwnerField>
-          <OwnerField label="Jenis aktivitas">
+          </TaField>
+          <TaField label="Jenis aktivitas">
             <select
-              className={ownerControlClass}
+              className={taControlClass}
               value={type}
               onChange={(e) => {
                 setType(e.target.value as typeof type);
@@ -108,10 +108,10 @@ function History() {
               <option value="playback">Playback</option>
               <option value="sync">Sinkronisasi</option>
             </select>
-          </OwnerField>
-          <OwnerField label="Status">
+          </TaField>
+          <TaField label="Status">
             <select
-              className={ownerControlClass}
+              className={taControlClass}
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value);
@@ -131,10 +131,10 @@ function History() {
                 </>
               )}
             </select>
-          </OwnerField>
-          <OwnerField label="Dari tanggal">
+          </TaField>
+          <TaField label="Dari tanggal">
             <input
-              className={ownerControlClass}
+              className={taControlClass}
               type="date"
               value={from}
               onChange={(e) => {
@@ -142,10 +142,10 @@ function History() {
                 resetPage();
               }}
             />
-          </OwnerField>
-          <OwnerField label="Sampai tanggal">
+          </TaField>
+          <TaField label="Sampai tanggal">
             <input
-              className={ownerControlClass}
+              className={taControlClass}
               type="date"
               value={to}
               onChange={(e) => {
@@ -153,12 +153,12 @@ function History() {
                 resetPage();
               }}
             />
-          </OwnerField>
-          <OwnerField label="Pencarian">
+          </TaField>
+          <TaField label="Pencarian">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 mt-0.5 size-4 -translate-y-1/2 text-slate-400" />
               <input
-                className={`${ownerControlClass} pl-10`}
+                className={`${taControlClass} pl-10`}
                 value={text}
                 maxLength={100}
                 placeholder="Cari label atau kode..."
@@ -168,36 +168,36 @@ function History() {
                 }}
               />
             </div>
-          </OwnerField>
+          </TaField>
         </div>
-      </OwnerPanel>
+      </TaCard>
 
       {!range.ok && (
-        <OwnerNotice role="alert" tone="danger">
+        <TaNotice role="alert" tone="danger">
           Rentang tanggal harus valid dan maksimal 30 hari.
-        </OwnerNotice>
+        </TaNotice>
       )}
-      {history.isLoading && <OwnerLoading label="Memuat riwayat..." />}
+      {history.isLoading && <TaLoading label="Memuat riwayat..." />}
       {(history.isError || (history.data && !history.data.ok)) && (
-        <OwnerPanel>
-          <OwnerNotice role="alert" tone="danger">
+        <TaCard>
+          <TaNotice role="alert" tone="danger">
             Riwayat tidak dapat dimuat.
-          </OwnerNotice>
+          </TaNotice>
           <div className="mt-4">
-            <OwnerRetry onClick={() => history.refetch()} />
+            <TaRetry onClick={() => history.refetch()} />
           </div>
-        </OwnerPanel>
+        </TaCard>
       )}
       {history.data?.ok && !rows.length && (
-        <OwnerPanel>
-          <OwnerEmpty
+        <TaCard>
+          <TaEmpty
             title="Belum ada riwayat"
             description="Aktivitas yang sesuai dengan filter akan muncul di sini."
           />
-        </OwnerPanel>
+        </TaCard>
       )}
       {!!rows.length && (
-        <OwnerPanel className="overflow-hidden" title={`${rows.length} aktivitas pada halaman ini`}>
+        <TaCard className="overflow-hidden" title={`${rows.length} aktivitas pada halaman ini`}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -218,7 +218,7 @@ function History() {
                       {String(row.label ?? row.report_code ?? row.audio_id ?? "Aktivitas")}
                     </TableCell>
                     <TableCell className="text-right">
-                      <StatusBadge
+                      <TaBadge
                         tone={
                           /fail|gagal|reject|error/i.test(rowStatus)
                             ? "danger"
@@ -228,16 +228,16 @@ function History() {
                         }
                       >
                         {rowStatus}
-                      </StatusBadge>
+                      </TaBadge>
                     </TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
           </Table>
-        </OwnerPanel>
+        </TaCard>
       )}
-      <OwnerPagination
+      <TaPagination
         page={page}
         hasNext={!!history.data?.ok && history.data.nextPage !== null}
         onPrevious={() => setPage((v) => v - 1)}
@@ -245,6 +245,6 @@ function History() {
         previousLabel="Halaman sebelumnya"
         nextLabel="Halaman berikutnya"
       />
-    </OwnerPage>
+    </TaPage>
   );
 }

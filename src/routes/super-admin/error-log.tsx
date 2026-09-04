@@ -7,19 +7,19 @@ import { normalizeHistoryRange } from "@/lib/owner-history-domain";
 import { listOwnerRestaurants } from "@/lib/owner-restaurants.server";
 import {
   formatOwnerDate,
-  OwnerEmpty,
-  OwnerField,
-  OwnerLoading,
-  OwnerNotice,
-  OwnerPage,
-  OwnerPageHeader,
-  OwnerPagination,
-  OwnerPanel,
-  OwnerRetry,
-  StatusBadge,
-  ownerControlClass,
-  ownerPrimaryButtonClass,
-} from "@/components/OwnerUi";
+  TaEmpty,
+  TaField,
+  TaLoading,
+  TaNotice,
+  TaPage,
+  TaPageHeader,
+  TaPagination,
+  TaCard,
+  TaRetry,
+  TaBadge,
+  taControlClass,
+  taPrimaryButtonClass,
+} from "@/components/dashboard/ui";
 import {
   Dialog,
   DialogContent,
@@ -114,8 +114,8 @@ function ErrorLog() {
   const resetPage = () => setPage(1);
 
   return (
-    <OwnerPage>
-      <OwnerPageHeader
+    <TaPage>
+      <TaPageHeader
         eyebrow="Monitoring Insiden"
         title="Error Log"
         description="Tinjau error operasional, buka detail aman, lalu tandai insiden yang sudah ditangani."
@@ -127,14 +127,14 @@ function ErrorLog() {
         <Metric label="Selesai" value={String(rows.length - unresolvedCount)} tone="success" />
       </section>
 
-      <OwnerPanel
+      <TaCard
         title="Filter error"
         description="Data awal menampilkan error operasional 7 hari terakhir."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <OwnerField label="Restoran">
+          <TaField label="Restoran">
             <select
-              className={ownerControlClass}
+              className={taControlClass}
               value={restaurantId}
               onChange={(event) => {
                 setRestaurantId(event.target.value);
@@ -151,10 +151,10 @@ function ErrorLog() {
                   ),
                 )}
             </select>
-          </OwnerField>
-          <OwnerField label="Status">
+          </TaField>
+          <TaField label="Status">
             <select
-              className={ownerControlClass}
+              className={taControlClass}
               value={resolved}
               onChange={(event) => {
                 setResolved(event.target.value);
@@ -165,10 +165,10 @@ function ErrorLog() {
               <option value="unresolved">Belum selesai</option>
               <option value="resolved">Selesai</option>
             </select>
-          </OwnerField>
-          <OwnerField label="Stage">
+          </TaField>
+          <TaField label="Stage">
             <input
-              className={ownerControlClass}
+              className={taControlClass}
               value={stage}
               maxLength={60}
               placeholder="Contoh: playback"
@@ -177,10 +177,10 @@ function ErrorLog() {
                 resetPage();
               }}
             />
-          </OwnerField>
-          <OwnerField label="Report code">
+          </TaField>
+          <TaField label="Report code">
             <input
-              className={ownerControlClass}
+              className={taControlClass}
               value={reportCode}
               maxLength={60}
               placeholder="Cari kode laporan"
@@ -189,10 +189,10 @@ function ErrorLog() {
                 resetPage();
               }}
             />
-          </OwnerField>
-          <OwnerField label="Dari tanggal">
+          </TaField>
+          <TaField label="Dari tanggal">
             <input
-              className={ownerControlClass}
+              className={taControlClass}
               type="date"
               value={from}
               onChange={(event) => {
@@ -200,10 +200,10 @@ function ErrorLog() {
                 resetPage();
               }}
             />
-          </OwnerField>
-          <OwnerField label="Sampai tanggal">
+          </TaField>
+          <TaField label="Sampai tanggal">
             <input
-              className={ownerControlClass}
+              className={taControlClass}
               type="date"
               value={to}
               onChange={(event) => {
@@ -211,12 +211,12 @@ function ErrorLog() {
                 resetPage();
               }}
             />
-          </OwnerField>
-          <OwnerField label="Pencarian">
+          </TaField>
+          <TaField label="Pencarian">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 mt-0.5 size-4 -translate-y-1/2 text-slate-400" />
               <input
-                className={`${ownerControlClass} pl-10`}
+                className={`${taControlClass} pl-10`}
                 value={text}
                 maxLength={100}
                 placeholder="Cari detail error..."
@@ -226,31 +226,31 @@ function ErrorLog() {
                 }}
               />
             </div>
-          </OwnerField>
+          </TaField>
         </div>
-      </OwnerPanel>
+      </TaCard>
 
-      {errors.isLoading && <OwnerLoading label="Memuat Error Log..." />}
+      {errors.isLoading && <TaLoading label="Memuat Error Log..." />}
       {(errors.isError || (errors.data && !errors.data.ok)) && (
-        <OwnerPanel>
-          <OwnerNotice role="alert" tone="danger">
+        <TaCard>
+          <TaNotice role="alert" tone="danger">
             Error Log tidak dapat dimuat.
-          </OwnerNotice>
+          </TaNotice>
           <div className="mt-4">
-            <OwnerRetry label="Coba Lagi" onClick={() => errors.refetch()} />
+            <TaRetry label="Coba Lagi" onClick={() => errors.refetch()} />
           </div>
-        </OwnerPanel>
+        </TaCard>
       )}
       {errors.data?.ok && !rows.length && (
-        <OwnerPanel>
-          <OwnerEmpty
+        <TaCard>
+          <TaEmpty
             title="Tidak ada error"
             description="Tidak ditemukan error yang sesuai dengan filter saat ini."
           />
-        </OwnerPanel>
+        </TaCard>
       )}
       {!!rows.length && (
-        <OwnerPanel
+        <TaCard
           title="Daftar insiden"
           description="Pilih baris untuk membuka detail dan tindakan penyelesaian."
           className="overflow-hidden"
@@ -285,17 +285,17 @@ function ErrorLog() {
                     {formatOwnerDate(row.occurred_at)}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge tone={row.resolved_at ? "success" : "danger"}>
+                    <TaBadge tone={row.resolved_at ? "success" : "danger"}>
                       {row.resolved_at ? "Selesai" : "Belum selesai"}
-                    </StatusBadge>
+                    </TaBadge>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </OwnerPanel>
+        </TaCard>
       )}
-      <OwnerPagination
+      <TaPagination
         page={page}
         hasNext={!!errors.data?.ok && errors.data.nextPage !== null}
         onPrevious={() => setPage((value) => value - 1)}
@@ -320,9 +320,9 @@ function ErrorLog() {
               >
                 <CircleAlert className="size-5" />
               </span>
-              <StatusBadge tone={selected?.resolved_at ? "success" : "danger"}>
+              <TaBadge tone={selected?.resolved_at ? "success" : "danger"}>
                 {selected?.resolved_at ? "Selesai" : "Belum selesai"}
-              </StatusBadge>
+              </TaBadge>
             </div>
             <DialogTitle className="text-xl font-black text-slate-950">
               {selected?.report_code}
@@ -352,23 +352,23 @@ function ErrorLog() {
                   <p className="mt-1">Catatan: {selected.resolution_note || "Tanpa catatan."}</p>
                 </div>
               ) : (
-                <OwnerField
+                <TaField
                   label="Catatan penyelesaian"
                   hint={`${note.length}/1000 karakter · opsional`}
                 >
                   <textarea
-                    className={`${ownerControlClass} min-h-28 resize-y`}
+                    className={`${taControlClass} min-h-28 resize-y`}
                     value={note}
                     maxLength={1000}
                     placeholder="Jelaskan tindakan yang sudah dilakukan..."
                     onChange={(event) => setNote(event.target.value)}
                   />
-                </OwnerField>
+                </TaField>
               )}
               {mutationError && (
-                <OwnerNotice role="alert" tone="danger">
+                <TaNotice role="alert" tone="danger">
                   {mutationError}
-                </OwnerNotice>
+                </TaNotice>
               )}
             </div>
           )}
@@ -378,7 +378,7 @@ function ErrorLog() {
                 type="button"
                 disabled={resolve.isPending}
                 onClick={() => resolve.mutate()}
-                className={ownerPrimaryButtonClass}
+                className={taPrimaryButtonClass}
               >
                 <CheckCircle2 className="size-4" />{" "}
                 {resolve.isPending ? "Menyimpan..." : "Tandai selesai"}
@@ -387,7 +387,7 @@ function ErrorLog() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </OwnerPage>
+    </TaPage>
   );
 }
 

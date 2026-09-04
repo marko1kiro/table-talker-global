@@ -14,19 +14,19 @@ import {
   type QrBatchHistoryRow,
 } from "@/lib/qr-export.server";
 import {
-  OwnerEmpty,
-  OwnerField,
-  OwnerLoading,
-  OwnerNotice,
-  OwnerPage,
-  OwnerPageHeader,
-  OwnerPanel,
-  OwnerRetry,
-  StatusBadge,
-  ownerControlClass,
-  ownerPrimaryButtonClass,
-  ownerSecondaryButtonClass,
-} from "@/components/OwnerUi";
+  TaEmpty,
+  TaField,
+  TaLoading,
+  TaNotice,
+  TaPage,
+  TaPageHeader,
+  TaCard,
+  TaRetry,
+  TaBadge,
+  taControlClass,
+  taPrimaryButtonClass,
+  taSecondaryButtonClass,
+} from "@/components/dashboard/ui";
 import {
   Table,
   TableBody,
@@ -140,38 +140,35 @@ function EsbExport() {
   }
 
   return (
-    <OwnerPage>
-      <OwnerPageHeader
+    <TaPage>
+      <TaPageHeader
         eyebrow="Integrasi ESB"
         title="ESB App ID & Generate QR"
         description="Atur ESB App ID, buat QR aman untuk semua atau meja tertentu, lalu unduh file cetaknya."
       />
 
-      {restaurants.isLoading && <OwnerLoading label="Memuat daftar restoran..." />}
+      {restaurants.isLoading && <TaLoading label="Memuat daftar restoran..." />}
       {(restaurants.isError || (restaurants.data && !restaurants.data.ok)) && (
-        <OwnerPanel>
-          <OwnerNotice role="alert" tone="danger">
+        <TaCard>
+          <TaNotice role="alert" tone="danger">
             Daftar restoran tidak dapat dimuat.
-          </OwnerNotice>
+          </TaNotice>
           <div className="mt-4">
-            <OwnerRetry onClick={() => restaurants.refetch()} />
+            <TaRetry onClick={() => restaurants.refetch()} />
           </div>
-        </OwnerPanel>
+        </TaCard>
       )}
       {restaurants.data?.ok && !rows.length && (
-        <OwnerPanel>
-          <OwnerEmpty
-            title="Belum ada restoran"
-            description="Tambahkan restoran terlebih dahulu."
-          />
-        </OwnerPanel>
+        <TaCard>
+          <TaEmpty title="Belum ada restoran" description="Tambahkan restoran terlebih dahulu." />
+        </TaCard>
       )}
 
       {!!rows.length && (
-        <OwnerPanel title="Pilih restoran" description="Pengaturan dan QR berlaku per restoran.">
-          <OwnerField label="Restoran">
+        <TaCard title="Pilih restoran" description="Pengaturan dan QR berlaku per restoran.">
+          <TaField label="Restoran">
             <select
-              className={ownerControlClass}
+              className={taControlClass}
               value={restaurantId}
               onChange={(event) => selectRestaurant(event.target.value)}
             >
@@ -183,22 +180,19 @@ function EsbExport() {
                 </option>
               ))}
             </select>
-          </OwnerField>
-        </OwnerPanel>
+          </TaField>
+        </TaCard>
       )}
 
       {restaurantId && (
-        <OwnerPanel
-          title="ESB App ID"
-          description="Nilai dari back-office ESB untuk tujuan pemesanan."
-        >
+        <TaCard title="ESB App ID" description="Nilai dari back-office ESB untuk tujuan pemesanan.">
           {detail.isLoading ? (
             <p className="text-sm text-slate-500">Memuat...</p>
           ) : (
             <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-              <OwnerField label="ESB App ID" hint="Contoh: 1294">
+              <TaField label="ESB App ID" hint="Contoh: 1294">
                 <input
-                  className={ownerControlClass}
+                  className={taControlClass}
                   value={esbAppIdInput}
                   maxLength={40}
                   placeholder="Masukkan ESB App ID"
@@ -207,12 +201,12 @@ function EsbExport() {
                     setSaveSuccess(false);
                   }}
                 />
-              </OwnerField>
+              </TaField>
               <button
                 type="button"
                 disabled={save.isPending || !esbAppIdInput.trim()}
                 onClick={() => save.mutate()}
-                className={ownerPrimaryButtonClass}
+                className={taPrimaryButtonClass}
               >
                 <Save className="size-4" />
                 {save.isPending ? "Menyimpan..." : "Simpan"}
@@ -220,14 +214,14 @@ function EsbExport() {
             </div>
           )}
           {saveError && (
-            <OwnerNotice role="alert" tone="danger">
+            <TaNotice role="alert" tone="danger">
               {saveError}
-            </OwnerNotice>
+            </TaNotice>
           )}
           {saveSuccess && (
-            <OwnerNotice role="status" tone="success">
+            <TaNotice role="status" tone="success">
               ESB App ID berhasil disimpan.
-            </OwnerNotice>
+            </TaNotice>
           )}
 
           <div className="mt-6 border-t border-slate-100 pt-6">
@@ -235,14 +229,14 @@ function EsbExport() {
             <p className="mt-1 text-sm text-slate-500">
               QR lama baru dinonaktifkan setelah file XLSX dan DOCX baru berhasil disimpan.
             </p>
-            <OwnerField label="Domain untuk link QR">
+            <TaField label="Domain untuk link QR">
               <input
-                className={ownerControlClass}
+                className={taControlClass}
                 value={domain}
                 placeholder={DEFAULT_QR_EXPORT_DOMAIN}
                 onChange={(event) => setDomain(event.target.value)}
               />
-            </OwnerField>
+            </TaField>
 
             <fieldset className="mt-5">
               <legend className="text-sm font-bold text-slate-900">Cakupan meja</legend>
@@ -278,18 +272,18 @@ function EsbExport() {
             )}
 
             <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-              <OwnerField label="Konfirmasi password Super Admin">
+              <TaField label="Konfirmasi password Super Admin">
                 <input
-                  className={ownerControlClass}
+                  className={taControlClass}
                   type="password"
                   autoComplete="current-password"
                   value={superAdminPassword}
                   onChange={(event) => setSuperAdminPassword(event.target.value)}
                 />
-              </OwnerField>
+              </TaField>
               <button
                 type="button"
-                className={ownerPrimaryButtonClass}
+                className={taPrimaryButtonClass}
                 disabled={
                   generate.isPending ||
                   !superAdminPassword ||
@@ -302,30 +296,30 @@ function EsbExport() {
               </button>
             </div>
             {generateError && (
-              <OwnerNotice role="alert" tone="danger">
+              <TaNotice role="alert" tone="danger">
                 {generateError}
-              </OwnerNotice>
+              </TaNotice>
             )}
             {generateSuccess && (
-              <OwnerNotice role="status" tone="success">
+              <TaNotice role="status" tone="success">
                 QR dan kedua file berhasil dibuat. Silakan ganti stiker meja yang dipilih.
-              </OwnerNotice>
+              </TaNotice>
             )}
           </div>
-        </OwnerPanel>
+        </TaCard>
       )}
 
       {restaurantId && (
-        <OwnerPanel
+        <TaCard
           title="Riwayat QR"
           description="Riwayat dan file lama disimpan permanen untuk audit."
         >
-          {history.isLoading && <OwnerLoading label="Memuat riwayat QR..." />}
+          {history.isLoading && <TaLoading label="Memuat riwayat QR..." />}
           {(history.isError || (history.data && !history.data.ok)) && (
-            <OwnerRetry onClick={() => history.refetch()} />
+            <TaRetry onClick={() => history.refetch()} />
           )}
           {history.data?.ok && !batches.length && (
-            <OwnerEmpty title="Belum ada riwayat QR" description="Lakukan Generate QR pertama." />
+            <TaEmpty title="Belum ada riwayat QR" description="Lakukan Generate QR pertama." />
           )}
           {!!batches.length && (
             <Table>
@@ -349,26 +343,26 @@ function EsbExport() {
                       {batch.scope === "all" ? "Semua meja" : `${batch.table_numbers.length} meja`}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge tone={batch.status === "ACTIVE" ? "success" : "neutral"}>
+                      <TaBadge tone={batch.status === "ACTIVE" ? "success" : "neutral"}>
                         {batch.status === "ACTIVE"
                           ? "ACTIVE"
                           : batch.status === "EXPIRED"
                             ? "EXPIRED"
                             : "SEBAGIAN AKTIF"}
-                      </StatusBadge>
+                      </TaBadge>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex gap-2">
                         <button
                           type="button"
-                          className={ownerSecondaryButtonClass}
+                          className={taSecondaryButtonClass}
                           onClick={() => downloadBatch(batch.id, "xlsx")}
                         >
                           <Download className="size-4" /> XLSX
                         </button>
                         <button
                           type="button"
-                          className={ownerSecondaryButtonClass}
+                          className={taSecondaryButtonClass}
                           onClick={() => downloadBatch(batch.id, "docx")}
                         >
                           <Download className="size-4" /> DOCX
@@ -380,8 +374,8 @@ function EsbExport() {
               </TableBody>
             </Table>
           )}
-        </OwnerPanel>
+        </TaCard>
       )}
-    </OwnerPage>
+    </TaPage>
   );
 }

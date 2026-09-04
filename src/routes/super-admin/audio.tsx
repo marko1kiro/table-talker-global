@@ -26,19 +26,19 @@ import {
 import { requestR2Upload } from "@/lib/upload.server";
 import { ANNOUNCEMENT_CATALOG } from "@/lib/remote-audio-domain";
 import {
-  OwnerEmpty,
-  OwnerField,
-  OwnerLoading,
-  OwnerNotice,
-  OwnerPage,
-  OwnerPageHeader,
-  OwnerPanel,
-  StatusBadge,
-  ownerControlClass,
-  ownerDangerButtonClass,
-  ownerPrimaryButtonClass,
-  ownerSecondaryButtonClass,
-} from "@/components/OwnerUi";
+  TaEmpty,
+  TaField,
+  TaLoading,
+  TaNotice,
+  TaPage,
+  TaPageHeader,
+  TaCard,
+  TaBadge,
+  taControlClass,
+  taDangerButtonClass,
+  taPrimaryButtonClass,
+  taSecondaryButtonClass,
+} from "@/components/dashboard/ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -246,21 +246,21 @@ function Audio() {
   const visibleItems = groups[activeGroup].filter((item) => matchesSearch(item, search));
 
   return (
-    <OwnerPage>
-      <OwnerPageHeader
+    <TaPage>
+      <TaPageHeader
         eyebrow="Katalog Konten"
         title="Audio"
         description="Unggah, susun, dan aktifkan audio yang tersedia untuk setiap restoran."
       />
 
-      <OwnerPanel
+      <TaCard
         title="Pilih restoran"
         description="Katalog audio dikelola secara terpisah untuk setiap restoran."
       >
-        <OwnerField label="Restoran">
+        <TaField label="Restoran">
           <select
             aria-label="Resto"
-            className={ownerControlClass}
+            className={taControlClass}
             value={restaurantId}
             onChange={(event) => void navigate({ search: { restaurantId: event.target.value } })}
           >
@@ -274,16 +274,16 @@ function Audio() {
                 ),
               )}
           </select>
-        </OwnerField>
-      </OwnerPanel>
+        </TaField>
+      </TaCard>
 
       {!restaurantId ? (
-        <OwnerPanel>
-          <OwnerEmpty
+        <TaCard>
+          <TaEmpty
             title="Pilih restoran terlebih dahulu"
             description="Setelah restoran dipilih, form upload dan katalog audionya akan muncul di sini."
           />
-        </OwnerPanel>
+        </TaCard>
       ) : (
         <>
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -312,15 +312,15 @@ function Audio() {
             />
           </section>
 
-          <OwnerPanel
+          <TaCard
             title="Tambah atau ganti audio"
             description="Pilih tipe audio untuk mengisi ID dan label secara otomatis. ID yang sama akan memperbarui mapping tanpa mengubah riwayat objek lama."
           >
             <div className="grid gap-4 md:grid-cols-3">
-              <OwnerField label="Tipe audio" hint="Menentukan grup katalog di bawah.">
+              <TaField label="Tipe audio" hint="Menentukan grup katalog di bawah.">
                 <select
                   aria-label="Tipe audio"
-                  className={ownerControlClass}
+                  className={taControlClass}
                   value={audioType}
                   onChange={(event) => selectAudioType(event.target.value as AudioType)}
                 >
@@ -328,13 +328,13 @@ function Audio() {
                   <option value="announcement">Sound Pengumuman</option>
                   <option value="custom">Lainnya (custom)</option>
                 </select>
-              </OwnerField>
+              </TaField>
 
               {audioType === "table" && (
-                <OwnerField label="Nomor meja">
+                <TaField label="Nomor meja">
                   <select
                     aria-label="Nomor meja"
-                    className={ownerControlClass}
+                    className={taControlClass}
                     value={String(tableNumberOf(audioId))}
                     onChange={(event) => selectTableNumber(event.target.value)}
                   >
@@ -344,14 +344,14 @@ function Audio() {
                       </option>
                     ))}
                   </select>
-                </OwnerField>
+                </TaField>
               )}
 
               {audioType === "announcement" && (
-                <OwnerField label="Pilih pengumuman">
+                <TaField label="Pilih pengumuman">
                   <select
                     aria-label="Pilih pengumuman"
-                    className={ownerControlClass}
+                    className={taControlClass}
                     value={
                       audioId.startsWith("announcement:")
                         ? audioId.slice("announcement:".length)
@@ -365,49 +365,49 @@ function Audio() {
                       </option>
                     ))}
                   </select>
-                </OwnerField>
+                </TaField>
               )}
 
               {audioType === "custom" && (
-                <OwnerField label="Audio ID" hint="Contoh: custom:promo-sore">
+                <TaField label="Audio ID" hint="Contoh: custom:promo-sore">
                   <input
                     aria-label="Audio ID"
-                    className={ownerControlClass}
+                    className={taControlClass}
                     value={audioId}
                     onChange={(event) => setAudioId(event.target.value)}
                   />
-                </OwnerField>
+                </TaField>
               )}
 
-              <OwnerField label="Label audio">
+              <TaField label="Label audio">
                 <input
                   aria-label="Label audio"
-                  className={ownerControlClass}
+                  className={taControlClass}
                   value={label}
                   onChange={(event) => setLabel(event.target.value)}
                 />
-              </OwnerField>
+              </TaField>
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-3">
               {audioType !== "custom" && (
-                <OwnerField label="Audio ID" hint="Terisi otomatis, dapat disalin bila diperlukan.">
+                <TaField label="Audio ID" hint="Terisi otomatis, dapat disalin bila diperlukan.">
                   <input
                     aria-label="Audio ID"
-                    className={`${ownerControlClass} bg-slate-50 text-slate-500`}
+                    className={`${taControlClass} bg-slate-50 text-slate-500`}
                     value={audioId}
                     readOnly
                   />
-                </OwnerField>
+                </TaField>
               )}
-              <OwnerField label="Kategori">
+              <TaField label="Kategori">
                 <input
                   aria-label="Kategori audio"
-                  className={ownerControlClass}
+                  className={taControlClass}
                   value={category}
                   onChange={(event) => setCategory(event.target.value)}
                 />
-              </OwnerField>
+              </TaField>
             </div>
 
             <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition hover:border-amber-400 hover:bg-amber-50/40">
@@ -435,26 +435,26 @@ function Audio() {
 
             {error && (
               <div className="mt-4">
-                <OwnerNotice role="alert" tone="danger">
+                <TaNotice role="alert" tone="danger">
                   {error}
-                </OwnerNotice>
+                </TaNotice>
               </div>
             )}
             <button
               type="button"
               disabled={pending || !file}
               onClick={() => void upload()}
-              className={`${ownerPrimaryButtonClass} mt-5 w-full sm:w-auto`}
+              className={`${taPrimaryButtonClass} mt-5 w-full sm:w-auto`}
             >
               <UploadCloud className="size-4" />
               {pending ? "Mengunggah..." : "Simpan MP3"}
             </button>
-          </OwnerPanel>
+          </TaCard>
 
           {manifest.isLoading ? (
-            <OwnerLoading label="Memuat katalog audio..." />
+            <TaLoading label="Memuat katalog audio..." />
           ) : manifest.data && "items" in manifest.data ? (
-            <OwnerPanel
+            <TaCard
               title="Katalog audio"
               description="Sound meja dan sound pengumuman dikelompokkan agar lebih mudah dicari dan dikelola."
             >
@@ -466,28 +466,28 @@ function Audio() {
                   <TabsList>
                     <TabsTrigger value="table" className="gap-1.5">
                       <Table2 className="size-4" /> Sound Meja
-                      <StatusBadge tone={activeGroup === "table" ? "info" : "neutral"}>
+                      <TaBadge tone={activeGroup === "table" ? "info" : "neutral"}>
                         {groups.table.length}
-                      </StatusBadge>
+                      </TaBadge>
                     </TabsTrigger>
                     <TabsTrigger value="announcement" className="gap-1.5">
                       <Megaphone className="size-4" /> Sound Pengumuman
-                      <StatusBadge tone={activeGroup === "announcement" ? "info" : "neutral"}>
+                      <TaBadge tone={activeGroup === "announcement" ? "info" : "neutral"}>
                         {groups.announcement.length}
-                      </StatusBadge>
+                      </TaBadge>
                     </TabsTrigger>
                     <TabsTrigger value="custom" className="gap-1.5">
                       <Sparkles className="size-4" /> Lainnya
-                      <StatusBadge tone={activeGroup === "custom" ? "info" : "neutral"}>
+                      <TaBadge tone={activeGroup === "custom" ? "info" : "neutral"}>
                         {groups.custom.length}
-                      </StatusBadge>
+                      </TaBadge>
                     </TabsTrigger>
                   </TabsList>
                   <div className="relative sm:w-64">
                     <Search className="pointer-events-none absolute left-3.5 top-1/2 mt-0.5 size-4 -translate-y-1/2 text-slate-400" />
                     <input
                       aria-label="Cari audio"
-                      className={`${ownerControlClass} pl-10`}
+                      className={`${taControlClass} pl-10`}
                       value={search}
                       placeholder="Cari label atau ID..."
                       onChange={(event) => setSearch(event.target.value)}
@@ -522,7 +522,7 @@ function Audio() {
                         </TableBody>
                       </Table>
                     ) : (
-                      <OwnerEmpty
+                      <TaEmpty
                         title={groups[group].length ? "Tidak ada hasil" : GROUP_META[group].title}
                         description={
                           groups[group].length
@@ -534,20 +534,20 @@ function Audio() {
                   </TabsContent>
                 ))}
               </Tabs>
-            </OwnerPanel>
+            </TaCard>
           ) : (
-            <OwnerNotice role="alert" tone="danger">
+            <TaNotice role="alert" tone="danger">
               Katalog tidak dapat dimuat.
-            </OwnerNotice>
+            </TaNotice>
           )}
           {mutationError && (
-            <OwnerNotice role="alert" tone="danger">
+            <TaNotice role="alert" tone="danger">
               {mutationError}
-            </OwnerNotice>
+            </TaNotice>
           )}
         </>
       )}
-    </OwnerPage>
+    </TaPage>
   );
 }
 
@@ -587,9 +587,9 @@ function AudioRow({
         </TableCell>
         <TableCell className="text-slate-600">{item.category}</TableCell>
         <TableCell>
-          <StatusBadge tone={item.active ? "success" : "neutral"}>
+          <TaBadge tone={item.active ? "success" : "neutral"}>
             {item.active ? "Aktif" : "Nonaktif"}
-          </StatusBadge>
+          </TaBadge>
         </TableCell>
         <TableCell className="text-right font-semibold">{item.ordering}</TableCell>
         <TableCell>
@@ -605,7 +605,7 @@ function AudioRow({
                   }),
                 )
               }
-              className={ownerSecondaryButtonClass}
+              className={taSecondaryButtonClass}
             >
               <Power className="size-4" />
             </button>
@@ -620,7 +620,7 @@ function AudioRow({
                   }),
                 )
               }
-              className={ownerSecondaryButtonClass}
+              className={taSecondaryButtonClass}
             >
               <ArrowUp className="size-4" />
             </button>
@@ -635,7 +635,7 @@ function AudioRow({
                   }),
                 )
               }
-              className={ownerSecondaryButtonClass}
+              className={taSecondaryButtonClass}
             >
               <ArrowDown className="size-4" />
             </button>
@@ -644,7 +644,7 @@ function AudioRow({
                 <button
                   type="button"
                   disabled={pendingItem === item.audio_id}
-                  className={ownerDangerButtonClass}
+                  className={taDangerButtonClass}
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -677,9 +677,9 @@ function AudioRow({
               <PencilLine className="size-3.5" /> Edit metadata
             </summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <OwnerField label="Label">
+              <TaField label="Label">
                 <input
-                  className={ownerControlClass}
+                  className={taControlClass}
                   aria-label={`Label ${item.audio_id}`}
                   defaultValue={item.label}
                   onBlur={(event) =>
@@ -697,10 +697,10 @@ function AudioRow({
                     )
                   }
                 />
-              </OwnerField>
-              <OwnerField label="Kategori">
+              </TaField>
+              <TaField label="Kategori">
                 <input
-                  className={ownerControlClass}
+                  className={taControlClass}
                   aria-label={`Kategori ${item.audio_id}`}
                   defaultValue={item.category}
                   onBlur={(event) =>
@@ -718,7 +718,7 @@ function AudioRow({
                     )
                   }
                 />
-              </OwnerField>
+              </TaField>
             </div>
           </details>
         </TableCell>

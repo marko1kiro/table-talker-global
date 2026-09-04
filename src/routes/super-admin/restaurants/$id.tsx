@@ -5,15 +5,15 @@ import { RestaurantCredentialDialog } from "@/components/RestaurantCredentialDia
 import { getOwnerRestaurantDetail } from "@/lib/owner-restaurants.server";
 import { deactivateRestaurant } from "@/lib/admin-restaurants.server";
 import {
-  OwnerLoading,
-  OwnerPage,
-  OwnerPageHeader,
-  OwnerPanel,
-  StatusBadge,
-  ownerDangerButtonClass,
-  ownerPrimaryButtonClass,
-  ownerSecondaryButtonClass,
-} from "@/components/OwnerUi";
+  TaLoading,
+  TaPage,
+  TaPageHeader,
+  TaCard,
+  TaBadge,
+  taDangerButtonClass,
+  taPrimaryButtonClass,
+  taSecondaryButtonClass,
+} from "@/components/dashboard/ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,25 +59,25 @@ function RestaurantDetail() {
     queryKey: ["owner-restaurant", id],
     queryFn: () => getOwnerRestaurantDetail({ data: { restaurantId: id } }),
   });
-  if (detail.isLoading) return <OwnerLoading label="Memuat detail resto..." />;
+  if (detail.isLoading) return <TaLoading label="Memuat detail resto..." />;
   if (detail.isError || !detail.data || !detail.data.ok)
     return (
-      <OwnerPage>
-        <OwnerPanel>
+      <TaPage>
+        <TaCard>
           <p role="alert" className="text-sm font-bold text-red-700">
             Resto tidak dapat dimuat.
           </p>
           <div className="mt-4">
             <button
               type="button"
-              className={ownerSecondaryButtonClass}
+              className={taSecondaryButtonClass}
               onClick={() => detail.refetch()}
             >
               Coba Lagi
             </button>
           </div>
-        </OwnerPanel>
-      </OwnerPage>
+        </TaCard>
+      </TaPage>
     );
   const data = detail.data.detail as {
     restaurant: { id: string; display_name: string; is_active: boolean; catalog_version: number };
@@ -105,7 +105,7 @@ function RestaurantDetail() {
     else void queryClient.invalidateQueries({ queryKey: ["owner-restaurant", id] });
   };
   return (
-    <OwnerPage>
+    <TaPage>
       <Link
         to="/super-admin/restaurants"
         className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-500 transition hover:text-slate-800"
@@ -113,7 +113,7 @@ function RestaurantDetail() {
         ← Kembali ke Restoran
       </Link>
 
-      <OwnerPageHeader
+      <TaPageHeader
         eyebrow="Detail Restoran"
         title={restaurant.displayName}
         description={`Katalog v${data.restaurant.catalog_version}. Kelola kredensial, audio, dan status operasional resto ini.`}
@@ -121,14 +121,14 @@ function RestaurantDetail() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className={ownerSecondaryButtonClass}
+              className={taSecondaryButtonClass}
               onClick={() => setCredentialMode("view")}
             >
               Lihat Kode
             </button>
             <button
               type="button"
-              className={ownerSecondaryButtonClass}
+              className={taSecondaryButtonClass}
               onClick={() => setCredentialMode("rotate")}
             >
               Ganti Kode
@@ -136,14 +136,14 @@ function RestaurantDetail() {
             <Link
               to="/super-admin/audio"
               search={{ restaurantId: id }}
-              className={ownerPrimaryButtonClass}
+              className={taPrimaryButtonClass}
             >
               Kelola Audio
             </Link>
             {data.restaurant.is_active && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <button type="button" className={ownerDangerButtonClass}>
+                  <button type="button" className={taDangerButtonClass}>
                     Nonaktifkan Resto
                   </button>
                 </AlertDialogTrigger>
@@ -188,7 +188,7 @@ function RestaurantDetail() {
                   <AlertDialogFooter>
                     <AlertDialogCancel>Batal</AlertDialogCancel>
                     <AlertDialogAction
-                      className={ownerDangerButtonClass}
+                      className={taDangerButtonClass}
                       disabled={displayNameConfirmation !== restaurant.displayName}
                       onClick={() => void deactivate()}
                     >
@@ -203,12 +203,12 @@ function RestaurantDetail() {
       />
 
       <div className="flex items-center gap-2">
-        <StatusBadge tone={data.restaurant.is_active ? "success" : "neutral"}>
+        <TaBadge tone={data.restaurant.is_active ? "success" : "neutral"}>
           {data.restaurant.is_active ? "Aktif" : "Nonaktif"}
-        </StatusBadge>
+        </TaBadge>
       </div>
 
-      <OwnerPanel title="Katalog" description={`${data.catalog.total} item mapping audio.`}>
+      <TaCard title="Katalog" description={`${data.catalog.total} item mapping audio.`}>
         {data.catalog.items.length ? (
           <Table>
             <TableHeader>
@@ -227,9 +227,9 @@ function RestaurantDetail() {
                   <TableCell className="font-semibold">{item.label}</TableCell>
                   <TableCell>{item.category}</TableCell>
                   <TableCell>
-                    <StatusBadge tone={item.active ? "success" : "neutral"}>
+                    <TaBadge tone={item.active ? "success" : "neutral"}>
                       {item.active ? "aktif" : "nonaktif"}
-                    </StatusBadge>
+                    </TaBadge>
                   </TableCell>
                   <TableCell className="text-right font-semibold">{item.ordering}</TableCell>
                 </TableRow>
@@ -239,9 +239,9 @@ function RestaurantDetail() {
         ) : (
           <p className="text-sm text-slate-500">Belum ada mapping.</p>
         )}
-      </OwnerPanel>
+      </TaCard>
 
-      <OwnerPanel title="Riwayat Sinkron">
+      <TaCard title="Riwayat Sinkron">
         {data.sync_history.length ? (
           <Table>
             <TableHeader>
@@ -262,9 +262,9 @@ function RestaurantDetail() {
         ) : (
           <p className="text-sm text-slate-500">Belum ada riwayat sinkron.</p>
         )}
-      </OwnerPanel>
+      </TaCard>
 
-      <OwnerPanel title="Pemutaran Terbaru">
+      <TaCard title="Pemutaran Terbaru">
         {data.recent_playback.length ? (
           <Table>
             <TableHeader>
@@ -289,9 +289,9 @@ function RestaurantDetail() {
         ) : (
           <p className="text-sm text-slate-500">Belum ada pemutaran.</p>
         )}
-      </OwnerPanel>
+      </TaCard>
 
-      <OwnerPanel title="Error Terbaru">
+      <TaCard title="Error Terbaru">
         {data.recent_errors.length ? (
           <Table>
             <TableHeader>
@@ -314,7 +314,7 @@ function RestaurantDetail() {
         ) : (
           <p className="text-sm text-slate-500">Belum ada error.</p>
         )}
-      </OwnerPanel>
+      </TaCard>
 
       {credentialMode && (
         <RestaurantCredentialDialog
@@ -327,6 +327,6 @@ function RestaurantDetail() {
           }
         />
       )}
-    </OwnerPage>
+    </TaPage>
   );
 }

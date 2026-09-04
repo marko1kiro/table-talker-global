@@ -9,12 +9,12 @@ import { expect, it } from "vitest";
 // displayNameConfirmation guard, dialog kredensial).
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-it("uses Owner Console layout primitives instead of raw Panels", () => {
+it("uses TailAdmin layout primitives instead of raw Panels", () => {
   const page = read("../src/routes/super-admin/restaurants/$id.tsx");
-  expect(page).toContain("OwnerPage");
-  expect(page).toContain("OwnerPageHeader");
-  expect(page).toContain("OwnerPanel");
-  expect(page).toContain("OwnerLoading");
+  expect(page).toContain("TaPage");
+  expect(page).toContain("TaPageHeader");
+  expect(page).toContain("TaCard");
+  expect(page).toContain("TaLoading");
   expect(page).not.toContain('className="brutal-border bg-card p-6"');
   expect(page).not.toContain("font-display text-2xl uppercase");
 });
@@ -31,11 +31,11 @@ it("renders catalog, sync, playback, and error sections as shadcn tables", () =>
   expect(page).not.toContain("` · `");
 });
 
-it("action buttons use owner button styles", () => {
+it("action buttons use TailAdmin button styles", () => {
   const page = read("../src/routes/super-admin/restaurants/$id.tsx");
-  expect(page).toContain("ownerPrimaryButtonClass");
-  expect(page).toContain("ownerSecondaryButtonClass");
-  expect(page).toContain("ownerDangerButtonClass");
+  expect(page).toContain("taPrimaryButtonClass");
+  expect(page).toContain("taSecondaryButtonClass");
+  expect(page).toContain("taDangerButtonClass");
 });
 
 it("formats timestamps in Indonesian locale instead of raw ISO", () => {

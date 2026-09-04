@@ -4,16 +4,16 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, CircleAlert, Plus, Radio } from "lucide-react";
 import { RestaurantCredentialDialog } from "@/components/RestaurantCredentialDialog";
 import {
-  OwnerEmpty,
-  OwnerLoading,
-  OwnerNotice,
-  OwnerPage,
-  OwnerPageHeader,
-  OwnerPanel,
-  OwnerRetry,
-  StatusBadge,
-  ownerPrimaryButtonClass,
-} from "@/components/OwnerUi";
+  TaEmpty,
+  TaLoading,
+  TaNotice,
+  TaPage,
+  TaPageHeader,
+  TaCard,
+  TaRetry,
+  TaBadge,
+  taPrimaryButtonClass,
+} from "@/components/dashboard/ui";
 import {
   Table,
   TableBody,
@@ -31,23 +31,23 @@ function Restaurants() {
   const [create, setCreate] = useState(false);
   const restaurants = useQuery({ queryKey: ["owner-restaurants"], queryFn: listOwnerRestaurants });
 
-  if (restaurants.isLoading) return <OwnerLoading label="Memuat daftar restoran..." />;
+  if (restaurants.isLoading) return <TaLoading label="Memuat daftar restoran..." />;
   if (restaurants.isError || !restaurants.data?.ok)
     return (
-      <OwnerPage>
-        <OwnerPageHeader
+      <TaPage>
+        <TaPageHeader
           title="Restoran"
           description="Kelola restoran dan pantau kesiapan operasionalnya."
         />
-        <OwnerPanel>
-          <OwnerNotice role="alert" tone="danger">
+        <TaCard>
+          <TaNotice role="alert" tone="danger">
             Daftar restoran tidak dapat dimuat.
-          </OwnerNotice>
+          </TaNotice>
           <div className="mt-4">
-            <OwnerRetry onClick={() => restaurants.refetch()} />
+            <TaRetry onClick={() => restaurants.refetch()} />
           </div>
-        </OwnerPanel>
-      </OwnerPage>
+        </TaCard>
+      </TaPage>
     );
 
   const rows = restaurants.data.restaurants as Array<{
@@ -60,20 +60,20 @@ function Restaurants() {
   }>;
 
   return (
-    <OwnerPage>
-      <OwnerPageHeader
+    <TaPage>
+      <TaPageHeader
         eyebrow="Manajemen Tenant"
         title="Restoran"
         description={`${rows.length} restoran terdaftar. Buka detail untuk mengelola kredensial, perangkat, dan katalog audio.`}
         action={
-          <button className={ownerPrimaryButtonClass} type="button" onClick={() => setCreate(true)}>
+          <button className={taPrimaryButtonClass} type="button" onClick={() => setCreate(true)}>
             <Plus className="size-4" /> Tambah restoran
           </button>
         }
       />
 
       {rows.length ? (
-        <OwnerPanel>
+        <TaCard>
           <Table>
             <TableHeader>
               <TableRow>
@@ -99,9 +99,9 @@ function Restaurants() {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge tone={row.is_active ? "success" : "neutral"}>
+                    <TaBadge tone={row.is_active ? "success" : "neutral"}>
                       {row.is_active ? "Aktif" : "Nonaktif"}
-                    </StatusBadge>
+                    </TaBadge>
                   </TableCell>
                   <TableCell className="font-semibold text-slate-700">
                     v{row.catalog_version}
@@ -135,14 +135,14 @@ function Restaurants() {
               ))}
             </TableBody>
           </Table>
-        </OwnerPanel>
+        </TaCard>
       ) : (
-        <OwnerPanel>
-          <OwnerEmpty
+        <TaCard>
+          <TaEmpty
             title="Belum ada restoran"
             description="Tambahkan restoran pertama untuk mulai mengelola perangkat dan audio."
           />
-        </OwnerPanel>
+        </TaCard>
       )}
 
       <RestaurantCredentialDialog
@@ -151,6 +151,6 @@ function Restaurants() {
         onOpenChange={setCreate}
         onComplete={() => void queryClient.invalidateQueries({ queryKey: ["owner-restaurants"] })}
       />
-    </OwnerPage>
+    </TaPage>
   );
 }
