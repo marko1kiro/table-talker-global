@@ -26,3 +26,16 @@ describe("NotificationBell", () => {
     expect(s).toContain("Clock");
   });
 });
+
+describe("ProfileMenu", () => {
+  it("shows avatar + name and a menu with disabled password + logout", () => {
+    const s = src("ProfileMenu.tsx");
+    expect(s).toContain("UserRound");
+    expect(s).toContain("ChevronDown");
+    expect(s).toContain("Ganti password");
+    expect(s).toContain("Segera hadir");
+    expect(s).toContain("disabled");
+    expect(s).toContain("onLogout");
+    expect(s).toContain("Keluar");
+  });
+});
