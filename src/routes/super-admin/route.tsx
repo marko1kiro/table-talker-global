@@ -12,6 +12,7 @@ import {
   QrCode,
   ShieldCheck,
   TriangleAlert,
+  Users,
 } from "lucide-react";
 import { AuthGate } from "@/components/AuthGate";
 import { getAuthStatus, loginSuperAdmin, logout } from "@/lib/auth";
@@ -21,6 +22,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 const nav = [
   { label: "Dashboard", to: "/super-admin", icon: CircleGauge, exact: true },
   { label: "Restoran", to: "/super-admin/restaurants", icon: Building2, exact: false },
+  { label: "Manager", to: "/super-admin/managers", icon: Users, exact: false },
   { label: "Audio", to: "/super-admin/audio", icon: AudioLines, exact: false },
   { label: "Riwayat", to: "/super-admin/history", icon: History, exact: false },
   { label: "Error Log", to: "/super-admin/error-log", icon: TriangleAlert, exact: false },

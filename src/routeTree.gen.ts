@@ -23,6 +23,7 @@ import { Route as SatgasIndexRouteImport } from './routes/satgas/index'
 import { Route as ManagerIndexRouteImport } from './routes/manager/index'
 import { Route as KasirIndexRouteImport } from './routes/kasir/index'
 import { Route as ClearUpIndexRouteImport } from './routes/clear-up/index'
+import { Route as SuperAdminManagersRouteImport } from './routes/super-admin/managers'
 import { Route as SuperAdminHistoryRouteImport } from './routes/super-admin/history'
 import { Route as SuperAdminEsbExportRouteImport } from './routes/super-admin/esb-export'
 import { Route as SuperAdminErrorLogRouteImport } from './routes/super-admin/error-log'
@@ -106,6 +107,11 @@ const ClearUpIndexRoute = ClearUpIndexRouteImport.update({
   path: '/clear-up/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SuperAdminManagersRoute = SuperAdminManagersRouteImport.update({
+  id: '/managers',
+  path: '/managers',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
 const SuperAdminHistoryRoute = SuperAdminHistoryRouteImport.update({
   id: '/history',
   path: '/history',
@@ -187,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
+  '/super-admin/managers': typeof SuperAdminManagersRoute
   '/clear-up/': typeof ClearUpIndexRoute
   '/kasir/': typeof KasirIndexRoute
   '/manager/': typeof ManagerIndexRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByTo {
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
+  '/super-admin/managers': typeof SuperAdminManagersRoute
   '/clear-up': typeof ClearUpIndexRoute
   '/kasir': typeof KasirIndexRoute
   '/manager': typeof ManagerIndexRoute
@@ -243,6 +251,7 @@ export interface FileRoutesById {
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
+  '/super-admin/managers': typeof SuperAdminManagersRoute
   '/clear-up/': typeof ClearUpIndexRoute
   '/kasir/': typeof KasirIndexRoute
   '/manager/': typeof ManagerIndexRoute
@@ -273,6 +282,7 @@ export interface FileRouteTypes {
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
     | '/super-admin/history'
+    | '/super-admin/managers'
     | '/clear-up/'
     | '/kasir/'
     | '/manager/'
@@ -300,6 +310,7 @@ export interface FileRouteTypes {
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
     | '/super-admin/history'
+    | '/super-admin/managers'
     | '/clear-up'
     | '/kasir'
     | '/manager'
@@ -328,6 +339,7 @@ export interface FileRouteTypes {
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
     | '/super-admin/history'
+    | '/super-admin/managers'
     | '/clear-up/'
     | '/kasir/'
     | '/manager/'
@@ -461,6 +473,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClearUpIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/super-admin/managers': {
+      id: '/super-admin/managers'
+      path: '/managers'
+      fullPath: '/super-admin/managers'
+      preLoaderRoute: typeof SuperAdminManagersRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
     '/super-admin/history': {
       id: '/super-admin/history'
       path: '/history'
@@ -553,6 +572,7 @@ interface SuperAdminRouteRouteChildren {
   SuperAdminErrorLogRoute: typeof SuperAdminErrorLogRoute
   SuperAdminEsbExportRoute: typeof SuperAdminEsbExportRoute
   SuperAdminHistoryRoute: typeof SuperAdminHistoryRoute
+  SuperAdminManagersRoute: typeof SuperAdminManagersRoute
   SuperAdminIndexRoute: typeof SuperAdminIndexRoute
   SuperAdminRestaurantsIdRoute: typeof SuperAdminRestaurantsIdRoute
   SuperAdminRestaurantsIndexRoute: typeof SuperAdminRestaurantsIndexRoute
@@ -563,6 +583,7 @@ const SuperAdminRouteRouteChildren: SuperAdminRouteRouteChildren = {
   SuperAdminErrorLogRoute: SuperAdminErrorLogRoute,
   SuperAdminEsbExportRoute: SuperAdminEsbExportRoute,
   SuperAdminHistoryRoute: SuperAdminHistoryRoute,
+  SuperAdminManagersRoute: SuperAdminManagersRoute,
   SuperAdminIndexRoute: SuperAdminIndexRoute,
   SuperAdminRestaurantsIdRoute: SuperAdminRestaurantsIdRoute,
   SuperAdminRestaurantsIndexRoute: SuperAdminRestaurantsIndexRoute,
