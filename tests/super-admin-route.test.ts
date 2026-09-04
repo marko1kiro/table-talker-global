@@ -37,7 +37,6 @@ it("logs out from shared owner navigation without clearing non-owner query cache
   expect(source).toContain("disabled={loggingOut}");
   expect(source).toContain('role="alert"');
   expect(source).toContain("isOwnerQueryKey(query.queryKey)");
-  expect(source).toContain("setMenuOpen(false)");
   expect(source).toContain("router.invalidate()");
   const success = source.slice(
     source.indexOf("const result = await logout()"),
@@ -47,6 +46,16 @@ it("logs out from shared owner navigation without clearing non-owner query cache
   expect(success.indexOf("isOwnerQueryKey(query.queryKey)")).toBeLessThan(
     success.indexOf("await router.invalidate()"),
   );
+});
+
+it("renders the TailAdmin AppShell with a light brand-blue sidebar", () => {
+  const source = readFileSync(
+    new URL("../src/routes/super-admin/route.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(source).toContain("AppShell");
+  expect(source).toContain("@/components/dashboard/AppShell");
+  expect(source).not.toContain("bg-slate-950");
 });
 
 it("keeps every owner route query namespace logout-purgeable", () => {
