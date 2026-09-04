@@ -8,13 +8,13 @@ import { cn } from "@/lib/utils";
 export { formatOwnerDate } from "@/components/OwnerUi";
 
 export const taControlClass =
-  "mt-1.5 min-h-11 w-full rounded-lg border border-ta-gray-300 bg-white px-3.5 py-2.5 text-sm text-ta-gray-900 outline-none transition placeholder:text-ta-gray-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/12 disabled:cursor-not-allowed disabled:bg-ta-gray-100 disabled:text-ta-gray-400";
+  "mt-1.5 min-h-11 w-full rounded-lg border border-ta-gray-300 bg-white px-3.5 py-2.5 text-sm text-ta-gray-900 outline-none transition placeholder:text-ta-gray-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/12 disabled:cursor-not-allowed disabled:bg-ta-gray-100 disabled:text-ta-gray-400 dark:border-ta-gray-700 dark:bg-ta-gray-900 dark:text-ta-gray-100 dark:placeholder:text-ta-gray-500 dark:disabled:bg-ta-gray-800";
 
 export const taPrimaryButtonClass =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-theme-sm transition hover:bg-brand-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25 disabled:pointer-events-none disabled:opacity-45";
 
 export const taSecondaryButtonClass =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ta-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-ta-gray-700 transition hover:bg-ta-gray-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ta-gray-200 disabled:pointer-events-none disabled:opacity-45";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-ta-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-ta-gray-700 transition hover:bg-ta-gray-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ta-gray-200 disabled:pointer-events-none disabled:opacity-45 dark:border-ta-gray-700 dark:bg-ta-gray-800 dark:text-ta-gray-200 dark:hover:bg-ta-gray-700";
 
 export const taDangerButtonClass =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-ta-error px-4 py-2.5 text-sm font-semibold text-white shadow-theme-sm transition hover:bg-[#d92d20] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ta-error/25 disabled:pointer-events-none disabled:opacity-45";
@@ -38,12 +38,16 @@ export function TaPageHeader({
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="max-w-3xl">
         {eyebrow && (
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-500">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-500 dark:text-brand-400">
             {eyebrow}
           </p>
         )}
-        <h1 className="text-2xl font-bold tracking-tight text-ta-gray-900">{title}</h1>
-        {description && <p className="mt-1 text-sm text-ta-gray-500">{description}</p>}
+        <h1 className="text-2xl font-bold tracking-tight text-ta-gray-900 dark:text-white">
+          {title}
+        </h1>
+        {description && (
+          <p className="mt-1 text-sm text-ta-gray-500 dark:text-ta-gray-400">{description}</p>
+        )}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </header>
@@ -63,12 +67,19 @@ export function TaCard({
 }) {
   return (
     <section
-      className={cn("rounded-xl border border-ta-gray-200 bg-white shadow-theme-sm", className)}
+      className={cn(
+        "rounded-xl border border-ta-gray-200 bg-white shadow-theme-sm dark:border-ta-gray-700 dark:bg-ta-gray-800",
+        className,
+      )}
     >
       {(title || description) && (
-        <div className="border-b border-ta-gray-100 px-5 py-4">
-          {title && <h2 className="text-base font-semibold text-ta-gray-900">{title}</h2>}
-          {description && <p className="mt-1 text-sm text-ta-gray-500">{description}</p>}
+        <div className="border-b border-ta-gray-100 px-5 py-4 dark:border-ta-gray-700">
+          {title && (
+            <h2 className="text-base font-semibold text-ta-gray-900 dark:text-white">{title}</h2>
+          )}
+          {description && (
+            <p className="mt-1 text-sm text-ta-gray-500 dark:text-ta-gray-400">{description}</p>
+          )}
         </div>
       )}
       <div className="p-5">{children}</div>
@@ -92,13 +103,16 @@ export function TaStatCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-ta-gray-200 bg-white shadow-theme-sm",
+        "rounded-xl border border-ta-gray-200 bg-white shadow-theme-sm dark:border-ta-gray-700 dark:bg-ta-gray-800",
         compact ? "p-5 md:p-3" : "p-5",
       )}
     >
       <div className="flex items-center justify-between">
         <p
-          className={cn("font-medium text-ta-gray-500", compact ? "text-sm md:text-xs" : "text-sm")}
+          className={cn(
+            "font-medium text-ta-gray-500 dark:text-ta-gray-400",
+            compact ? "text-sm md:text-xs" : "text-sm",
+          )}
         >
           {label}
         </p>
@@ -116,7 +130,7 @@ export function TaStatCard({
       </div>
       <p
         className={cn(
-          "font-bold tracking-tight text-ta-gray-900",
+          "font-bold tracking-tight text-ta-gray-900 dark:text-white",
           compact ? "mt-3 text-3xl md:mt-1 md:text-xl" : "mt-3 text-3xl",
         )}
       >
@@ -136,20 +150,24 @@ export function TaField({
   children: ReactNode;
 }) {
   return (
-    <label className="block text-sm font-medium text-ta-gray-700">
+    <label className="block text-sm font-medium text-ta-gray-700 dark:text-ta-gray-300">
       {label}
       {children}
-      {hint && <span className="mt-1.5 block text-xs font-normal text-ta-gray-500">{hint}</span>}
+      {hint && (
+        <span className="mt-1.5 block text-xs font-normal text-ta-gray-500 dark:text-ta-gray-400">
+          {hint}
+        </span>
+      )}
     </label>
   );
 }
 
 const BADGE_TONES = {
-  success: "bg-ta-success/10 text-ta-success",
-  danger: "bg-ta-error/10 text-ta-error",
-  warning: "bg-ta-warning/10 text-ta-warning",
-  info: "bg-brand-50 text-brand-500",
-  neutral: "bg-ta-gray-100 text-ta-gray-600",
+  success: "bg-ta-success/10 text-ta-success dark:text-[#34d399]",
+  danger: "bg-ta-error/10 text-ta-error dark:text-[#f97066]",
+  warning: "bg-ta-warning/10 text-ta-warning dark:text-[#f9b949]",
+  info: "bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400",
+  neutral: "bg-ta-gray-100 text-ta-gray-600 dark:bg-ta-gray-700 dark:text-ta-gray-300",
 } as const;
 
 export function TaBadge({
@@ -172,10 +190,11 @@ export function TaBadge({
 }
 
 const NOTICE_TONES = {
-  danger: "border-ta-error/30 bg-ta-error/10 text-ta-error",
-  warning: "border-ta-warning/30 bg-ta-warning/10 text-ta-warning",
-  success: "border-ta-success/30 bg-ta-success/10 text-ta-success",
-  neutral: "border-ta-gray-200 bg-ta-gray-50 text-ta-gray-600",
+  danger: "border-ta-error/30 bg-ta-error/10 text-ta-error dark:text-[#fda29b]",
+  warning: "border-ta-warning/30 bg-ta-warning/10 text-ta-warning dark:text-[#fecd6b]",
+  success: "border-ta-success/30 bg-ta-success/10 text-ta-success dark:text-[#47cd8f]",
+  neutral:
+    "border-ta-gray-200 bg-ta-gray-50 text-ta-gray-600 dark:border-ta-gray-700 dark:bg-ta-gray-800 dark:text-ta-gray-300",
 } as const;
 
 export function TaNotice({
@@ -206,7 +225,7 @@ export function TaLoading({ label = "Memuat data..." }: { label?: string }) {
     <TaCard>
       <div
         role="status"
-        className="flex min-h-48 flex-col items-center justify-center gap-3 text-ta-gray-500"
+        className="flex min-h-48 flex-col items-center justify-center gap-3 text-ta-gray-500 dark:text-ta-gray-400"
       >
         <LoaderCircle className="size-6 animate-spin text-brand-500" />
         <p className="text-sm font-medium">{label}</p>
@@ -217,12 +236,12 @@ export function TaLoading({ label = "Memuat data..." }: { label?: string }) {
 
 export function TaEmpty({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-ta-gray-300 bg-ta-gray-25 px-6 text-center">
-      <span className="mb-3 grid size-10 place-items-center rounded-lg bg-white text-ta-gray-400 shadow-theme-xs ring-1 ring-ta-gray-200">
+    <div className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-ta-gray-300 bg-ta-gray-25 px-6 text-center dark:border-ta-gray-700 dark:bg-ta-gray-800">
+      <span className="mb-3 grid size-10 place-items-center rounded-lg bg-white text-ta-gray-400 shadow-theme-xs ring-1 ring-ta-gray-200 dark:bg-ta-gray-700 dark:ring-ta-gray-600">
         <Inbox className="size-5" />
       </span>
-      <p className="font-semibold text-ta-gray-800">{title}</p>
-      <p className="mt-1 max-w-sm text-sm text-ta-gray-500">{description}</p>
+      <p className="font-semibold text-ta-gray-800 dark:text-ta-gray-100">{title}</p>
+      <p className="mt-1 max-w-sm text-sm text-ta-gray-500 dark:text-ta-gray-400">{description}</p>
     </div>
   );
 }
@@ -254,7 +273,7 @@ export function TaPagination({
   return (
     <nav
       aria-label="Paginasi"
-      className="flex flex-col gap-3 rounded-lg border border-ta-gray-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col gap-3 rounded-lg border border-ta-gray-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-ta-gray-700 dark:bg-ta-gray-800"
     >
       <button
         type="button"
@@ -264,7 +283,9 @@ export function TaPagination({
       >
         {previousLabel}
       </button>
-      <span className="text-center text-sm font-semibold text-ta-gray-600">Halaman {page}</span>
+      <span className="text-center text-sm font-semibold text-ta-gray-600 dark:text-ta-gray-300">
+        Halaman {page}
+      </span>
       <button type="button" disabled={!hasNext} onClick={onNext} className={taSecondaryButtonClass}>
         {nextLabel}
       </button>

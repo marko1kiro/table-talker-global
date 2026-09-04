@@ -33,4 +33,11 @@ describe("dashboard/ui primitives", () => {
     expect(s).toContain("border-ta-gray-200");
     expect(s).not.toContain("amber");
   });
+  it("primitives carry dark-mode variants", () => {
+    const s = src();
+    expect(s).toContain("dark:bg-ta-gray-800");
+    expect(s).toContain("dark:border-ta-gray-700");
+    expect(s).toContain("dark:text-white");
+    expect(s).toContain("dark:bg-ta-gray-900");
+  });
 });
