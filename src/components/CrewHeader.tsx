@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { LayoutGrid, List, LogOut } from "lucide-react";
+import { formatRestaurantLabel } from "../lib/restaurant-label";
+import type { OccupancyNotice } from "../lib/occupancy-notice";
 
 // Dedicated header for the crew dashboards (Kasir, Satgas, Clear Up).
 // Plain shadcn-style look (rounded card, border, shadow-sm) -- intentionally
@@ -30,31 +32,41 @@ export const crewSecondaryButtonClass =
 export function CrewHeader({
   role,
   restaurantName,
+  restaurantCode,
   userName,
   onLogout,
+  notice,
 }: {
   role: string;
   restaurantName?: string;
+  restaurantCode?: string;
   userName: string;
   onLogout: () => void;
+  notice?: OccupancyNotice | null;
 }) {
+  const label = formatRestaurantLabel(restaurantCode ?? "", restaurantName ?? "");
   return (
     <header className="sticky top-0 z-30 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/85">
-      <div className="flex items-center justify-between gap-3 px-5 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-2.5">
+      <div className="flex items-center justify-between gap-3 px-5 py-2 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2">
           <img
             src="/lime-logo.webp"
             alt="LIME"
-            className="h-7 w-auto shrink-0 select-none sm:h-8"
+            className="h-6 w-auto shrink-0 select-none sm:h-7"
           />
-          <span className="inline-flex shrink-0 items-center rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-            {role}
+          <span className="min-w-0 truncate text-[11px] font-extrabold uppercase tracking-wide text-lime-800 sm:text-xs">
+            {label}
           </span>
         </div>
-        <div className="flex min-w-0 shrink-0 items-center gap-2.5">
-          <span className="max-w-[7rem] truncate text-xs font-bold uppercase text-slate-600 sm:max-w-[12rem] sm:text-sm">
-            {userName}
-          </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-col items-end">
+            <span className="max-w-[7rem] truncate text-xs font-bold uppercase text-slate-600 sm:max-w-[12rem]">
+              {userName}
+            </span>
+            <span className="mt-0.5 inline-flex shrink-0 items-center rounded-full bg-slate-900 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white sm:text-[10px]">
+              {role}
+            </span>
+          </div>
           <button
             type="button"
             onClick={onLogout}
@@ -67,13 +79,24 @@ export function CrewHeader({
         </div>
       </div>
 
-      {restaurantName && (
-        <div className="border-t border-slate-100 px-5 py-2.5 sm:px-6">
-          <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-lg bg-lime-50 px-2.5 py-1 text-sm font-extrabold text-lime-800 ring-1 ring-inset ring-lime-200">
-            {restaurantName}
-          </span>
+      <div className="px-5 pb-2 sm:px-6">
+        <div className="flex min-h-[2.75rem] flex-col justify-center rounded-xl bg-fuchsia-50 px-3 py-1.5 ring-1 ring-inset ring-fuchsia-200">
+          {notice ? (
+            <>
+              <p className="truncate text-sm font-extrabold uppercase text-fuchsia-900">
+                {notice.line1}
+              </p>
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-fuchsia-800">
+                <span className="text-[10px] font-bold uppercase text-fuchsia-500">BY</span>
+                <span className="inline-flex items-center rounded-full bg-cyan-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                  {notice.roleLabel}
+                </span>
+                {notice.actorName ? <span>: {notice.actorName}</span> : null}
+              </p>
+            </>
+          ) : null}
         </div>
-      )}
+      </div>
     </header>
   );
 }
