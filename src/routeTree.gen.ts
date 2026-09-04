@@ -20,6 +20,7 @@ import { Route as SuperAdminRouteRouteImport } from './routes/super-admin/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
 import { Route as SatgasIndexRouteImport } from './routes/satgas/index'
+import { Route as ManagerIndexRouteImport } from './routes/manager/index'
 import { Route as KasirIndexRouteImport } from './routes/kasir/index'
 import { Route as ClearUpIndexRouteImport } from './routes/clear-up/index'
 import { Route as SuperAdminHistoryRouteImport } from './routes/super-admin/history'
@@ -28,6 +29,8 @@ import { Route as SuperAdminErrorLogRouteImport } from './routes/super-admin/err
 import { Route as SuperAdminAudioRouteImport } from './routes/super-admin/audio'
 import { Route as QDeclineRouteImport } from './routes/q/decline'
 import { Route as QTokenRouteImport } from './routes/q/$token'
+import { Route as ManagerRegisterRouteImport } from './routes/manager/register'
+import { Route as ManagerLoginRouteImport } from './routes/manager/login'
 import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
 import { Route as ApiAudioAudioIdRouteImport } from './routes/api/audio/$audioId'
@@ -88,6 +91,11 @@ const SatgasIndexRoute = SatgasIndexRouteImport.update({
   path: '/satgas/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManagerIndexRoute = ManagerIndexRouteImport.update({
+  id: '/manager/',
+  path: '/manager/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const KasirIndexRoute = KasirIndexRouteImport.update({
   id: '/kasir/',
   path: '/kasir/',
@@ -128,6 +136,16 @@ const QTokenRoute = QTokenRouteImport.update({
   path: '/q/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManagerRegisterRoute = ManagerRegisterRouteImport.update({
+  id: '/manager/register',
+  path: '/manager/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManagerLoginRoute = ManagerLoginRouteImport.update({
+  id: '/manager/login',
+  path: '/manager/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuperAdminRestaurantsIndexRoute =
   SuperAdminRestaurantsIndexRouteImport.update({
     id: '/restaurants/',
@@ -161,6 +179,8 @@ export interface FileRoutesByFullPath {
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
+  '/manager/login': typeof ManagerLoginRoute
+  '/manager/register': typeof ManagerRegisterRoute
   '/q/$token': typeof QTokenRoute
   '/q/decline': typeof QDeclineRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
@@ -169,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/clear-up/': typeof ClearUpIndexRoute
   '/kasir/': typeof KasirIndexRoute
+  '/manager/': typeof ManagerIndexRoute
   '/satgas/': typeof SatgasIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
@@ -185,6 +206,8 @@ export interface FileRoutesByTo {
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
+  '/manager/login': typeof ManagerLoginRoute
+  '/manager/register': typeof ManagerRegisterRoute
   '/q/$token': typeof QTokenRoute
   '/q/decline': typeof QDeclineRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
@@ -193,6 +216,7 @@ export interface FileRoutesByTo {
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/clear-up': typeof ClearUpIndexRoute
   '/kasir': typeof KasirIndexRoute
+  '/manager': typeof ManagerIndexRoute
   '/satgas': typeof SatgasIndexRoute
   '/super-admin': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
@@ -211,6 +235,8 @@ export interface FileRoutesById {
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
+  '/manager/login': typeof ManagerLoginRoute
+  '/manager/register': typeof ManagerRegisterRoute
   '/q/$token': typeof QTokenRoute
   '/q/decline': typeof QDeclineRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
@@ -219,6 +245,7 @@ export interface FileRoutesById {
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/clear-up/': typeof ClearUpIndexRoute
   '/kasir/': typeof KasirIndexRoute
+  '/manager/': typeof ManagerIndexRoute
   '/satgas/': typeof SatgasIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/api/audio/$audioId': typeof ApiAudioAudioIdRoute
@@ -238,6 +265,8 @@ export interface FileRouteTypes {
     | '/privacy-policy'
     | '/sitemap.xml'
     | '/terms-of-use'
+    | '/manager/login'
+    | '/manager/register'
     | '/q/$token'
     | '/q/decline'
     | '/super-admin/audio'
@@ -246,6 +275,7 @@ export interface FileRouteTypes {
     | '/super-admin/history'
     | '/clear-up/'
     | '/kasir/'
+    | '/manager/'
     | '/satgas/'
     | '/super-admin/'
     | '/api/audio/$audioId'
@@ -262,6 +292,8 @@ export interface FileRouteTypes {
     | '/privacy-policy'
     | '/sitemap.xml'
     | '/terms-of-use'
+    | '/manager/login'
+    | '/manager/register'
     | '/q/$token'
     | '/q/decline'
     | '/super-admin/audio'
@@ -270,6 +302,7 @@ export interface FileRouteTypes {
     | '/super-admin/history'
     | '/clear-up'
     | '/kasir'
+    | '/manager'
     | '/satgas'
     | '/super-admin'
     | '/api/audio/$audioId'
@@ -287,6 +320,8 @@ export interface FileRouteTypes {
     | '/privacy-policy'
     | '/sitemap.xml'
     | '/terms-of-use'
+    | '/manager/login'
+    | '/manager/register'
     | '/q/$token'
     | '/q/decline'
     | '/super-admin/audio'
@@ -295,6 +330,7 @@ export interface FileRouteTypes {
     | '/super-admin/history'
     | '/clear-up/'
     | '/kasir/'
+    | '/manager/'
     | '/satgas/'
     | '/super-admin/'
     | '/api/audio/$audioId'
@@ -313,10 +349,13 @@ export interface RootRouteChildren {
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsOfUseRoute: typeof TermsOfUseRoute
+  ManagerLoginRoute: typeof ManagerLoginRoute
+  ManagerRegisterRoute: typeof ManagerRegisterRoute
   QTokenRoute: typeof QTokenRoute
   QDeclineRoute: typeof QDeclineRoute
   ClearUpIndexRoute: typeof ClearUpIndexRoute
   KasirIndexRoute: typeof KasirIndexRoute
+  ManagerIndexRoute: typeof ManagerIndexRoute
   SatgasIndexRoute: typeof SatgasIndexRoute
   ApiAudioAudioIdRoute: typeof ApiAudioAudioIdRoute
   ApiSuperAdminQrExportBatchIdFormatRoute: typeof ApiSuperAdminQrExportBatchIdFormatRoute
@@ -401,6 +440,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SatgasIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manager/': {
+      id: '/manager/'
+      path: '/manager'
+      fullPath: '/manager/'
+      preLoaderRoute: typeof ManagerIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/kasir/': {
       id: '/kasir/'
       path: '/kasir'
@@ -455,6 +501,20 @@ declare module '@tanstack/react-router' {
       path: '/q/$token'
       fullPath: '/q/$token'
       preLoaderRoute: typeof QTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manager/register': {
+      id: '/manager/register'
+      path: '/manager/register'
+      fullPath: '/manager/register'
+      preLoaderRoute: typeof ManagerRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manager/login': {
+      id: '/manager/login'
+      path: '/manager/login'
+      fullPath: '/manager/login'
+      preLoaderRoute: typeof ManagerLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/super-admin/restaurants/': {
@@ -522,10 +582,13 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyPolicyRoute: PrivacyPolicyRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsOfUseRoute: TermsOfUseRoute,
+  ManagerLoginRoute: ManagerLoginRoute,
+  ManagerRegisterRoute: ManagerRegisterRoute,
   QTokenRoute: QTokenRoute,
   QDeclineRoute: QDeclineRoute,
   ClearUpIndexRoute: ClearUpIndexRoute,
   KasirIndexRoute: KasirIndexRoute,
+  ManagerIndexRoute: ManagerIndexRoute,
   SatgasIndexRoute: SatgasIndexRoute,
   ApiAudioAudioIdRoute: ApiAudioAudioIdRoute,
   ApiSuperAdminQrExportBatchIdFormatRoute:
