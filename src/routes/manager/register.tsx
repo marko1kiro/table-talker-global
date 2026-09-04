@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { CheckCircle2, Eye, EyeOff, Hash, Loader2, Lock, Store, User } from "lucide-react";
+import { AuthShell, IconField } from "@/components/dashboard/auth";
+import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { registerManager } from "@/lib/manager-auth.server";
 import { loginToRestaurant } from "@/lib/restaurants.server";
 
@@ -105,124 +106,108 @@ function ManagerRegisterPage() {
   }
 
   return (
-    <main className="flex min-h-[100svh] items-center justify-center bg-white px-4 py-10">
-      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl">
-        <h1 className="text-center text-2xl font-black text-slate-900">Buat ID MANAGER BARU</h1>
-        <form className="mt-6 space-y-4" onSubmit={submit}>
-          <label className="block text-sm font-bold text-slate-700" htmlFor="r-name">
-            Nama Lengkap
-          </label>
-          <Input
-            id="r-name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-            className="h-12 rounded-xl"
-          />
-          <label className="block text-sm font-bold text-slate-700" htmlFor="r-id">
-            ID Manager
-          </label>
-          <Input
-            id="r-id"
-            value={idManager}
-            onChange={(e) => setIdManager(e.target.value)}
-            required
-            className="h-12 rounded-xl"
-          />
-          <label className="block text-sm font-bold text-slate-700" htmlFor="r-code">
-            Kode Resto
-          </label>
-          <Input
-            id="r-code"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            required
-            className="h-12 rounded-xl"
-          />
-          <div className="min-h-[1.25rem] text-sm">
-            {looking ? (
-              <p className="flex items-center gap-2 font-semibold text-slate-500">
-                <Loader2 className="size-4 animate-spin" /> Memeriksa kode resto...
-              </p>
-            ) : restoValid ? (
-              <p className="flex items-center gap-1.5 font-semibold text-emerald-600">
-                {restoName} <CheckCircle2 className="size-4 shrink-0" />
-              </p>
-            ) : code.trim() ? (
-              <p className="font-semibold text-red-500">Kode Resto tidak ditemukan.</p>
-            ) : null}
-          </div>
-          <label className="block text-sm font-bold text-slate-700" htmlFor="r-pw">
-            Password
-          </label>
-          <div className="relative">
-            <Input
-              id="r-pw"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="h-12 rounded-xl pr-12"
-            />
-            <button
-              type="button"
-              aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-400 transition hover:text-slate-600"
-            >
-              {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
-            </button>
-          </div>
-          {passwordWeak && (
-            <p className="text-xs font-semibold text-red-500">Password minimal 8 karakter.</p>
-          )}
-          <label className="block text-sm font-bold text-slate-700" htmlFor="r-confirm">
-            Ketik Ulang Password
-          </label>
-          <div className="relative">
-            <Input
-              id="r-confirm"
-              type={showPassword ? "text" : "password"}
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              required
-              className="h-12 rounded-xl pr-12"
-            />
-            <button
-              type="button"
-              aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-400 transition hover:text-slate-600"
-            >
-              {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
-            </button>
-          </div>
-          {confirmMismatch && (
-            <p className="text-xs font-semibold text-red-500">Ketik ulang password tidak cocok.</p>
-          )}
-          {error && (
-            <p
-              role="alert"
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
-            >
-              {error}
+    <AuthShell
+      title="Buat ID MANAGER BARU"
+      footer={
+        <Link to="/manager/login" className="font-semibold text-brand-500 hover:underline">
+          Kembali ke Login Manager
+        </Link>
+      }
+    >
+      <form className="space-y-3" onSubmit={submit}>
+        <IconField
+          icon={User}
+          aria-label="Nama Lengkap"
+          placeholder="Nama Lengkap"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          autoComplete="name"
+          autoFocus
+          required
+        />
+        <IconField
+          icon={Hash}
+          aria-label="ID Manager"
+          placeholder="ID Manager"
+          value={idManager}
+          onChange={(e) => setIdManager(e.target.value)}
+          required
+        />
+        <IconField
+          icon={Store}
+          aria-label="Kode Resto"
+          placeholder="Kode Resto"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          autoComplete="organization"
+          required
+        />
+        <div className="min-h-[1.25rem] text-sm">
+          {looking ? (
+            <p className="flex items-center gap-2 font-semibold text-ta-gray-500">
+              <Loader2 className="size-4 animate-spin" /> Memeriksa kode resto...
             </p>
-          )}
-          <button
-            type="submit"
-            disabled={!canSubmit || busy}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-extrabold uppercase text-white disabled:cursor-not-allowed disabled:opacity-50"
+          ) : restoValid ? (
+            <p className="flex items-center gap-1.5 font-semibold text-ta-success">
+              {restoName} <CheckCircle2 className="size-4 shrink-0" />
+            </p>
+          ) : code.trim() ? (
+            <p className="font-semibold text-ta-error">Kode Resto tidak ditemukan.</p>
+          ) : null}
+        </div>
+        <IconField
+          icon={Lock}
+          aria-label="Password"
+          placeholder="Password"
+          type={showPassword ? "text" : "password"}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          required
+          trailing={
+            <button
+              type="button"
+              aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+              onClick={() => setShowPassword((v) => !v)}
+              className="text-ta-gray-400 transition hover:text-ta-gray-600"
+            >
+              {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+            </button>
+          }
+        />
+        {passwordWeak && (
+          <p className="text-xs font-semibold text-ta-error">Password minimal 8 karakter.</p>
+        )}
+        <IconField
+          icon={Lock}
+          aria-label="Ketik Ulang Password"
+          placeholder="Ketik Ulang Password"
+          type={showPassword ? "text" : "password"}
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          autoComplete="new-password"
+          required
+        />
+        {confirmMismatch && (
+          <p className="text-xs font-semibold text-ta-error">Ketik ulang password tidak cocok.</p>
+        )}
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
           >
-            {busy && <Loader2 className="size-4 animate-spin" />}
-            {busy ? "Menyimpan..." : "Submit"}
-          </button>
-        </form>
-        <p className="mt-6 text-center text-sm">
-          <Link to="/manager/login" className="font-bold text-cyan-700 underline">
-            Kembali ke Login Manager
-          </Link>
-        </p>
-      </div>
-    </main>
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={!canSubmit || busy}
+          className={`${taPrimaryButtonClass} w-full`}
+        >
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy ? "Menyimpan..." : "Submit"}
+        </button>
+      </form>
+    </AuthShell>
   );
 }

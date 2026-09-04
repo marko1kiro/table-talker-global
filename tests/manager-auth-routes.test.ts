@@ -57,4 +57,9 @@ describe("manager register route", () => {
     expect(text()).toContain("disabled={!canSubmit || busy}");
     expect(text()).toContain("tidak cocok");
   });
+  it("uses TailAdmin auth primitives", () => {
+    expect(text()).toContain("AuthShell");
+    expect(text()).toContain("IconField");
+    expect(text()).toContain("taPrimaryButtonClass");
+  });
 });
