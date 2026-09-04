@@ -50,6 +50,7 @@ export const loginToRestaurant = createServerFn({ method: "POST" })
         ok: true as const,
         restaurantId: login.p_rid,
         displayName: login.p_rname,
+        code: validated.code,
         tenantToken,
       };
     } catch {

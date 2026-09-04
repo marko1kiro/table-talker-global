@@ -58,6 +58,7 @@ type Step = "code" | "pin" | "role" | "identity";
 type LoginResult = {
   restaurantId: string;
   displayName: string;
+  code: string;
   tenantToken: string;
 };
 
@@ -147,6 +148,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
       setLogin({
         restaurantId: result.restaurantId,
         displayName: result.displayName,
+        code: result.code,
         tenantToken: result.tenantToken,
       });
       setPin("");
@@ -237,6 +239,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
       onRoleContinue({
         restaurantId: login.restaurantId,
         restaurantDisplayName: login.displayName,
+        restaurantCode: login.code,
         tenantToken: login.tenantToken,
         role,
         displayName: result.displayName,
