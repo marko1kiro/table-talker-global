@@ -19,6 +19,10 @@ describe("manager dashboard route", () => {
     expect(text()).toContain("groupActiveCrewByStation");
     expect(text()).toContain("reminder");
   });
+  it("lists ALL tables (1..TABLE_COUNT), not just occupied ones", () => {
+    expect(text()).toContain("TABLE_COUNT");
+    expect(text()).toContain("Array.from");
+  });
   it("accumulates a name-less activity log from notices", () => {
     expect(text()).toContain("formatOccupancyNotice");
     expect(text()).toContain("roleLabel");

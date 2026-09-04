@@ -94,7 +94,7 @@ export function ManagerLayout({
 
         <aside className="hidden md:flex md:sticky md:top-0 md:h-[100svh] w-72 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white p-4">
           <div className="mb-6 flex h-14 items-center justify-center">
-            <span className="text-lg font-black uppercase tracking-[0.25em] text-cyan-300 [text-shadow:0_0_10px_rgba(34,211,238,0.9)]">
+            <span className="bg-gradient-to-r from-red-500 via-green-500 to-blue-500 bg-clip-text text-lg font-black uppercase tracking-[0.25em] text-transparent">
               DASHBOARD
             </span>
           </div>

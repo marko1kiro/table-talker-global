@@ -17,6 +17,7 @@ import { formatOccupancyNotice, type OccupancyNotice } from "@/lib/occupancy-not
 import { buildStaleReminders, rotateIndex } from "@/lib/manager-reminder";
 import { groupActiveCrewByStation, formatWibClock } from "@/lib/manager-crew-groups";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { TABLE_COUNT } from "@/lib/audio";
 
 export const Route = createFileRoute("/manager/")({
   head: () => ({
@@ -117,6 +118,7 @@ function ManagerDashboard() {
   if (!hydrated || !identity) return null;
 
   const tables = snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
+  const statusByNumber = new Map(tables.map((t) => [t.tableNumber, t.status] as const));
 
   return (
     <ManagerLayout
@@ -172,23 +174,23 @@ function ManagerDashboard() {
             </>
           ) : (
             <ul className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-              {tables.map((t) => {
-                const terisi = t.status === "terisi";
+              {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((n) => {
+                const terisi = statusByNumber.get(n) === "terisi";
                 return (
                   <li
-                    key={t.tableNumber}
+                    key={n}
                     className="flex items-center gap-3 rounded-xl border border-slate-100 px-4 py-3"
                   >
                     <span
                       className={`text-sm font-extrabold uppercase md:hidden ${terisi ? "text-red-600" : "text-emerald-600"}`}
                     >
-                      MEJA {t.tableNumber}
+                      MEJA {n}
                     </span>
                     <span className="hidden md:flex items-center gap-3">
                       <span
                         className={`grid size-10 shrink-0 place-items-center rounded-lg text-base font-black text-white ${terisi ? "bg-red-500" : "bg-emerald-500"}`}
                       >
-                        {t.tableNumber}
+                        {n}
                       </span>
                       <span
                         className={`text-sm font-extrabold uppercase ${terisi ? "text-red-600" : "text-emerald-600"}`}
@@ -221,7 +223,7 @@ function ManagerDashboard() {
                           <th
                             key={g.label}
                             colSpan={2}
-                            className="border border-slate-200 px-3 py-2 text-center font-black"
+                            className="border border-black/10 px-3 py-2 text-center font-black"
                           >
                             {g.label}
                           </th>
@@ -230,10 +232,10 @@ function ManagerDashboard() {
                       <tr className="text-[11px] uppercase text-slate-400">
                         {groups.map((g) => (
                           <Fragment key={g.label}>
-                            <th className="border border-slate-200 px-3 py-1 text-left">
+                            <th className="border border-black/10 px-3 py-1 text-center">
                               Nama Crew
                             </th>
-                            <th className="border border-slate-200 px-3 py-1 text-left">
+                            <th className="border border-black/10 px-3 py-1 text-center">
                               Jam Masuk
                             </th>
                           </Fragment>
@@ -247,10 +249,10 @@ function ManagerDashboard() {
                             const m = g.members[r];
                             return (
                               <Fragment key={g.label}>
-                                <td className="border border-slate-100 px-3 py-2 font-bold text-slate-800">
+                                <td className="border border-black/10 px-3 py-2 text-center font-bold text-slate-800">
                                   {m?.displayName ?? ""}
                                 </td>
-                                <td className="border border-slate-100 px-3 py-2 text-slate-600">
+                                <td className="border border-black/10 px-3 py-2 text-center text-slate-600">
                                   {m ? formatWibClock(m.checkedInAt) : ""}
                                 </td>
                               </Fragment>
