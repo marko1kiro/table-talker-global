@@ -24,4 +24,10 @@ describe("ManagerLayout (TailAdmin)", () => {
     expect(text).toContain("XDIRGA LABS");
     expect(text).not.toContain("MIE GACOAN");
   });
+  it("keeps the restaurant name on one line, tight to the domain", () => {
+    const text = source();
+    expect(text).toContain("truncate");
+    expect(text).toContain("whitespace-nowrap");
+    expect(text).toContain("mt-0.5");
+  });
 });
