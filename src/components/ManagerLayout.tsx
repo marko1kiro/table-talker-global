@@ -9,12 +9,18 @@ const MENU: { id: ManagerMenu; label: string; icon: typeof Table2 }[] = [
   { id: "log", label: "LOG AKTIVITAS CREW", icon: ScrollText },
 ];
 
-// activeClass defaults to the crew-dark style used by the mobile drawer (left
-// untouched). The desktop rail passes a cyan variant instead.
+function RailTitle() {
+  return (
+    <span className="bg-gradient-to-r from-red-500 via-green-500 to-blue-500 bg-clip-text text-lg font-black uppercase tracking-[0.25em] text-transparent">
+      DASHBOARD
+    </span>
+  );
+}
+
 function NavList({
   active,
   onSelect,
-  activeClass = "bg-slate-900 text-white",
+  activeClass = "bg-cyan-500 text-white shadow-sm",
 }: {
   active: ManagerMenu;
   onSelect: (m: ManagerMenu) => void;
@@ -40,15 +46,25 @@ function NavList({
   );
 }
 
+function FooterBranding({ restaurantName }: { restaurantName: string }) {
+  return (
+    <>
+      <p className="text-sm font-extrabold uppercase text-slate-900">{restaurantName}</p>
+      <p className="mt-2 flex items-center justify-center gap-1 text-[11px] text-slate-400">
+        lihatmeja.com <span aria-label="copyright">©</span> 2026
+      </p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">XDIRGA LABS</p>
+    </>
+  );
+}
+
 export function ManagerLayout({
-  restaurantCode,
   restaurantName,
   active,
   onSelect,
   header,
   children,
 }: {
-  restaurantCode: string;
   restaurantName: string;
   active: ManagerMenu;
   onSelect: (m: ManagerMenu) => void;
@@ -82,7 +98,7 @@ export function ManagerLayout({
             />
             <div className="absolute inset-y-0 left-0 flex w-72 flex-col bg-white p-4 shadow-xl">
               <div className="mb-4 flex items-center justify-between">
-                <span className="text-sm font-black uppercase">Manager</span>
+                <RailTitle />
                 <button type="button" aria-label="Tutup" onClick={() => setOpen(false)}>
                   <X className="size-5" />
                 </button>
@@ -94,28 +110,19 @@ export function ManagerLayout({
 
         <aside className="hidden md:flex md:sticky md:top-0 md:h-[100svh] w-72 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white p-4">
           <div className="mb-6 flex h-14 items-center justify-center">
-            <span className="bg-gradient-to-r from-red-500 via-green-500 to-blue-500 bg-clip-text text-lg font-black uppercase tracking-[0.25em] text-transparent">
-              DASHBOARD
-            </span>
+            <RailTitle />
           </div>
-          <NavList active={active} onSelect={pick} activeClass="bg-cyan-500 text-white shadow-sm" />
+          <NavList active={active} onSelect={pick} />
           <div className="mt-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center">
-            <p className="text-sm font-extrabold uppercase text-slate-900">{restaurantName}</p>
-            <p className="mt-3 flex items-center justify-center gap-1 text-[11px] text-slate-400">
-              lihatmeja.com <span aria-label="copyright">©</span> 2026
-            </p>
-            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-              XDIRGA LABS
-            </p>
+            <FooterBranding restaurantName={restaurantName} />
           </div>
         </aside>
 
         <main className="min-w-0 flex-1">
           {header}
           <div className="w-full px-4 py-5 sm:px-6">{children}</div>
-          <footer className="px-4 pb-8 pt-2 text-center text-[11px] text-slate-400 md:hidden">
-            <p className="font-extrabold uppercase text-slate-600">MIE GACOAN {restaurantCode}</p>
-            <p>lihatmeja.com (c)2026 · XDIRGA LABS</p>
+          <footer className="px-4 pb-8 pt-2 text-center md:hidden">
+            <FooterBranding restaurantName={restaurantName} />
           </footer>
         </main>
       </div>

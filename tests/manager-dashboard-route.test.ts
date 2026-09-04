@@ -27,15 +27,17 @@ describe("manager dashboard route", () => {
     expect(text()).toContain("formatOccupancyNotice");
     expect(text()).toContain("roleLabel");
   });
-  it("shows only the table number on desktop, 10 per row, no cell border", () => {
+  it("shows table numbers as crew-style squares: 5/row mobile, 10/row desktop, no status text", () => {
+    expect(text()).toContain("grid-cols-5");
     expect(text()).toContain("md:grid-cols-10");
-    expect(text()).toContain("md:border-0");
-    expect(text()).toContain("hidden md:grid");
-    expect(text()).toContain("md:hidden");
     expect(text()).not.toContain("SIAP DIGUNAKAN");
     expect(text()).not.toContain("PERLU DIBERSIHKAN");
   });
-  it("renders active crew as one horizontal table, uppercase names, per-role header bg", () => {
+  it("labels the legend MEJA KOSONG / MEJA TERISI", () => {
+    expect(text()).toContain("MEJA KOSONG");
+    expect(text()).toContain("MEJA TERISI");
+  });
+  it("renders desktop crew as one horizontal table (uppercase names, per-role header bg)", () => {
     expect(text()).toContain("colSpan");
     expect(text()).toContain("Nama Crew");
     expect(text()).toContain("Jam Masuk");
@@ -44,8 +46,17 @@ describe("manager dashboard route", () => {
     expect(text()).toContain("bg-amber-500");
     expect(text()).toContain("bg-violet-500");
     expect(text()).toContain("bg-emerald-500");
+    expect(text()).toContain("hidden md:block");
+  });
+  it("renders mobile crew as role tabs (2 per row)", () => {
+    expect(text()).toContain("activeStation");
+    expect(text()).toContain("md:hidden");
+    expect(text()).toContain("grid-cols-2");
   });
   it("uses a stronger but still thin divider in the activity log", () => {
     expect(text()).toContain("divide-slate-300");
+  });
+  it("passes a stacked restaurant identity to the manager header", () => {
+    expect(text()).toContain("stackedRestaurant");
   });
 });

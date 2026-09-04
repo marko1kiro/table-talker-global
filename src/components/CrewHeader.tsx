@@ -36,6 +36,7 @@ export function CrewHeader({
   userName,
   onLogout,
   notice,
+  stackedRestaurant = false,
 }: {
   role: string;
   restaurantName?: string;
@@ -43,6 +44,7 @@ export function CrewHeader({
   userName: string;
   onLogout: () => void;
   notice?: OccupancyNotice | null;
+  stackedRestaurant?: boolean;
 }) {
   const label = formatRestaurantLabel(restaurantCode ?? "", restaurantName ?? "");
   return (
@@ -54,9 +56,20 @@ export function CrewHeader({
             alt="LIME"
             className="h-6 w-auto shrink-0 select-none sm:h-7"
           />
-          <span className="min-w-0 truncate text-[11px] font-extrabold uppercase tracking-wide text-lime-800 sm:text-xs">
-            {label}
-          </span>
+          {stackedRestaurant ? (
+            <div className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate text-[11px] font-extrabold uppercase tracking-wide text-lime-800 sm:text-xs">
+                {restaurantCode}
+              </span>
+              <span className="truncate text-[11px] font-extrabold uppercase tracking-wide text-lime-800 sm:text-xs">
+                {restaurantName}
+              </span>
+            </div>
+          ) : (
+            <span className="min-w-0 truncate text-[11px] font-extrabold uppercase tracking-wide text-lime-800 sm:text-xs">
+              {label}
+            </span>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <div className="flex flex-col items-end">
@@ -95,8 +108,8 @@ export function CrewHeader({
               </p>
             </>
           ) : (
-            <p className="text-center text-xs font-semibold text-fuchsia-400">
-              Informasi Update Status Meja Akan Muncul Disini Ya.
+            <p className="text-center text-xs font-semibold text-fuchsia-400 opacity-60">
+              Belum ada perubahan status meja
             </p>
           )}
         </div>

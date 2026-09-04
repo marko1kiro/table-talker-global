@@ -20,9 +20,18 @@ describe("CrewHeader compact layout + notice slot", () => {
     expect(source()).toContain("sticky top-0");
   });
   it("shows a placeholder when there is no notice", () => {
-    expect(source()).toContain("Informasi Update Status Meja Akan Muncul Disini Ya");
+    const file = source();
+    expect(file).toContain("Belum ada perubahan status meja");
+    expect(file).toContain("opacity-60");
+    expect(file).not.toContain("Informasi Update Status Meja Akan Muncul Disini Ya");
   });
   it("reserves enough notice height so the layout does not shift when a toast appears", () => {
     expect(source()).toContain("min-h-[3.75rem]");
+  });
+  it("supports a stacked (two-line) restaurant identity for the manager header", () => {
+    const file = source();
+    expect(file).toContain("stackedRestaurant");
+    expect(file).toContain("restaurantCode");
+    expect(file).toContain("restaurantName");
   });
 });

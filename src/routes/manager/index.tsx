@@ -36,6 +36,7 @@ function ManagerDashboard() {
   const [identity, setIdentity] = useState<ManagerIdentity | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [menu, setMenu] = useState<ManagerMenu>("tables");
+  const [activeStation, setActiveStation] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [tick, setTick] = useState(0);
   const [log, setLog] = useState<OccupancyNotice[]>([]);
@@ -122,7 +123,6 @@ function ManagerDashboard() {
 
   return (
     <ManagerLayout
-      restaurantCode={identity.restaurantCode}
       restaurantName={identity.restaurantDisplayName}
       active={menu}
       onSelect={setMenu}
@@ -134,6 +134,7 @@ function ManagerDashboard() {
           userName={identity.fullName}
           onLogout={logout}
           notice={notices.current}
+          stackedRestaurant
         />
       }
     >
@@ -154,11 +155,11 @@ function ManagerDashboard() {
           <div className="mb-3 flex items-center gap-4 text-[11px] font-bold uppercase">
             <span className="inline-flex items-center gap-1.5">
               <span className="size-2 rounded-full bg-emerald-500" />
-              Kosong
+              MEJA KOSONG
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="size-2 rounded-full bg-red-500" />
-              Terisi
+              MEJA TERISI
             </span>
           </div>
           {snapshot.isLoading ? (
@@ -173,21 +174,17 @@ function ManagerDashboard() {
               </div>
             </>
           ) : (
-            <ul className="grid grid-cols-2 gap-2 md:grid-cols-10">
+            <ul className="mx-auto grid w-fit grid-cols-5 gap-2 md:w-full md:grid-cols-10">
               {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((n) => {
                 const terisi = statusByNumber.get(n) === "terisi";
                 return (
-                  <li
-                    key={n}
-                    className="flex items-center gap-3 rounded-xl border border-slate-100 px-4 py-3 md:border-0 md:justify-center md:p-0"
-                  >
+                  <li key={n} className="flex items-center justify-center">
                     <span
-                      className={`text-sm font-extrabold uppercase md:hidden ${terisi ? "text-red-600" : "text-emerald-600"}`}
-                    >
-                      MEJA {n}
-                    </span>
-                    <span
-                      className={`hidden md:grid size-10 place-items-center rounded-lg text-base font-black text-white ${terisi ? "bg-red-500" : "bg-emerald-500"}`}
+                      className={`grid size-10 place-items-center rounded-lg text-base font-black ${
+                        terisi
+                          ? "border-2 border-red-300 bg-red-50 text-red-700 md:border-0 md:bg-red-500 md:text-white"
+                          : "border-2 border-emerald-300 bg-emerald-50 text-emerald-700 md:border-0 md:bg-emerald-500 md:text-white"
+                      }`}
                     >
                       {n}
                     </span>
@@ -208,55 +205,110 @@ function ManagerDashboard() {
               const groups = groupActiveCrewByStation(crew.data.crew);
               const maxRows = Math.max(1, ...groups.map((g) => g.members.length));
               const STATION_BG = ["bg-sky-500", "bg-amber-500", "bg-violet-500", "bg-emerald-500"];
+              const current = groups[activeStation] ?? groups[0];
               return (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="text-[11px] uppercase">
-                        {groups.map((g, gi) => (
-                          <th
-                            key={g.label}
-                            colSpan={2}
-                            className={`border border-black/10 px-3 py-2 text-center font-black text-white ${STATION_BG[gi]}`}
-                          >
-                            {g.label}
-                          </th>
-                        ))}
-                      </tr>
-                      <tr className="text-[11px] uppercase text-slate-400">
-                        {groups.map((g) => (
-                          <Fragment key={g.label}>
-                            <th className="border border-black/10 px-3 py-1 text-center">
-                              Nama Crew
+                <>
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="text-[11px] uppercase">
+                          {groups.map((g, gi) => (
+                            <th
+                              key={g.label}
+                              colSpan={2}
+                              className={`border border-black/10 px-3 py-2 text-center font-black text-white ${STATION_BG[gi]}`}
+                            >
+                              {g.label}
                             </th>
-                            <th className="border border-black/10 px-3 py-1 text-center">
-                              Jam Masuk
-                            </th>
-                          </Fragment>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Array.from({ length: maxRows }).map((_, r) => (
-                        <tr key={r}>
-                          {groups.map((g) => {
-                            const m = g.members[r];
-                            return (
-                              <Fragment key={g.label}>
-                                <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-slate-800">
-                                  {m?.displayName ?? ""}
-                                </td>
-                                <td className="border border-black/10 px-3 py-2 text-center text-slate-600">
-                                  {m ? formatWibClock(m.checkedInAt) : ""}
-                                </td>
-                              </Fragment>
-                            );
-                          })}
+                          ))}
                         </tr>
+                        <tr className="text-[11px] uppercase text-slate-400">
+                          {groups.map((g) => (
+                            <Fragment key={g.label}>
+                              <th className="border border-black/10 px-3 py-1 text-center">
+                                Nama Crew
+                              </th>
+                              <th className="border border-black/10 px-3 py-1 text-center">
+                                Jam Masuk
+                              </th>
+                            </Fragment>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: maxRows }).map((_, r) => (
+                          <tr key={r}>
+                            {groups.map((g) => {
+                              const m = g.members[r];
+                              return (
+                                <Fragment key={g.label}>
+                                  <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-slate-800">
+                                    {m?.displayName ?? ""}
+                                  </td>
+                                  <td className="border border-black/10 px-3 py-2 text-center text-slate-600">
+                                    {m ? formatWibClock(m.checkedInAt) : ""}
+                                  </td>
+                                </Fragment>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="md:hidden">
+                    <div className="grid grid-cols-2 gap-2">
+                      {groups.map((g, gi) => (
+                        <button
+                          key={g.label}
+                          type="button"
+                          onClick={() => setActiveStation(gi)}
+                          className={`min-h-11 rounded-xl px-3 py-2 text-xs font-black uppercase text-white transition ${
+                            activeStation === gi ? STATION_BG[gi] : "bg-slate-300"
+                          }`}
+                        >
+                          {g.label}
+                        </button>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+                    <table className="mt-3 w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="text-[11px] uppercase text-slate-400">
+                          <th className="border border-black/10 px-3 py-1 text-center">
+                            Nama Crew
+                          </th>
+                          <th className="border border-black/10 px-3 py-1 text-center">
+                            Jam Masuk
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {current && current.members.length > 0 ? (
+                          current.members.map((m, i) => (
+                            <tr key={`${m.displayName}-${i}`}>
+                              <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-slate-800">
+                                {m.displayName}
+                              </td>
+                              <td className="border border-black/10 px-3 py-2 text-center text-slate-600">
+                                {formatWibClock(m.checkedInAt)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td
+                              colSpan={2}
+                              className="border border-black/10 px-3 py-3 text-center text-xs text-slate-400"
+                            >
+                              Tidak ada crew aktif.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               );
             })()}
         </section>
