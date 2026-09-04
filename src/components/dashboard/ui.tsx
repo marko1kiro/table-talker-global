@@ -81,23 +81,47 @@ export function TaStatCard({
   value,
   icon: Icon,
   tone = "bg-brand-50 text-brand-500",
+  compact = false,
 }: {
   label: string;
   value: ReactNode;
   icon?: typeof Inbox;
   tone?: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-ta-gray-200 bg-white p-5 shadow-theme-sm">
+    <div
+      className={cn(
+        "rounded-xl border border-ta-gray-200 bg-white shadow-theme-sm",
+        compact ? "p-5 md:p-3" : "p-5",
+      )}
+    >
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-ta-gray-500">{label}</p>
+        <p
+          className={cn("font-medium text-ta-gray-500", compact ? "text-sm md:text-xs" : "text-sm")}
+        >
+          {label}
+        </p>
         {Icon && (
-          <span className={cn("grid size-9 place-items-center rounded-lg", tone)}>
-            <Icon className="size-5" />
+          <span
+            className={cn(
+              "grid place-items-center rounded-lg",
+              compact ? "size-9 md:size-7" : "size-9",
+              tone,
+            )}
+          >
+            <Icon className={compact ? "size-5 md:size-4" : "size-5"} />
           </span>
         )}
       </div>
-      <p className="mt-3 text-3xl font-bold tracking-tight text-ta-gray-900">{value}</p>
+      <p
+        className={cn(
+          "font-bold tracking-tight text-ta-gray-900",
+          compact ? "mt-3 text-3xl md:mt-1 md:text-xl" : "mt-3 text-3xl",
+        )}
+      >
+        {value}
+      </p>
     </div>
   );
 }

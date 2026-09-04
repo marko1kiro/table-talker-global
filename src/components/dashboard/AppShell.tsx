@@ -101,7 +101,7 @@ export function AppShell({
           </header>
 
           {notice && (
-            <div className="border-b border-brand-100 bg-brand-50 px-4 py-2 sm:px-6">
+            <div className="border-b border-brand-100 bg-brand-50 px-4 py-2 sm:px-6 md:hidden">
               <p className="truncate text-sm font-semibold uppercase text-brand-700">
                 {notice.line1}
                 <span className="ml-2 rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold text-white">

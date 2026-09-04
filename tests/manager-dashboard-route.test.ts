@@ -20,6 +20,12 @@ describe("manager dashboard route (TailAdmin)", () => {
     expect(text()).not.toContain("CrewHeader");
     expect(text()).not.toContain("OwnerUi");
   });
+  it("has compact stat cards + a reserved-height TailAdmin toast slot", () => {
+    expect(text()).toContain("TaStatCard");
+    expect(text()).toContain("compact");
+    expect(text()).toContain("ToastSlot");
+    expect(text()).toContain("min-h-[");
+  });
   it("keeps the reminder banner + full table grid", () => {
     expect(text()).toContain("reminder");
     expect(text()).toContain("TABLE_COUNT");
