@@ -1,0 +1,33 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
+
+describe("manager login route", () => {
+  const text = () => read("../src/routes/manager/login.tsx");
+  it("collects ID Manager + Password and links to register", () => {
+    expect(text()).toContain("ID Manager");
+    expect(text()).toContain("Password");
+    expect(text()).toContain("membuat ID MANAGER BARU");
+    expect(text()).toContain("loginManager");
+  });
+  it("redirects to the dashboard only after a successful login", () => {
+    expect(text()).toContain('navigate({ to: "/manager" })');
+    expect(text()).toContain("writeManagerIdentity");
+  });
+});
+
+describe("manager register route", () => {
+  const text = () => read("../src/routes/manager/register.tsx");
+  it("collects the required fields and auto-shows the resto name", () => {
+    expect(text()).toContain("Nama Lengkap");
+    expect(text()).toContain("ID Manager");
+    expect(text()).toContain("Kode Resto");
+    expect(text()).toContain("Ketik Ulang");
+    expect(text()).toContain("loginToRestaurant");
+  });
+  it("redirects to login after submit, never to the dashboard", () => {
+    expect(text()).toContain('navigate({ to: "/manager/login" })');
+    expect(text()).not.toContain('navigate({ to: "/manager" })');
+  });
+});
