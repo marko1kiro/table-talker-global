@@ -78,6 +78,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "Soundboard panggilan meja untuk restoran. Tap nomor meja, suara panggilan otomatis diputar.",
       },
       { name: "theme-color", content: "#f5f2e8" },
+      { name: "robots", content: "noindex, nofollow" },
       { property: "og:title", content: "LIME — Panggilan Meja Restoran" },
       {
         property: "og:description",

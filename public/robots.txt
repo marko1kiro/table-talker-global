@@ -1,3 +1,4 @@
+# Private web app. Block ALL crawlers, scrapers, and search engines from
+# indexing this site and every page on it.
 User-agent: *
-Allow: /
-Disallow: /manage
+Disallow: /
