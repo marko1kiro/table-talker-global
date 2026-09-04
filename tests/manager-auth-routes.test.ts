@@ -15,6 +15,16 @@ describe("manager login route", () => {
     expect(text()).toContain('navigate({ to: "/manager" })');
     expect(text()).toContain("writeManagerIdentity");
   });
+  it("uses TailAdmin auth primitives with a show/hide password toggle", () => {
+    expect(text()).toContain("AuthShell");
+    expect(text()).toContain("IconField");
+    expect(text()).toContain("showPassword");
+    expect(text()).toContain("EyeOff");
+  });
+  it("gates submit until both fields are filled", () => {
+    expect(text()).toContain("canSubmit");
+    expect(text()).toContain("disabled={!canSubmit || busy}");
+  });
 });
 
 describe("manager register route", () => {
