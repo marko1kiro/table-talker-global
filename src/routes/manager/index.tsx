@@ -188,7 +188,9 @@ function ManagerDashboard() {
               </span>
             </div>
             {snapshot.isLoading ? (
-              <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">Memuat status meja...</p>
+              <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">
+                Memuat status meja...
+              </p>
             ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
               <>
                 <TaNotice role="alert" tone="danger">
