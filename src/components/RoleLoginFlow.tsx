@@ -277,256 +277,256 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
         ))}
       </div>
 
-          {step === "code" && (
-            <>
-              <div className="mb-6">
-                <h1 className="mb-2 text-2xl font-semibold text-ta-gray-800 dark:text-white">
-                  Login Dulu
-                </h1>
-                <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">
-                  Masuk ke station kamu untuk mulai bertugas.
-                </p>
-              </div>
-              <Link
-                to="/manager/login"
-                className="inline-flex w-full items-center justify-center gap-3 rounded-lg bg-ta-gray-100 px-7 py-3 text-sm font-medium text-ta-gray-700 transition hover:bg-ta-gray-200 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
+      {step === "code" && (
+        <>
+          <div className="mb-6">
+            <h1 className="mb-2 text-2xl font-semibold text-ta-gray-800 dark:text-white">
+              Login Dulu
+            </h1>
+            <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">
+              Masuk ke station kamu untuk mulai bertugas.
+            </p>
+          </div>
+          <Link
+            to="/manager/login"
+            className="inline-flex w-full items-center justify-center gap-3 rounded-lg bg-ta-gray-100 px-7 py-3 text-sm font-medium text-ta-gray-700 transition hover:bg-ta-gray-200 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
+          >
+            <UserCog className="size-5" /> Login Manager
+          </Link>
+          <div className="relative py-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-ta-gray-200 dark:border-ta-gray-700" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-white px-3 text-ta-gray-400 dark:bg-ta-gray-900">Or</span>
+            </div>
+          </div>
+          <form className="space-y-4" onSubmit={submitCode}>
+            <IconField
+              icon={Store}
+              id="restaurant-code"
+              aria-label="Kode Resto"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="Masukkan Kode Resto"
+              autoComplete="organization"
+              required
+              autoFocus
+            />
+            {codeError && (
+              <div
+                role="alert"
+                className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
               >
-                <UserCog className="size-5" /> Login Manager
-              </Link>
-              <div className="relative py-4">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-ta-gray-200 dark:border-ta-gray-700" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="bg-white px-3 text-ta-gray-400 dark:bg-ta-gray-900">Or</span>
-                </div>
+                {codeError}
               </div>
-              <form className="space-y-4" onSubmit={submitCode}>
-                <IconField
-                  icon={Store}
-                  id="restaurant-code"
-                  aria-label="Kode Resto"
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                  placeholder="Masukkan Kode Resto"
-                  autoComplete="organization"
-                  required
-                  autoFocus
-                />
-                {codeError && (
-                  <div
-                    role="alert"
-                    className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
-                  >
-                    {codeError}
-                  </div>
-                )}
+            )}
+            <button
+              type="submit"
+              disabled={submittingCode}
+              className={`${taPrimaryButtonClass} w-full`}
+            >
+              {submittingCode && <Loader2 className="size-4 animate-spin" />}
+              {submittingCode ? "Memeriksa..." : "Lanjutkan"}
+            </button>
+          </form>
+        </>
+      )}
+
+      {step === "pin" && login && (
+        <>
+          <button
+            type="button"
+            onClick={backToCode}
+            className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600"
+          >
+            <ArrowLeft className="size-3.5" /> Ganti Kode Resto
+          </button>
+
+          <div className="mb-5 flex justify-center">
+            <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-brand-50 px-3 py-1.5 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
+              <CheckCircle2 className="size-4 shrink-0" />
+              <span className="truncate">{login.displayName}</span>
+            </span>
+          </div>
+
+          <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
+            ID Resto
+          </h1>
+          <p className="mt-1 text-center text-sm text-ta-gray-500">
+            Masukkan ID Resto (4 digit) yang diberikan admin untuk resto ini.
+          </p>
+          <form className="mt-6 space-y-4" onSubmit={submitPin}>
+            <IconField
+              icon={KeyRound}
+              id="restaurant-pin"
+              aria-label="ID Resto"
+              value={pin}
+              onChange={(event) => setPin(onlyDigits(event.target.value, 4))}
+              placeholder="0000"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={4}
+              required
+              autoFocus
+              className="text-center text-lg font-black tracking-[0.4em]"
+            />
+            {pinError && (
+              <div
+                role="alert"
+                className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
+              >
+                {pinError}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={submittingPin || pin.length !== 4}
+              className={`${taPrimaryButtonClass} w-full`}
+            >
+              {submittingPin && <Loader2 className="size-4 animate-spin" />}
+              {submittingPin ? "Memeriksa..." : "Lanjutkan"}
+            </button>
+          </form>
+        </>
+      )}
+
+      {step === "role" && login && (
+        <>
+          <button
+            type="button"
+            onClick={backToPin}
+            className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600"
+          >
+            <ArrowLeft className="size-3.5" /> Ganti ID Resto
+          </button>
+
+          <div className="mb-5 flex justify-center">
+            <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-brand-50 px-3 py-1.5 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
+              <CheckCircle2 className="size-4 shrink-0" />
+              <span className="truncate">{login.displayName}</span>
+            </span>
+          </div>
+
+          <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
+            Pilih Station
+          </h1>
+          <p className="mt-1 text-center text-sm text-ta-gray-500">
+            Pilih station kamu untuk melanjutkan.
+          </p>
+
+          <div className="mt-6 flex flex-col gap-3">
+            {CREW_ROLE_ORDER.map((option) => {
+              const meta = ROLE_META[option];
+              const Icon = meta.icon;
+              return (
                 <button
-                  type="submit"
-                  disabled={submittingCode}
-                  className={`${taPrimaryButtonClass} w-full`}
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    setRole(option);
+                    setStep("identity");
+                  }}
+                  className="group flex w-full items-center gap-3 rounded-xl border border-ta-gray-200 bg-white px-4 py-3.5 text-left shadow-theme-xs transition hover:border-brand-300 hover:bg-brand-50/40"
                 >
-                  {submittingCode && <Loader2 className="size-4 animate-spin" />}
-                  {submittingCode ? "Memeriksa..." : "Lanjutkan"}
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-white">
+                    <Icon className="size-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-ta-gray-900">
+                      {CREW_ROLE_LABELS[option]}
+                    </span>
+                    <span className="block truncate text-xs text-ta-gray-500">
+                      {meta.description}
+                    </span>
+                  </span>
                 </button>
-              </form>
-            </>
-          )}
+              );
+            })}
+          </div>
+        </>
+      )}
 
-          {step === "pin" && login && (
-            <>
-              <button
-                type="button"
-                onClick={backToCode}
-                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600"
+      {step === "identity" && role && login && (
+        <>
+          <button
+            type="button"
+            onClick={backToRole}
+            className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600"
+          >
+            <ArrowLeft className="size-3.5" /> Ganti Station
+          </button>
+
+          <div className="mb-5 flex flex-wrap items-center justify-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+              {CREW_ROLE_LABELS[role]}
+            </span>
+            <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-brand-50 px-2.5 py-1 text-xs font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
+              {login.displayName}
+            </span>
+          </div>
+
+          <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
+            Lengkapi Data
+          </h1>
+          <p className="mt-1 text-center text-sm text-ta-gray-500">
+            Isi nama dan jam kerja kamu sebagai {CREW_ROLE_LABELS[role]}.
+          </p>
+
+          <form className="mt-6 space-y-4" onSubmit={submitIdentity}>
+            <IconField
+              icon={User}
+              id="crew-name"
+              aria-label="Nama"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Nama kamu"
+              required
+              autoFocus
+            />
+            <IconField
+              icon={Calendar}
+              id="checked-in-at"
+              aria-label="Tanggal & Jam Kerja"
+              type="datetime-local"
+              value={checkedInAt}
+              onChange={(event) => setCheckedInAt(event.target.value)}
+              required
+            />
+            {identityError && (
+              <div
+                role="alert"
+                className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
               >
-                <ArrowLeft className="size-3.5" /> Ganti Kode Resto
-              </button>
-
-              <div className="mb-5 flex justify-center">
-                <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-brand-50 px-3 py-1.5 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
-                  <CheckCircle2 className="size-4 shrink-0" />
-                  <span className="truncate">{login.displayName}</span>
-                </span>
+                {identityError}
               </div>
-
-              <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
-                ID Resto
-              </h1>
-              <p className="mt-1 text-center text-sm text-ta-gray-500">
-                Masukkan ID Resto (4 digit) yang diberikan admin untuk resto ini.
-              </p>
-              <form className="mt-6 space-y-4" onSubmit={submitPin}>
-                <IconField
-                  icon={KeyRound}
-                  id="restaurant-pin"
-                  aria-label="ID Resto"
-                  value={pin}
-                  onChange={(event) => setPin(onlyDigits(event.target.value, 4))}
-                  placeholder="0000"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  maxLength={4}
-                  required
-                  autoFocus
-                  className="text-center text-lg font-black tracking-[0.4em]"
-                />
-                {pinError && (
-                  <div
-                    role="alert"
-                    className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
-                  >
-                    {pinError}
-                  </div>
-                )}
-                <button
-                  type="submit"
-                  disabled={submittingPin || pin.length !== 4}
-                  className={`${taPrimaryButtonClass} w-full`}
-                >
-                  {submittingPin && <Loader2 className="size-4 animate-spin" />}
-                  {submittingPin ? "Memeriksa..." : "Lanjutkan"}
-                </button>
-              </form>
-            </>
-          )}
-
-          {step === "role" && login && (
-            <>
-              <button
-                type="button"
-                onClick={backToPin}
-                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600"
-              >
-                <ArrowLeft className="size-3.5" /> Ganti ID Resto
-              </button>
-
-              <div className="mb-5 flex justify-center">
-                <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-brand-50 px-3 py-1.5 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
-                  <CheckCircle2 className="size-4 shrink-0" />
-                  <span className="truncate">{login.displayName}</span>
-                </span>
-              </div>
-
-              <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
-                Pilih Station
-              </h1>
-              <p className="mt-1 text-center text-sm text-ta-gray-500">
-                Pilih station kamu untuk melanjutkan.
-              </p>
-
-              <div className="mt-6 flex flex-col gap-3">
-                {CREW_ROLE_ORDER.map((option) => {
-                  const meta = ROLE_META[option];
-                  const Icon = meta.icon;
-                  return (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => {
-                        setRole(option);
-                        setStep("identity");
-                      }}
-                      className="group flex w-full items-center gap-3 rounded-xl border border-ta-gray-200 bg-white px-4 py-3.5 text-left shadow-theme-xs transition hover:border-brand-300 hover:bg-brand-50/40"
-                    >
-                      <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-white">
-                        <Icon className="size-5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-bold text-ta-gray-900">
-                          {CREW_ROLE_LABELS[option]}
-                        </span>
-                        <span className="block truncate text-xs text-ta-gray-500">
-                          {meta.description}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-
-          {step === "identity" && role && login && (
-            <>
-              <button
-                type="button"
-                onClick={backToRole}
-                className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600"
-              >
-                <ArrowLeft className="size-3.5" /> Ganti Station
-              </button>
-
-              <div className="mb-5 flex flex-wrap items-center justify-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white">
-                  {CREW_ROLE_LABELS[role]}
-                </span>
-                <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-brand-50 px-2.5 py-1 text-xs font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
-                  {login.displayName}
-                </span>
-              </div>
-
-              <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
-                Lengkapi Data
-              </h1>
-              <p className="mt-1 text-center text-sm text-ta-gray-500">
-                Isi nama dan jam kerja kamu sebagai {CREW_ROLE_LABELS[role]}.
-              </p>
-
-              <form className="mt-6 space-y-4" onSubmit={submitIdentity}>
-                <IconField
-                  icon={User}
-                  id="crew-name"
-                  aria-label="Nama"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Nama kamu"
-                  required
-                  autoFocus
-                />
-                <IconField
-                  icon={Calendar}
-                  id="checked-in-at"
-                  aria-label="Tanggal & Jam Kerja"
-                  type="datetime-local"
-                  value={checkedInAt}
-                  onChange={(event) => setCheckedInAt(event.target.value)}
-                  required
-                />
-                {identityError && (
-                  <div
-                    role="alert"
-                    className="rounded-lg bg-ta-error/10 px-4 py-3 text-sm font-semibold text-ta-error"
-                  >
-                    {identityError}
-                  </div>
-                )}
-                <button
-                  type="submit"
-                  disabled={!canSubmitIdentity || submittingIdentity}
-                  className={
-                    canSubmitIdentity
-                      ? `${taPrimaryButtonClass} w-full`
-                      : "flex h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-ta-gray-100 text-sm font-semibold text-ta-gray-400"
-                  }
-                >
-                  {submittingIdentity ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" /> Memproses...
-                    </>
-                  ) : canSubmitIdentity ? (
-                    <>
-                      <Unlock className="size-4" /> Masuk
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="size-4" /> Lengkapi Data
-                    </>
-                  )}
-                </button>
-              </form>
-            </>
-          )}
+            )}
+            <button
+              type="submit"
+              disabled={!canSubmitIdentity || submittingIdentity}
+              className={
+                canSubmitIdentity
+                  ? `${taPrimaryButtonClass} w-full`
+                  : "flex h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-ta-gray-100 text-sm font-semibold text-ta-gray-400"
+              }
+            >
+              {submittingIdentity ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Memproses...
+                </>
+              ) : canSubmitIdentity ? (
+                <>
+                  <Unlock className="size-4" /> Masuk
+                </>
+              ) : (
+                <>
+                  <Lock className="size-4" /> Lengkapi Data
+                </>
+              )}
+            </button>
+          </form>
+        </>
+      )}
 
       <p className="mt-6 text-center text-xs leading-5 text-ta-gray-400">
         Aktivitas login dapat dicatat untuk keamanan operasional.
