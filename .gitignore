@@ -44,3 +44,7 @@ dist-ssr
 
 # Supabase CLI local artifacts
 supabase/.temp/
+
+.playwright-mcp/
+.vercel
+.env*
