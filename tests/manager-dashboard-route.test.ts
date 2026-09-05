@@ -34,4 +34,11 @@ describe("manager dashboard route (TailAdmin)", () => {
     expect(text()).toContain("TABLE_COUNT");
     expect(text()).toContain("md:grid-cols-10");
   });
+  it("counts Kosong as TABLE_COUNT minus terisi so it matches the grid", () => {
+    // Bug: the snapshot only returns tables that have an occupancy row, so
+    // filtering status === "kosong" undercounts vs the grid (which renders all
+    // TABLE_COUNT slots and treats a missing table as kosong).
+    expect(text()).not.toContain('t.status === "kosong"');
+    expect(text()).toContain("TABLE_COUNT - terisiCount");
+  });
 });

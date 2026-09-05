@@ -138,6 +138,10 @@ function ManagerDashboard() {
 
   const tables = snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
   const statusByNumber = new Map(tables.map((t) => [t.tableNumber, t.status] as const));
+  // The snapshot only returns tables that have an occupancy row; the grid
+  // renders all TABLE_COUNT slots and treats a missing table as kosong. Count
+  // terisi from the rows and derive kosong so the cards match the grid.
+  const terisiCount = tables.filter((t) => t.status === "terisi").length;
 
   return (
     <ManagerLayout
@@ -163,16 +167,8 @@ function ManagerDashboard() {
       {menu === "tables" && (
         <>
           <div className="mb-3 grid grid-cols-3 gap-2">
-            <TaStatCard
-              compact
-              label="Terisi"
-              value={tables.filter((t) => t.status === "terisi").length}
-            />
-            <TaStatCard
-              compact
-              label="Kosong"
-              value={tables.filter((t) => t.status === "kosong").length}
-            />
+            <TaStatCard compact label="Terisi" value={terisiCount} />
+            <TaStatCard compact label="Kosong" value={TABLE_COUNT - terisiCount} />
             <TaStatCard compact label="Perlu Dicek" value={staleNotices.length} />
           </div>
           <ToastSlot notice={notices.current} />
