@@ -38,6 +38,11 @@ describe("ProfileMenu", () => {
     expect(s).toContain("onLogout");
     expect(s).toContain("Keluar");
   });
+  it("shows the manager ID below the name in the dropdown", () => {
+    const s = src("ProfileMenu.tsx");
+    expect(s).toContain("idManager");
+    expect(s).toContain("ID:");
+  });
 });
 
 describe("RoleEmblem", () => {

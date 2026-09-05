@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, KeyRound, LogOut, UserRound } from "lucide-react";
 
-export function ProfileMenu({ name, onLogout }: { name: string; onLogout: () => void }) {
+export function ProfileMenu({
+  name,
+  idManager,
+  onLogout,
+}: {
+  name: string;
+  idManager: string;
+  onLogout: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -38,6 +46,9 @@ export function ProfileMenu({ name, onLogout }: { name: string; onLogout: () => 
         <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-ta-gray-200 bg-white py-1 shadow-theme-md dark:border-ta-gray-700 dark:bg-ta-gray-800">
           <div className="border-b border-ta-gray-100 px-4 py-2 dark:border-ta-gray-700">
             <p className="truncate text-sm font-semibold">{name}</p>
+            <p className="truncate text-xs text-ta-gray-500 dark:text-ta-gray-400">
+              ID: {idManager}
+            </p>
           </div>
           <button
             type="button"

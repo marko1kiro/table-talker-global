@@ -26,6 +26,7 @@ describe("manager dashboard route (TailAdmin)", () => {
     expect(text()).toContain("ThemeToggle");
     expect(text()).toContain("NotificationBell");
     expect(text()).toContain("ProfileMenu");
+    expect(text()).toContain("idManager={identity.idManager}");
   });
   it("drops the rotating reminder line but keeps the Perlu Dicek stat", () => {
     expect(text()).not.toContain("rotateIndex");

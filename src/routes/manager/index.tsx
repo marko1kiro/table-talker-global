@@ -183,7 +183,7 @@ function ManagerDashboard() {
           <RoleEmblem label="MANAGER" />
           <ThemeToggle />
           <NotificationBell items={staleNotices} />
-          <ProfileMenu name={identity.fullName} onLogout={logout} />
+          <ProfileMenu name={identity.fullName} idManager={identity.idManager} onLogout={logout} />
         </>
       }
     >
