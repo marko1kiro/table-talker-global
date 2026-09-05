@@ -159,13 +159,20 @@ describe("RoleLoginFlow: never shows removed remote-audio/heartbeat copy", () =>
   });
 });
 
-describe("RoleLoginFlow: TailAdmin restyle (presentational only)", () => {
-  it("uses TailAdmin card + brand button + icon fields, logo inside card", () => {
+describe("RoleLoginFlow: TailAdmin split layout", () => {
+  it("uses AuthLayout + brand button + icon fields", () => {
     const text = source();
+    expect(text).toContain("AuthLayout");
     expect(text).toContain("taPrimaryButtonClass");
     expect(text).toContain("IconField");
-    expect(text).toContain("bg-brand-50");
-    expect(text).toContain("shadow-theme-md");
+  });
+  it("manager entry is a demo-style secondary button, no X button, with Or divider", () => {
+    const text = source();
+    expect(text).toContain("Login Manager");
+    expect(text).toContain("bg-ta-gray-100");
+    expect(text).toContain(">Or<");
+    expect(text).not.toContain("Sign in with X");
+    expect(text).not.toContain("Khusus Pimpinan Shift");
   });
   it("renames the code heading and drops the helper copy + hero icon boxes", () => {
     const text = source();

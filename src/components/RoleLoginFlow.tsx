@@ -18,7 +18,7 @@ import {
   Volume2,
   Wallet,
 } from "lucide-react";
-import { IconField } from "@/components/dashboard/auth";
+import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { loginToRestaurant, verifyRestaurantPin } from "@/lib/restaurants.server";
 import { normalizeCrewName } from "@/lib/remote-audio-domain";
@@ -261,50 +261,47 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
   const canSubmitIdentity = name.trim().length > 0 && checkedInAt.trim().length > 0;
 
   return (
-    <main className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-ta-gray-50 px-4 py-10 font-outfit sm:px-6">
-      <div className="relative w-full max-w-md">
-        <div className="mb-5 flex items-center justify-center gap-2">
-          {STEP_ORDER.map((s, i) => (
-            <span
-              key={s}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === stepIndex
-                  ? "w-8 bg-brand-500"
-                  : i < stepIndex
-                    ? "w-4 bg-brand-300"
-                    : "w-4 bg-ta-gray-200"
-              }`}
-            />
-          ))}
-        </div>
-
-        <div className="rounded-2xl border border-ta-gray-200 bg-white p-6 shadow-theme-md sm:p-8">
-          <div className="mb-6 flex flex-col items-center gap-2 text-center">
-            <span className="grid size-16 place-items-center rounded-2xl bg-brand-50">
-              <img src="/lime-logo.webp" alt="LIME" className="h-9 w-auto select-none" />
-            </span>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-ta-gray-400">
-              Login Crew
-            </p>
-          </div>
+    <AuthLayout>
+      <div className="mb-5 flex items-center justify-center gap-2">
+        {STEP_ORDER.map((s, i) => (
+          <span
+            key={s}
+            className={`h-1.5 rounded-full transition-all duration-300 ${
+              i === stepIndex
+                ? "w-8 bg-brand-500"
+                : i < stepIndex
+                  ? "w-4 bg-brand-300"
+                  : "w-4 bg-ta-gray-200"
+            }`}
+          />
+        ))}
+      </div>
 
           {step === "code" && (
             <>
-              <h1 className="text-center text-2xl font-bold tracking-tight text-ta-gray-900">
-                Login Dulu
-              </h1>
-              <div className="mt-5 mb-1 rounded-xl border border-ta-gray-200 bg-ta-gray-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-ta-gray-500">
-                  Khusus Pimpinan Shift
+              <div className="mb-6">
+                <h1 className="mb-2 text-2xl font-semibold text-ta-gray-800 dark:text-white">
+                  Login Dulu
+                </h1>
+                <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">
+                  Masuk ke station kamu untuk mulai bertugas.
                 </p>
-                <Link
-                  to="/manager/login"
-                  className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-brand-500 text-sm font-bold uppercase tracking-wide text-white transition hover:bg-brand-600"
-                >
-                  <UserCog className="size-4" /> Login MANAGER
-                </Link>
               </div>
-              <form className="mt-6 space-y-4" onSubmit={submitCode}>
+              <Link
+                to="/manager/login"
+                className="inline-flex w-full items-center justify-center gap-3 rounded-lg bg-ta-gray-100 px-7 py-3 text-sm font-medium text-ta-gray-700 transition hover:bg-ta-gray-200 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
+              >
+                <UserCog className="size-5" /> Login Manager
+              </Link>
+              <div className="relative py-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-ta-gray-200 dark:border-ta-gray-700" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-white px-3 text-ta-gray-400 dark:bg-ta-gray-900">Or</span>
+                </div>
+              </div>
+              <form className="space-y-4" onSubmit={submitCode}>
                 <IconField
                   icon={Store}
                   id="restaurant-code"
@@ -530,12 +527,10 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
               </form>
             </>
           )}
-        </div>
 
-        <p className="mt-6 text-center text-xs leading-5 text-ta-gray-400">
-          Aktivitas login dapat dicatat untuk keamanan operasional.
-        </p>
-      </div>
-    </main>
+      <p className="mt-6 text-center text-xs leading-5 text-ta-gray-400">
+        Aktivitas login dapat dicatat untuk keamanan operasional.
+      </p>
+    </AuthLayout>
   );
 }
