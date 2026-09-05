@@ -46,4 +46,15 @@ describe("manager dashboard route (TailAdmin)", () => {
     expect(text()).not.toContain("w-fit");
     expect(text()).toContain("aspect-square");
   });
+  it("mobile-only: small colored cards + sticky compact badge on scroll", () => {
+    // Desktop keeps the TailAdmin stat cards (hidden below md); mobile gets a
+    // compact colored variant plus a fixed single-row badge that appears once
+    // the cards scroll under the header (IntersectionObserver -> stuck).
+    expect(text()).toContain("hidden grid-cols-3 gap-2 md:grid");
+    expect(text()).toContain("MobileStat");
+    expect(text()).toContain("text-ta-warning");
+    expect(text()).toContain("IntersectionObserver");
+    expect(text()).toContain("setStuck");
+    expect(text()).toContain("fixed inset-x-0");
+  });
 });

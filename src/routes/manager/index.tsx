@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ManagerLayout, type ManagerMenu } from "@/components/ManagerLayout";
@@ -54,6 +54,15 @@ function ToastSlot({ notice }: { notice: OccupancyNotice | null }) {
   );
 }
 
+function MobileStat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="rounded-lg border border-ta-gray-200 bg-white px-2 py-1.5 text-center shadow-theme-sm dark:border-ta-gray-700 dark:bg-ta-gray-800">
+      <p className={`truncate text-[10px] font-bold uppercase ${color}`}>{label}</p>
+      <p className={`text-lg leading-tight font-black ${color}`}>{value}</p>
+    </div>
+  );
+}
+
 function ManagerDashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -64,6 +73,8 @@ function ManagerDashboard() {
   const [now, setNow] = useState(() => Date.now());
   const [log, setLog] = useState<OccupancyNotice[]>([]);
   const notices = useNoticeQueue();
+  const [stuck, setStuck] = useState(false);
+  const cardsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const stored = readManagerIdentity(browserManagerStorage());
@@ -129,6 +140,24 @@ function ManagerDashboard() {
     return buildStaleNotices(tables, now);
   }, [snapshot.data, now]);
 
+  // Mobile only: once the stat cards scroll up under the sticky header, flip
+  // `stuck` so the compact single-row badge pins below the header. The header
+  // is ~49px tall, so the root is inset by that amount.
+  useEffect(() => {
+    if (menu !== "tables") {
+      setStuck(false);
+      return;
+    }
+    const el = cardsRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([entry]) => setStuck(!entry.isIntersecting), {
+      rootMargin: "-49px 0px 0px 0px",
+      threshold: 0,
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [menu]);
+
   const logout = () => {
     removeManagerIdentity(browserManagerStorage());
     void navigate({ to: "/manager/login" });
@@ -166,11 +195,27 @@ function ManagerDashboard() {
 
       {menu === "tables" && (
         <>
-          <div className="mb-3 grid grid-cols-3 gap-2">
+          <div className="mb-3 hidden grid-cols-3 gap-2 md:grid">
             <TaStatCard compact label="Terisi" value={terisiCount} />
             <TaStatCard compact label="Kosong" value={TABLE_COUNT - terisiCount} />
             <TaStatCard compact label="Perlu Dicek" value={staleNotices.length} />
           </div>
+          <div ref={cardsRef} className="mb-3 grid grid-cols-3 gap-2 md:hidden">
+            <MobileStat label="Terisi" value={terisiCount} color="text-ta-error" />
+            <MobileStat label="Kosong" value={TABLE_COUNT - terisiCount} color="text-ta-success" />
+            <MobileStat label="Perlu Dicek" value={staleNotices.length} color="text-ta-warning" />
+          </div>
+          {stuck && (
+            <div className="fixed inset-x-0 top-[49px] z-20 md:hidden">
+              <div className="flex items-center justify-center gap-2 border-b border-ta-gray-200 bg-white/95 px-3 py-1 text-[11px] font-bold uppercase shadow-theme-sm backdrop-blur dark:border-ta-gray-700 dark:bg-ta-gray-800/95">
+                <span className="text-ta-error">Terisi {terisiCount}</span>
+                <span className="text-ta-gray-300 dark:text-ta-gray-600">|</span>
+                <span className="text-ta-success">Kosong {TABLE_COUNT - terisiCount}</span>
+                <span className="text-ta-gray-300 dark:text-ta-gray-600">|</span>
+                <span className="text-ta-warning">Perlu Dicek {staleNotices.length}</span>
+              </div>
+            </div>
+          )}
           <ToastSlot notice={notices.current} />
           <TaCard>
             <div className="mb-3 flex items-center gap-4 text-[11px] font-bold uppercase text-ta-gray-500 dark:text-ta-gray-400">
