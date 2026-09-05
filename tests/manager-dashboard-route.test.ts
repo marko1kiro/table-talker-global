@@ -17,16 +17,15 @@ describe("manager dashboard route (TailAdmin)", () => {
     expect(text()).toContain("ManagerLayout");
     expect(text()).toContain("TaCard");
     expect(text()).toContain("TaStatCard");
-    expect(text()).toContain("ToastSlot");
+    expect(text()).not.toContain("ToastSlot");
     expect(text()).not.toContain("CrewHeader");
     expect(text()).not.toContain("OwnerUi");
   });
-  it("renders the header cluster (emblem, toggle, bell, profile)", () => {
-    expect(text()).toContain("RoleEmblem");
-    expect(text()).toContain("ThemeToggle");
-    expect(text()).toContain("NotificationBell");
-    expect(text()).toContain("ProfileMenu");
-    expect(text()).toContain("idManager={identity.idManager}");
+  it("renders the unified header cluster via DashboardHeaderRight", () => {
+    expect(text()).toContain("DashboardHeaderRight");
+    expect(text()).toContain('roleLabel="MANAGER"');
+    expect(text()).toContain("useNotificationCenter");
+    expect(text()).toContain("idManager: identity.idManager");
   });
   it("drops the rotating reminder line but keeps the Perlu Dicek stat", () => {
     expect(text()).not.toContain("rotateIndex");

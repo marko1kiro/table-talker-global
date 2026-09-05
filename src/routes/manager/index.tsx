@@ -3,10 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ManagerLayout, type ManagerMenu } from "@/components/ManagerLayout";
 import { TaCard, TaNotice, TaEmpty, TaRetry, TaStatCard } from "@/components/dashboard/ui";
-import { RoleEmblem } from "@/components/dashboard/RoleEmblem";
-import { ThemeToggle } from "@/components/dashboard/ThemeToggle";
-import { NotificationBell } from "@/components/dashboard/NotificationBell";
-import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
+import { DashboardHeaderRight } from "@/components/dashboard/DashboardHeaderRight";
 import {
   browserManagerStorage,
   readManagerIdentity,
@@ -15,8 +12,8 @@ import {
 } from "@/lib/manager-session-identity";
 import { getManagerSnapshot, getManagerActiveCrew } from "@/lib/manager-dashboard.server";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
-import { useNoticeQueue } from "@/hooks/use-notice-queue";
-import { formatOccupancyNotice, type OccupancyNotice } from "@/lib/occupancy-notice";
+import { useNotificationCenter } from "@/hooks/use-notification-center";
+import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { buildStaleNotices } from "@/lib/manager-reminder";
 import { groupActiveCrewByStation, formatWibClock } from "@/lib/manager-crew-groups";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -31,27 +28,6 @@ export const Route = createFileRoute("/manager/")({
 
 function snapshotKey(id: string) {
   return ["manager-snapshot", id] as const;
-}
-
-// Desktop-only toast slot with a reserved height so the layout never shifts
-// when a live notice arrives. Mobile keeps the AppShell header banner (md:hidden).
-function ToastSlot({ notice }: { notice: OccupancyNotice | null }) {
-  return (
-    <div className="mb-4 hidden min-h-[3.5rem] items-center rounded-xl border border-brand-100 bg-brand-50/60 px-4 md:flex dark:border-ta-gray-700 dark:bg-brand-500/10">
-      {notice ? (
-        <p className="truncate text-sm font-semibold uppercase text-brand-700 dark:text-brand-300">
-          {notice.line1}
-          <span className="ml-2 rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold text-white">
-            {notice.roleLabel}
-          </span>
-        </p>
-      ) : (
-        <p className="text-sm font-medium text-ta-gray-400 opacity-60">
-          Belum ada perubahan status meja
-        </p>
-      )}
-    </div>
-  );
 }
 
 function MobileStat({ label, value, color }: { label: string; value: number; color: string }) {
@@ -71,8 +47,7 @@ function ManagerDashboard() {
   const [menu, setMenu] = useState<ManagerMenu>("tables");
   const [activeStation, setActiveStation] = useState(0);
   const [now, setNow] = useState(() => Date.now());
-  const [log, setLog] = useState<OccupancyNotice[]>([]);
-  const notices = useNoticeQueue();
+  const { items, unread, push, markRead } = useNotificationCenter();
   const [stuck, setStuck] = useState(false);
   const cardsRef = useRef<HTMLDivElement>(null);
 
@@ -127,10 +102,7 @@ function ManagerDashboard() {
     null,
     (broadcast) => {
       const notice = formatOccupancyNotice(broadcast);
-      if (notice) {
-        notices.push(notice);
-        setLog((prev) => [notice, ...prev].slice(0, 100));
-      }
+      if (notice) push(notice);
     },
     "bind_manager_session_realtime",
   );
@@ -177,14 +149,13 @@ function ManagerDashboard() {
       restaurantName={identity.restaurantDisplayName}
       active={menu}
       onSelect={setMenu}
-      notice={notices.current}
       headerRight={
-        <>
-          <RoleEmblem label="MANAGER" />
-          <ThemeToggle />
-          <NotificationBell items={staleNotices} />
-          <ProfileMenu name={identity.fullName} idManager={identity.idManager} onLogout={logout} />
-        </>
+        <DashboardHeaderRight
+          roleLabel="MANAGER"
+          profile={{ name: identity.fullName, idManager: identity.idManager }}
+          notifications={{ stale: staleNotices, feed: items, unread, onOpen: markRead }}
+          onLogout={logout}
+        />
       }
     >
       {realtimeStatus !== "SUBSCRIBED" && (
@@ -216,7 +187,6 @@ function ManagerDashboard() {
               </div>
             </div>
           )}
-          <ToastSlot notice={notices.current} />
           <TaCard>
             <div className="mb-3 flex items-center gap-4 text-[11px] font-bold uppercase text-ta-gray-500 dark:text-ta-gray-400">
               <span className="inline-flex items-center gap-1.5">
@@ -267,7 +237,6 @@ function ManagerDashboard() {
 
       {menu === "crew" && (
         <>
-          <ToastSlot notice={notices.current} />
           <TaCard>
             {crew.isLoading && (
               <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">Memuat crew...</p>
@@ -395,16 +364,15 @@ function ManagerDashboard() {
 
       {menu === "log" && (
         <>
-          <ToastSlot notice={notices.current} />
           <TaCard title="Log Aktivitas Crew">
-            {log.length === 0 ? (
+            {items.length === 0 ? (
               <TaEmpty
                 title="Belum ada aktivitas"
                 description="Aktivitas perubahan status meja akan muncul di sini selama halaman terbuka."
               />
             ) : (
               <ul className="divide-y divide-ta-gray-200 dark:divide-ta-gray-700">
-                {log.map((n, i) => (
+                {items.map((n, i) => (
                   <li
                     key={`${n.line1}-${i}`}
                     className="flex items-center justify-between py-2 text-sm"
