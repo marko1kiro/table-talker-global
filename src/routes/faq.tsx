@@ -24,11 +24,15 @@ export const Route = createFileRoute("/faq")({
 const faqs = [
   {
     q: "Apa itu LIME?",
-    a: "LIME adalah soundboard panggilan meja berbasis web. Crew restoran cukup menekan nomor meja untuk memutar rekaman panggilan pesanan otomatis.",
+    a: "LIME adalah sistem manajemen meja restoran berbasis web: panggilan pelanggan otomatis lewat soundboard, status meja KOSONG/TERISI yang tersinkron real-time, pemesanan mandiri pelanggan via QR di meja, serta dashboard monitoring untuk Manager dan Owner.",
   },
   {
     q: "Bagaimana cara login sebagai crew?",
-    a: "Masukkan Kode Resto yang diberikan oleh administrator restoran pada dialog yang muncul saat pertama membuka aplikasi.",
+    a: "Masukkan Kode Resto yang diberikan administrator restoran pada dialog yang muncul saat pertama membuka aplikasi. Setelah kode valid, pilih peran Anda: SS (soundboard), Kasir, Satgas, atau Clear Up.",
+  },
+  {
+    q: "Bagaimana Manager masuk ke dashboard?",
+    a: "Manager masuk melalui halaman login Manager khusus memakai ID Manager dan password. Akun Manager dibuat lewat halaman registrasi Manager dengan mencantumkan kode restoran, ID Manager, nama lengkap, dan password.",
   },
   {
     q: "Kenapa audio tidak keluar suara saat pertama dibuka?",
@@ -36,15 +40,27 @@ const faqs = [
   },
   {
     q: "Apakah audio bisa dipakai tanpa koneksi internet?",
-    a: "Audio yang sudah tersinkron akan tersimpan di cache browser sehingga tetap bisa diputar meski koneksi sempat terputus. Sinkronisasi awal tetap memerlukan koneksi internet.",
+    a: "Audio yang sudah tersinkron akan tersimpan di cache browser sehingga tetap bisa diputar meski koneksi sempat terputus. Sinkronisasi awal tetap membutuhkan koneksi internet.",
   },
   {
-    q: "Kenapa jumlah meja yang siap tidak sesuai?",
-    a: "Katalog audio dikelola oleh administrator restoran. Jika ada nomor meja yang belum tersedia audionya, hubungi admin restoran Anda untuk melengkapi katalog.",
+    q: "Bagaimana status meja bisa berubah otomatis?",
+    a: "Ada dua jalur: pelanggan mengonfirmasi duduk lewat QR di meja (otomatis tercatat sebagai pindai QR), atau crew menandai langsung dari dashboard perannya — Kasir untuk pembayaran di kasir, Satgas untuk tamu yang diantar, dan Clear Up setelah meja dibersihkan. Semua perubahan langsung tersinkron real-time ke seluruh dashboard.",
   },
   {
-    q: "Apakah data saya aman?",
-    a: "Setiap restoran memiliki data dan sesi yang terpisah. Akses diverifikasi melalui kode resto dan sesi crew yang tervalidasi di server.",
+    q: "Apa arti 'Perlu Dicek' di dashboard Manager?",
+    a: "Label Perlu Dicek muncul pada meja yang sudah TERISI lebih dari 2 jam. Manager disarankan memeriksa kondisi meja tersebut, misalnya menanyakan ulang ke tamu atau memastikan crew sudah menangani meja itu.",
+  },
+  {
+    q: "Apakah LIME bisa dipakai di HP?",
+    a: "Ya. Seluruh dashboard crew dan stasiun SS dirancang mobile-first agar nyaman dipakai sambil berdiri. Dashboard Manager dan Kasir juga responsif bila dibuka di desktop atau PC.",
+  },
+  {
+    q: "Apakah ada mode gelap?",
+    a: "Ada. Tombol tema gelap/terang tersedia di header dan menu profil setiap dashboard. Pilihan tema tersimpan di perangkat sehingga tampilan konsisten saat aplikasi dibuka kembali.",
+  },
+  {
+    q: "Apakah data restoran saya aman?",
+    a: "Setiap restoran memiliki data, katalog audio, dan sesi yang terpisah secara ketat per tenant. Akses crew diverifikasi lewat kode resto, sesi Manager divalidasi di server, dan login Owner dibatasi percobaan untuk mencegah penyalahgunaan.",
   },
 ];
 

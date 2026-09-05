@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Volume2, Zap, ShieldCheck, Radio } from "lucide-react";
+import { Volume2, Radio, QrCode, Users, LayoutDashboard, ShieldCheck } from "lucide-react";
 
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/about")({
       {
         name: "description",
         content:
-          "LIME adalah soundboard panggilan meja untuk restoran. Kenali cara kerja dan tujuan aplikasi ini.",
+          "LIME adalah sistem manajemen meja restoran: panggilan meja otomatis, status meja real-time, pemesanan mandiri via QR, serta monitoring Manager dan Owner. Kenali cara kerja dan tujuan aplikasi ini.",
       },
       { property: "og:title", content: "Tentang — LIME" },
       { property: "og:url", content: "/about" },
@@ -26,23 +26,33 @@ export const Route = createFileRoute("/about")({
 const points = [
   {
     icon: Volume2,
-    title: "Soundboard Panggilan Meja",
-    body: "Tap nomor meja untuk memutar rekaman panggilan otomatis, sehingga crew tidak perlu berteriak manual di area dapur atau kasir.",
-  },
-  {
-    icon: Zap,
-    title: "Cepat & Ringan",
-    body: "Audio disinkronkan dan disimpan di cache browser, jadi pemutaran instan begitu tombol ditekan tanpa jeda loading berulang.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Akses Terbatas per Restoran",
-    body: "Setiap crew login memakai kode resto unik. Katalog audio, sesi, dan riwayat dipisahkan per tenant restoran.",
+    title: "Panggilan Meja Otomatis",
+    body: "Crew cukup menekan nomor meja di stasiun SS dan LIME memutar rekaman panggilan secara otomatis, lengkap dengan katalog pengumuman umum, info, dan larangan. Tidak perlu lagi crew berteriak manual di area dapur atau kasir.",
   },
   {
     icon: Radio,
-    title: "Terus Dikembangkan",
-    body: "Aplikasi ini terus disempurnakan agar operasional panggilan meja di restoran makin praktis dan andal.",
+    title: "Status Meja Real-Time",
+    body: "Status KOSONG dan TERISI tersinkron langsung lintas peran: Kasir, Satgas, Clear Up, hingga dashboard Manager. Setiap perubahan langsung terlihat di seluruh dashboard tanpa perlu memuat ulang halaman.",
+  },
+  {
+    icon: QrCode,
+    title: "Pemesanan Mandiri via QR",
+    body: "Pelanggan memindai QR yang tersedia di meja untuk konfirmasi duduk, dan meja otomatis tercatat TERISI. Bila pelanggan membatalkan konfirmasi, meja kembali tersedia setelah masa tunggu singkat.",
+  },
+  {
+    icon: Users,
+    title: "Peran Operasional Terpisah",
+    body: "Setiap peran memiliki dashboard khusus yang mobile-first: Kasir menandai meja untuk pelanggan yang membayar langsung di kasir, Satgas mengantar dan mengonfirmasi tamu yang sudah duduk, Clear Up menandai meja selesai dibersihkan, dan SS memutar panggilan.",
+  },
+  {
+    icon: LayoutDashboard,
+    title: "Monitoring Manager",
+    body: "Manager memantau grid 100 meja beserta statistik Terisi, Kosong, dan Perlu Dicek (meja terisi lebih dari 2 jam), dilengkapi pusat notifikasi perubahan status, log aktivitas crew, serta mode gelap.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Konsol Owner yang Lengkap",
+    body: "Pemilik restoran mengelola data restoran, akun manager, katalog audio, ekspor QR, riwayat aktivitas, dan log kesalahan operasional dari satu konsol Super Admin yang aman dan terlindungi kredensial.",
   },
 ];
 
@@ -56,9 +66,10 @@ function AboutPage() {
           <div className="rounded-2xl border border-ta-gray-200 bg-white p-6 shadow-theme-sm sm:p-10 dark:border-ta-gray-700 dark:bg-ta-gray-800">
             <h1 className="text-2xl font-black leading-tight sm:text-4xl">Tentang LIME</h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ta-gray-500 sm:text-base dark:text-ta-gray-400">
-              LIME adalah aplikasi soundboard sederhana yang membantu crew restoran memanggil
-              pelanggan mengambil pesanan hanya dengan menekan nomor meja. Tujuannya: operasional
-              dapur/kasir jadi lebih cepat, rapi, dan konsisten.
+              LIME adalah sistem manajemen meja restoran yang mencakup panggilan pelanggan otomatis
+              lewat soundboard, status meja real-time lintas peran, pemesanan mandiri via QR, serta
+              dashboard monitoring untuk Manager dan Owner. Tujuannya: operasional dapur, kasir, dan
+              lantai layanan menjadi lebih cepat, rapi, dan konsisten.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">

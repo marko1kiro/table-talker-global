@@ -32,8 +32,9 @@ function ContactPage() {
           <div className="rounded-2xl border border-ta-gray-200 bg-white p-6 shadow-theme-sm sm:p-10 dark:border-ta-gray-700 dark:bg-ta-gray-800">
             <h1 className="text-2xl font-black leading-tight sm:text-4xl">Kontak</h1>
             <p className="mt-3 text-sm leading-relaxed text-ta-gray-500 sm:text-base dark:text-ta-gray-400">
-              Ada pertanyaan, laporan bug, atau butuh bantuan setup restoran? Hubungi kami lewat
-              saluran di bawah ini.
+              Ada pertanyaan, laporan bug, atau butuh bantuan setup restoran? Baik Anda crew (SS,
+              Kasir, Satgas, Clear Up), Manager, maupun Owner — hubungi kami lewat saluran di bawah
+              ini.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -43,8 +44,8 @@ function ContactPage() {
                 </div>
                 <h2 className="text-base font-bold text-ta-gray-900 dark:text-white">Email</h2>
                 <p className="mt-1.5 text-sm text-ta-gray-500 dark:text-ta-gray-400">
-                  Kirim pertanyaan atau laporan masalah melalui email admin restoran Anda, atau
-                  gunakan email support yang tertera pada dashboard pengelola.
+                  Kirim pertanyaan atau laporan masalah melalui email admin restoran Anda. Pemilik
+                  restoran dapat menemukan email support yang tertera pada konsol Super Admin.
                 </p>
               </div>
               <div className="rounded-xl border border-ta-gray-200 bg-ta-gray-50 p-4 dark:border-ta-gray-700 dark:bg-ta-gray-900">
@@ -55,8 +56,10 @@ function ContactPage() {
                   Dukungan Teknis
                 </h2>
                 <p className="mt-1.5 text-sm text-ta-gray-500 dark:text-ta-gray-400">
-                  Untuk kendala login, sinkronisasi audio, atau kode resto yang tidak berfungsi,
-                  hubungi administrator restoran tempat Anda bertugas.
+                  Untuk kendala login crew, kode resto, akun Manager, QR meja, sinkronisasi audio,
+                  atau dashboard Manager/Owner yang bermasalah, hubungi administrator restoran
+                  tempat Anda bertugas. Anda juga bisa memakai tombol Bantuan di aplikasi — laporan
+                  Anda (kode resto, nama, dan kendala) otomatis terkirim ke WhatsApp tim support.
                 </p>
               </div>
             </div>

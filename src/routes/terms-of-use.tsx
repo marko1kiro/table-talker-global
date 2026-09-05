@@ -31,7 +31,7 @@ function TermsOfUsePage() {
           <div className="rounded-2xl border border-ta-gray-200 bg-white p-6 shadow-theme-sm sm:p-10 dark:border-ta-gray-700 dark:bg-ta-gray-800">
             <h1 className="text-2xl font-black leading-tight sm:text-4xl">Syarat Penggunaan</h1>
             <p className="mt-2 text-xs font-bold uppercase text-ta-gray-500 dark:text-ta-gray-400">
-              Terakhir diperbarui: 28 Agustus 2026
+              Terakhir diperbarui: 6 September 2026
             </p>
 
             <div className="mt-8 space-y-6 text-sm leading-relaxed text-ta-gray-500 sm:text-base dark:text-ta-gray-400">
@@ -46,12 +46,13 @@ function TermsOfUsePage() {
               </section>
               <section>
                 <h2 className="text-base font-bold text-ta-gray-900 dark:text-white">
-                  2. Akses & Kode Resto
+                  2. Akses &amp; Kredensial
                 </h2>
                 <p className="mt-2">
                   Akses crew ke aplikasi menggunakan Kode Resto yang diberikan oleh administrator
-                  restoran masing-masing. Kode Resto bersifat rahasia dan tidak boleh dibagikan ke
-                  pihak yang tidak berwenang.
+                  restoran masing-masing. Manager masuk menggunakan ID Manager dan password
+                  miliknya. Kode Resto, ID Manager, dan password bersifat rahasia dan tidak boleh
+                  dibagikan ke pihak yang tidak berwenang.
                 </p>
               </section>
               <section>
@@ -59,10 +60,12 @@ function TermsOfUsePage() {
                   3. Penggunaan yang Wajar
                 </h2>
                 <p className="mt-2">
-                  Aplikasi ini ditujukan untuk keperluan operasional panggilan meja dan pengumuman
-                  di lingkungan restoran. Dilarang menyalahgunakan fitur untuk tujuan di luar
-                  operasional restoran, termasuk mengganggu sistem atau mencoba mengakses data
-                  restoran lain.
+                  Aplikasi ini ditujukan untuk keperluan operasional restoran: panggilan meja,
+                  pengumuman, pengelolaan status meja real-time, konfirmasi duduk pelanggan lewat
+                  QR, serta pemantauan oleh manager dan owner. Dilarang menyalahgunakan fitur untuk
+                  tujuan di luar operasional restoran, termasuk mengubah status meja tanpa dasar
+                  operasional yang nyata (misalnya memanipulasi konfirmasi QR), mengganggu sistem,
+                  atau mencoba mengakses data restoran lain.
                 </p>
               </section>
               <section>

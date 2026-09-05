@@ -31,7 +31,7 @@ function PrivacyPolicyPage() {
           <div className="rounded-2xl border border-ta-gray-200 bg-white p-6 shadow-theme-sm sm:p-10 dark:border-ta-gray-700 dark:bg-ta-gray-800">
             <h1 className="text-2xl font-black leading-tight sm:text-4xl">Kebijakan Privasi</h1>
             <p className="mt-2 text-xs font-bold uppercase text-ta-gray-500 dark:text-ta-gray-400">
-              Terakhir diperbarui: 28 Agustus 2026
+              Terakhir diperbarui: 6 September 2026
             </p>
 
             <div className="mt-8 space-y-6 text-sm leading-relaxed text-ta-gray-500 sm:text-base dark:text-ta-gray-400">
@@ -40,10 +40,12 @@ function PrivacyPolicyPage() {
                   1. Data yang Dikumpulkan
                 </h2>
                 <p className="mt-2">
-                  LIME mengumpulkan data operasional minimal yang diperlukan agar soundboard
-                  berfungsi, antara lain: kode resto, nama tampilan crew (dibuat otomatis), sesi
-                  perangkat, dan catatan aktivitas pemutaran audio (waktu, nomor meja/pengumuman
-                  yang diputar).
+                  LIME mengumpulkan data operasional minimal yang diperlukan agar sistem berfungsi,
+                  antara lain: kode resto, nama tampilan crew (dibuat otomatis), sesi perangkat,
+                  data akun manager (ID Manager, nama lengkap; password disimpan dalam bentuk hash),
+                  status meja (kosong/terisi beserta waktu dan sumber perubahannya: kasir, clear up,
+                  satgas, atau pindai QR), catatan aktivitas pemutaran audio (waktu, nomor
+                  meja/pengumuman yang diputar), riwayat operasional, dan log kesalahan teknis.
                 </p>
               </section>
               <section>
@@ -51,9 +53,11 @@ function PrivacyPolicyPage() {
                   2. Cara Penggunaan Data
                 </h2>
                 <p className="mt-2">
-                  Data digunakan untuk memvalidasi akses restoran, menjaga sesi crew tetap sinkron,
-                  menampilkan status ketersediaan audio, serta membantu administrator restoran
-                  memantau aktivitas operasional dan menyelesaikan kendala teknis.
+                  Data digunakan untuk memvalidasi akses restoran, menjaga sesi crew dan manager
+                  tetap sinkron, menampilkan status meja real-time lintas peran (Kasir, Satgas,
+                  Clear Up, SS), menjalankan konfirmasi duduk pelanggan lewat QR, membantu manager
+                  memantau statistik meja dan aktivitas crew, serta membantu administrator restoran
+                  menyelesaikan kendala teknis melalui riwayat dan log.
                 </p>
               </section>
               <section>
@@ -64,6 +68,8 @@ function PrivacyPolicyPage() {
                   Berkas audio yang telah disinkronkan disimpan sementara di penyimpanan cache
                   browser (Cache Storage) pada perangkat crew agar pemutaran lebih cepat. Identitas
                   sesi crew disimpan di session storage browser dan akan hilang saat tab ditutup.
+                  Preferensi tampilan seperti pilihan tema gelap/terang disimpan di localStorage
+                  perangkat agar tampilan konsisten saat aplikasi dibuka kembali.
                 </p>
               </section>
               <section>
@@ -82,8 +88,10 @@ function PrivacyPolicyPage() {
                 </h2>
                 <p className="mt-2">
                   Akses ke dashboard, katalog audio, dan panel administrasi dilindungi kredensial
-                  dan sesi yang divalidasi di server. Kami menerapkan praktik keamanan yang wajar
-                  untuk melindungi data operasional restoran.
+                  dan sesi yang divalidasi di server. Password manager disimpan dalam bentuk hash,
+                  login Owner dibatasi jumlah percobaan untuk mencegah penyalahgunaan, dan data tiap
+                  restoran dipisahkan secara ketat per tenant. Kami menerapkan praktik keamanan yang
+                  wajar untuk melindungi data operasional restoran.
                 </p>
               </section>
               <section>
