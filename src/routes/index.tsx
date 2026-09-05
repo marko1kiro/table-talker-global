@@ -4,6 +4,7 @@ import { Loader2, Square } from "lucide-react";
 
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { ThemeFrame } from "@/components/dashboard/ThemeFrame";
 import { SoundboardGrid } from "@/components/SoundboardGrid";
 import {
   TABLE_COUNT,
@@ -447,97 +448,97 @@ function SoundboardPage() {
       )}
 
       {identityHydrated && crewIdentity && (
-        <div className="brutal-bg-lines relative min-h-screen pb-24">
-          {crewIdentity?.restaurantId && !audioSynced && (
-            <SyncDialog
-              restaurantId={crewIdentity.restaurantId}
-              tenantToken={crewIdentity.tenantToken}
-              onSynced={(audioIds) => {
-                setAvailableAudioIds(new Set(audioIds as AudioId[]));
-                setAudioSynced(true);
-                void getAudioUrlPool().preload(crewIdentity.restaurantId, audioIds);
-              }}
-              onSessionInvalid={invalidateCrewSession}
+        <ThemeFrame>
+          <div className="relative min-h-[100svh] pb-24">
+            {crewIdentity?.restaurantId && !audioSynced && (
+              <SyncDialog
+                restaurantId={crewIdentity.restaurantId}
+                tenantToken={crewIdentity.tenantToken}
+                onSynced={(audioIds) => {
+                  setAvailableAudioIds(new Set(audioIds as AudioId[]));
+                  setAudioSynced(true);
+                  void getAudioUrlPool().preload(crewIdentity.restaurantId, audioIds);
+                }}
+                onSessionInvalid={invalidateCrewSession}
+              />
+            )}
+            <Header
+              readyCount={availableAudioIds.size}
+              totalCount={TABLE_COUNT}
+              restaurantDisplayName={crewIdentity?.restaurantDisplayName}
+              userName={crewIdentity?.displayName}
+              onLogout={logout}
             />
-          )}
-          <Header
-            readyCount={availableAudioIds.size}
-            totalCount={TABLE_COUNT}
-            restaurantDisplayName={crewIdentity?.restaurantDisplayName}
-            userName={crewIdentity?.displayName}
-            onLogout={logout}
-          />
 
-          <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h1 className="font-display text-xl uppercase leading-tight sm:text-2xl">
-                  Pilih Nomor Meja
-                </h1>
-                <p className="text-xs text-muted-foreground">
-                  Tap tombol untuk memanggil pelanggan mengambil pesanan.
-                </p>
+            <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h1 className="text-xl font-black leading-tight sm:text-2xl">Pilih Nomor Meja</h1>
+                  <p className="text-xs text-ta-gray-500 dark:text-ta-gray-400">
+                    Tap tombol untuk memanggil pelanggan mengambil pesanan.
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <SoundboardGrid
-              availableAudioIds={availableAudioIds}
-              drawerDisabled={false}
-              announcementTriggerElevated={activeAudioId !== null}
-              tableDisabled={() => activeAudioId !== null}
-              announcementDisabled={(audioId) =>
-                loading !== null || (activeAudioId !== null && activeAudioId !== audioId)
-              }
-              tableStatus={(tableNumber) => {
-                if (playing === tableNumber) return "playing";
-                if (loading === tableNumber) return "loading";
-                return availableAudioIds.has(tableAudioId(tableNumber)) ? "ready" : "empty";
-              }}
-              announcementStatus={(announcementId) =>
-                announcementPlaybackStatus(
-                  announcementPlaybackId(announcementId),
-                  playing,
-                  loading,
-                  paused,
-                )
-              }
-              onSelect={(audioId) => {
-                if (audioId.startsWith("table:")) {
-                  void play(Number(audioId.slice("table:".length)));
-                  return;
+              <SoundboardGrid
+                availableAudioIds={availableAudioIds}
+                drawerDisabled={false}
+                announcementTriggerElevated={activeAudioId !== null}
+                tableDisabled={() => activeAudioId !== null}
+                announcementDisabled={(audioId) =>
+                  loading !== null || (activeAudioId !== null && activeAudioId !== audioId)
                 }
-                const announcement = ANNOUNCEMENT_CATALOG.find(
-                  ({ id }) => announcementPlaybackId(id) === audioId,
-                );
-                if (announcement) toggleAnnouncement(audioId);
-              }}
-            />
+                tableStatus={(tableNumber) => {
+                  if (playing === tableNumber) return "playing";
+                  if (loading === tableNumber) return "loading";
+                  return availableAudioIds.has(tableAudioId(tableNumber)) ? "ready" : "empty";
+                }}
+                announcementStatus={(announcementId) =>
+                  announcementPlaybackStatus(
+                    announcementPlaybackId(announcementId),
+                    playing,
+                    loading,
+                    paused,
+                  )
+                }
+                onSelect={(audioId) => {
+                  if (audioId.startsWith("table:")) {
+                    void play(Number(audioId.slice("table:".length)));
+                    return;
+                  }
+                  const announcement = ANNOUNCEMENT_CATALOG.find(
+                    ({ id }) => announcementPlaybackId(id) === audioId,
+                  );
+                  if (announcement) toggleAnnouncement(audioId);
+                }}
+              />
 
-            {audioSynced && availableAudioIds.size === 0 && (
-              <div className="brutal-border brutal-shadow mt-6 bg-card p-6 text-center">
-                <p className="font-display uppercase">Belum ada audio</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Katalog audio restoran tidak tersedia. Hubungi admin restoran.
-                </p>
+              {audioSynced && availableAudioIds.size === 0 && (
+                <div className="mt-6 rounded-2xl border border-ta-gray-200 bg-white p-6 text-center shadow-theme-sm dark:border-ta-gray-700 dark:bg-ta-gray-800">
+                  <p className="font-bold text-ta-gray-900 dark:text-white">Belum ada audio</p>
+                  <p className="mt-1 text-xs text-ta-gray-500 dark:text-ta-gray-400">
+                    Katalog audio restoran tidak tersedia. Hubungi admin restoran.
+                  </p>
+                </div>
+              )}
+            </main>
+
+            <Footer />
+
+            {activeAudioId !== null && (
+              <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+                <button
+                  onClick={stop}
+                  className="flex items-center gap-2 rounded-full bg-ta-error px-5 py-3 font-bold uppercase text-white shadow-theme-md transition active:scale-[0.99]"
+                >
+                  <Square className="h-4 w-4" fill="currentColor" strokeWidth={3} />
+                  Stop{" "}
+                  {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioLabel}
+                </button>
               </div>
             )}
-          </main>
-
-          <Footer />
-
-          {activeAudioId !== null && (
-            <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
-              <button
-                onClick={stop}
-                className="brutal-border brutal-shadow-lg brutal-press flex items-center gap-2 bg-destructive px-5 py-3 font-display uppercase text-destructive-foreground"
-              >
-                <Square className="h-4 w-4" fill="currentColor" strokeWidth={3} />
-                Stop{" "}
-                {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioLabel}
-              </button>
-            </div>
-          )}
-        </div>
+          </div>
+        </ThemeFrame>
       )}
     </>
   );

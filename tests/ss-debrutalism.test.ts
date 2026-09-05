@@ -17,6 +17,10 @@ describe("SS/public de-brutalism", () => {
   it("SyncDialog.tsx", () => clean("../src/components/SyncDialog.tsx"));
   it("RestaurantCredentialDialog.tsx", () =>
     clean("../src/components/RestaurantCredentialDialog.tsx"));
+  it("routes/index.tsx", () => clean("../src/routes/index.tsx"));
+  it("SS station wrapped in ThemeFrame", () => {
+    expect(read("../src/routes/index.tsx")).toContain("ThemeFrame");
+  });
   it("Header uses the TailAdmin cluster (emblem + toggle), no bell", () => {
     const s = read("../src/components/Header.tsx");
     expect(s).toContain("RoleEmblem");
