@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
+import { Loader2, Table2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +22,8 @@ import {
   crewPrimaryButtonClass,
   crewSecondaryButtonClass,
 } from "@/components/CrewHeader";
-import { CrewShell } from "@/components/dashboard/CrewShell";
+import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
+import { DashboardHeaderRight } from "@/components/dashboard/DashboardHeaderRight";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
   browserSessionStorage,
@@ -156,14 +157,46 @@ function KasirRoute() {
 
   const tables = snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
 
+  const navItems: AppShellNavItem[] = [
+    { id: "tables", label: "Status Meja", icon: Table2, active: true, onSelect: () => {} },
+  ];
+  const brand = (
+    <div className="flex items-center gap-2">
+      <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0" />
+      <span className="text-sm font-bold uppercase text-ta-gray-900 dark:text-white">Kasir</span>
+    </div>
+  );
+  const footer = (
+    <div className="rounded-xl border border-ta-gray-200 bg-white p-4 text-center dark:border-ta-gray-700 dark:bg-ta-gray-800">
+      <p className="truncate whitespace-nowrap text-[13px] font-bold uppercase text-ta-gray-900 dark:text-white">
+        {identity.restaurantDisplayName}
+      </p>
+      <p className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-ta-gray-400">
+        lihatmeja.com <span aria-label="copyright">©</span> 2026
+      </p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-ta-gray-400 dark:text-ta-gray-500">
+        XDIRGA LABS
+      </p>
+    </div>
+  );
+
   return (
-    <CrewShell
-      roleLabel="KASIR"
-      userName={identity.displayName}
-      onLogout={logout}
-      feed={items}
-      unread={unread}
-      onOpen={markRead}
+    <AppShell
+      brand={brand}
+      navItems={navItems}
+      headerTitle="Status Meja"
+      headerLogo={
+        <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
+      }
+      headerRight={
+        <DashboardHeaderRight
+          roleLabel="KASIR"
+          profile={{ name: identity.displayName, canChangePassword: false }}
+          notifications={{ stale: [], feed: items, unread, onOpen: markRead }}
+          onLogout={logout}
+        />
+      }
+      footer={footer}
     >
       <OwnerPage>
         {realtimeStatus !== "SUBSCRIBED" && (
@@ -262,7 +295,7 @@ function KasirRoute() {
           </AlertDialogContent>
         </AlertDialog>
       </OwnerPage>
-    </CrewShell>
+    </AppShell>
   );
 }
 
