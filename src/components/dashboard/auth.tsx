@@ -56,3 +56,36 @@ export function AuthShell({
     </main>
   );
 }
+
+// TailAdmin split auth shell: form column (children) + branding panel (lg+).
+export function AuthLayout({ children }: { children: ReactNode }) {
+  return (
+    <div className="relative z-10 flex min-h-[100svh] w-full flex-col bg-white lg:flex-row dark:bg-ta-gray-900">
+      <div className="flex flex-1 flex-col justify-center px-6 py-12 sm:px-10">
+        <div className="mx-auto w-full max-w-md">{children}</div>
+      </div>
+      <div className="relative hidden w-full items-center justify-center overflow-hidden bg-brand-950 lg:flex lg:w-1/2 dark:bg-white/5">
+        <img
+          src="/shape/grid-01.svg"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 top-0 w-[250px] xl:w-[450px]"
+        />
+        <img
+          src="/shape/grid-01.svg"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 left-0 w-[250px] rotate-180 xl:w-[450px]"
+        />
+        <div className="relative z-10 flex max-w-xs flex-col items-center">
+          <span className="mb-4 grid place-items-center rounded-2xl bg-white px-5 py-3">
+            <img src="/lime-logo.webp" alt="LIME" className="h-10 w-auto" />
+          </span>
+          <p className="text-center text-sm text-ta-gray-400">
+            Sistem Panggilan &amp; Status Meja Restoran
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

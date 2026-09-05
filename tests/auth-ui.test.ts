@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const src = () =>
@@ -22,5 +22,22 @@ describe("dashboard/auth primitives", () => {
   });
   it("input base carries dark variants", () => {
     expect(src()).toContain("dark:bg-ta-gray-900");
+  });
+});
+
+describe("AuthLayout (TailAdmin split)", () => {
+  it("splits form + branding panel, responsive", () => {
+    const s = src();
+    expect(s).toContain("export function AuthLayout");
+    expect(s).toContain("lg:flex-row");
+    expect(s).toContain("lg:w-1/2");
+    expect(s).toContain("bg-brand-950");
+    expect(s).toContain("grid-01.svg");
+    expect(s).toContain("lime-logo.webp");
+  });
+  it("adds brand-950 token and grid asset", () => {
+    const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+    expect(css).toContain("--color-brand-950:");
+    expect(existsSync(new URL("../public/shape/grid-01.svg", import.meta.url))).toBe(true);
   });
 });
