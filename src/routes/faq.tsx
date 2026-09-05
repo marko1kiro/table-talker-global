@@ -53,7 +53,7 @@ function FaqPage() {
   return (
     <ThemeFrame>
       <div className="pb-10">
-        <Header readyCount={0} totalCount={0} onLogout={logout} />
+        <Header onLogout={logout} />
         <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
           <div className="rounded-2xl border border-ta-gray-200 bg-white p-6 shadow-theme-sm sm:p-10 dark:border-ta-gray-700 dark:bg-ta-gray-800">
             <h1 className="text-2xl font-black leading-tight sm:text-4xl">Pertanyaan Umum</h1>

@@ -82,9 +82,9 @@ describe("The 6 public info routes wire a working onLogout instead of omitting i
     const page = source(`../src/routes/${routeName}.tsx`);
     expect(page).toContain('import { useCrewLogout } from "@/hooks/use-crew-logout"');
     expect(page).toContain("const logout = useCrewLogout();");
-    expect(page).toContain("<Header readyCount={0} totalCount={0} onLogout={logout} />");
+    expect(page).toContain("<Header onLogout={logout} />");
     // Guard against the original bug regressing: no bare, handler-less
     // Header call should remain in any of these 6 files.
-    expect(page).not.toMatch(/<Header readyCount=\{0\} totalCount=\{0\} \/>/);
+    expect(page).not.toMatch(/<Header\s*\/>/);
   });
 });

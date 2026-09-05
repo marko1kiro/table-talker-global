@@ -7,7 +7,6 @@ import { Footer } from "@/components/Footer";
 import { ThemeFrame } from "@/components/dashboard/ThemeFrame";
 import { SoundboardGrid } from "@/components/SoundboardGrid";
 import {
-  TABLE_COUNT,
   createAudioPlaybackController,
   createPlaybackGeneration,
   getUnlockAudioUrl,
@@ -463,8 +462,6 @@ function SoundboardPage() {
               />
             )}
             <Header
-              readyCount={availableAudioIds.size}
-              totalCount={TABLE_COUNT}
               restaurantDisplayName={crewIdentity?.restaurantDisplayName}
               userName={crewIdentity?.displayName}
               onLogout={logout}

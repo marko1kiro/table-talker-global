@@ -35,4 +35,10 @@ describe("SS/public de-brutalism", () => {
     expect(s).toContain("lime-logo.webp");
     expect(s).not.toContain("NotificationCenter");
   });
+  it("Header drops the SS ready-count pill (collided with the role badge)", () => {
+    const s = read("../src/components/Header.tsx");
+    expect(s).not.toContain("Siap ");
+    expect(s).not.toContain("readyCount");
+    expect(s).not.toContain("totalCount");
+  });
 });

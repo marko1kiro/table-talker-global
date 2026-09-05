@@ -51,5 +51,5 @@ it("wires a working logout handler into the shared Header instead of omitting on
   const page = source("../src/routes/help.tsx");
   expect(page).toContain('import { useCrewLogout } from "@/hooks/use-crew-logout"');
   expect(page).toContain("const logout = useCrewLogout();");
-  expect(page).toContain("<Header readyCount={0} totalCount={0} onLogout={logout} />");
+  expect(page).toContain("<Header onLogout={logout} />");
 });

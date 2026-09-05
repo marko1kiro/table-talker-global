@@ -53,7 +53,7 @@ function HelpPage() {
   return (
     <ThemeFrame>
       <div className="pb-10">
-        <Header readyCount={0} totalCount={0} onLogout={logout} />
+        <Header onLogout={logout} />
         <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
           <div className="rounded-2xl border border-ta-gray-200 bg-white p-6 shadow-theme-sm sm:p-10 dark:border-ta-gray-700 dark:bg-ta-gray-800">
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-500">
