@@ -150,22 +150,27 @@ export function SyncDialog({
   }, [runSync]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-brutal-fg/60 p-4 backdrop-blur-sm animate-in fade-in-0 duration-200">
-      <div className="brutal-border brutal-shadow-lg w-full max-w-sm animate-in zoom-in-95 fade-in-0 rounded-none bg-card duration-300">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in-0 duration-200">
+      <div className="w-full max-w-sm animate-in zoom-in-95 fade-in-0 rounded-2xl border border-ta-gray-200 bg-white shadow-theme-md duration-300 dark:border-ta-gray-700 dark:bg-ta-gray-800">
         <div className="space-y-4 p-6">
           {state.phase === "fetching" && (
             <div className="flex flex-col items-center gap-4 py-4">
               <div className="relative flex h-16 w-16 items-center justify-center">
-                <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-                <span className="brutal-border absolute inset-0 rounded-full bg-background" />
-                <Loader2 className="relative h-8 w-8 animate-spin text-primary" strokeWidth={2.5} />
+                <span className="absolute inset-0 rounded-full bg-brand-500/20 animate-ping" />
+                <span className="absolute inset-0 rounded-full border border-ta-gray-200 bg-white dark:border-ta-gray-700 dark:bg-ta-gray-800" />
+                <Loader2
+                  className="relative h-8 w-8 animate-spin text-brand-500"
+                  strokeWidth={2.5}
+                />
               </div>
               <div className="text-center">
-                <p className="text-sm font-bold">Memuat manifest audio...</p>
+                <p className="text-sm font-bold text-ta-gray-900 dark:text-white">
+                  Memuat manifest audio...
+                </p>
                 <p className="mt-2 flex items-center justify-center gap-1">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500 [animation-delay:-0.3s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500 [animation-delay:-0.15s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500" />
                 </p>
               </div>
             </div>
@@ -175,28 +180,33 @@ export function SyncDialog({
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <span className="relative flex h-6 w-6 items-center justify-center">
-                  <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-                  <Wifi className="relative h-4 w-4 animate-pulse text-primary" strokeWidth={2.5} />
+                  <span className="absolute inset-0 rounded-full bg-brand-500/20 animate-ping" />
+                  <Wifi
+                    className="relative h-4 w-4 animate-pulse text-brand-500"
+                    strokeWidth={2.5}
+                  />
                 </span>
-                <p className="text-sm font-bold">Sinkronisasi Audio</p>
+                <p className="text-sm font-bold text-ta-gray-900 dark:text-white">
+                  Sinkronisasi Audio
+                </p>
               </div>
               <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-medium text-muted-foreground">
+                <div className="flex justify-between text-xs font-medium text-ta-gray-500 dark:text-ta-gray-400">
                   <span className="truncate">{state.progress.label}</span>
-                  <span className="tabular-nums font-bold text-foreground">
+                  <span className="tabular-nums font-bold text-ta-gray-900 dark:text-white">
                     {state.progress.current}/{state.progress.total}
                   </span>
                 </div>
-                <div className="brutal-border h-3 overflow-hidden rounded-full bg-muted">
+                <div className="h-3 overflow-hidden rounded-full bg-ta-gray-100 dark:bg-ta-gray-700">
                   <div
-                    className="brutal-shimmer h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
+                    className="brutal-shimmer h-full rounded-full bg-brand-500 transition-[width] duration-500 ease-out"
                     style={{
                       width: `${state.progress.total > 0 ? (state.progress.current / state.progress.total) * 100 : 0}%`,
                     }}
                   />
                 </div>
               </div>
-              <p className="animate-pulse text-center text-xs font-medium text-muted-foreground">
+              <p className="animate-pulse text-center text-xs font-medium text-ta-gray-500 dark:text-ta-gray-400">
                 Jangan tutup aplikasi selama sinkronisasi
               </p>
             </div>
@@ -205,29 +215,35 @@ export function SyncDialog({
           {state.phase === "done" && (
             <div className="flex flex-col items-center gap-3 py-4">
               <div className="relative flex h-16 w-16 items-center justify-center">
-                <span className="absolute inset-0 rounded-full bg-brutal-success/25 animate-ping" />
+                <span className="absolute inset-0 rounded-full bg-ta-success/25 animate-ping" />
                 <CheckCircle2
-                  className="brutal-pop-in relative h-10 w-10 text-brutal-success"
+                  className="brutal-pop-in relative h-10 w-10 text-ta-success"
                   strokeWidth={2.5}
                 />
               </div>
-              <p className="text-sm font-bold">Audio siap digunakan</p>
+              <p className="text-sm font-bold text-ta-gray-900 dark:text-white">
+                Audio siap digunakan
+              </p>
             </div>
           )}
 
           {state.phase === "error" && (
             <div className="space-y-3">
               <div className="brutal-shake flex items-center gap-2">
-                <WifiOff className="h-4 w-4 text-destructive" strokeWidth={2.5} />
-                <p className="text-sm font-bold">Sinkronisasi Gagal</p>
+                <WifiOff className="h-4 w-4 text-ta-error" strokeWidth={2.5} />
+                <p className="text-sm font-bold text-ta-gray-900 dark:text-white">
+                  Sinkronisasi Gagal
+                </p>
               </div>
-              <p className="text-sm text-muted-foreground">{state.message}</p>
-              <p className="text-xs text-muted-foreground">Laporan: {state.reportCode}</p>
+              <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">{state.message}</p>
+              <p className="text-xs text-ta-gray-500 dark:text-ta-gray-400">
+                Laporan: {state.reportCode}
+              </p>
               <Button
                 onClick={runSync}
                 variant="ghost"
                 size="sm"
-                className="brutal-border brutal-shadow brutal-press w-full rounded-none bg-accent font-bold text-accent-foreground hover:bg-accent"
+                className="w-full rounded-xl bg-brand-500 font-bold text-white hover:bg-brand-600 hover:text-white"
               >
                 Coba Lagi
               </Button>
