@@ -15,6 +15,8 @@ describe("SS/public de-brutalism", () => {
   it("TableButton.tsx", () => clean("../src/components/TableButton.tsx"));
   it("SoundboardGrid.tsx", () => clean("../src/components/SoundboardGrid.tsx"));
   it("SyncDialog.tsx", () => clean("../src/components/SyncDialog.tsx"));
+  it("RestaurantCredentialDialog.tsx", () =>
+    clean("../src/components/RestaurantCredentialDialog.tsx"));
   it("Header uses the TailAdmin cluster (emblem + toggle), no bell", () => {
     const s = read("../src/components/Header.tsx");
     expect(s).toContain("RoleEmblem");

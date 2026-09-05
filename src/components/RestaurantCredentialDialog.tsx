@@ -94,9 +94,9 @@ export function RestaurantCredentialDialog({
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent
         aria-describedby="restaurant-credential-description"
-        className="brutal-border brutal-shadow-lg"
+        className="border border-ta-gray-200 dark:border-ta-gray-700"
       >
-        <DialogTitle className="font-display text-xl">{title}</DialogTitle>
+        <DialogTitle className="text-xl font-bold">{title}</DialogTitle>
         <DialogDescription id="restaurant-credential-description">
           {restaurant ? restaurant.displayName : "Masukkan Nama Resto dan Kode Resto baru."}
         </DialogDescription>
@@ -105,14 +105,14 @@ export function RestaurantCredentialDialog({
             <Input aria-label="Kode Resto" type="password" value={viewedCode} readOnly />
             <button
               type="button"
-              className="brutal-border brutal-press w-full bg-accent px-4 py-3 font-display"
+              className="w-full rounded-xl bg-brand-500 px-4 py-3 font-bold text-white transition hover:bg-brand-600"
               disabled={pending}
               onClick={() => void reveal()}
             >
               Tampilkan Kode Resto
             </button>
             {error && (
-              <p role="alert" className="text-sm font-bold text-destructive">
+              <p role="alert" className="text-sm font-bold text-ta-error">
                 {error}
               </p>
             )}
@@ -182,14 +182,14 @@ export function RestaurantCredentialDialog({
               Tampilkan input Kode Resto
             </button>
             {error && (
-              <p role="alert" className="text-sm font-bold text-destructive">
+              <p role="alert" className="text-sm font-bold text-ta-error">
                 {error}
               </p>
             )}
             <button
               type="submit"
               disabled={pending}
-              className="brutal-border brutal-press w-full bg-accent px-4 py-3 font-display disabled:opacity-60"
+              className="w-full rounded-xl bg-brand-500 px-4 py-3 font-bold text-white transition hover:bg-brand-600 disabled:opacity-60"
             >
               {pending ? "Menyimpan..." : "Simpan"}
             </button>
