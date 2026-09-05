@@ -16,7 +16,7 @@ describe("manager login route", () => {
     expect(text()).toContain("writeManagerIdentity");
   });
   it("uses TailAdmin auth primitives with a show/hide password toggle", () => {
-    expect(text()).toContain("AuthShell");
+    expect(text()).toContain("AuthLayout");
     expect(text()).toContain("IconField");
     expect(text()).toContain("showPassword");
     expect(text()).toContain("EyeOff");

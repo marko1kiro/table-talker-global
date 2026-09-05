@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { Eye, EyeOff, Hash, Loader2, Lock } from "lucide-react";
-import { AuthShell, IconField } from "@/components/dashboard/auth";
+import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { loginManager } from "@/lib/manager-auth.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -58,16 +58,16 @@ function ManagerLoginPage() {
   }
 
   return (
-    <AuthShell
-      logo={<img src="/lime-logo.webp" alt="LIME" className="h-9 w-auto" />}
-      title="Login Manager"
-      footer={
-        <Link to="/manager/register" className="font-semibold text-brand-500 hover:underline">
-          KLIK DISINI untuk membuat ID MANAGER BARU
-        </Link>
-      }
-    >
-      <form className="space-y-3" onSubmit={submit}>
+    <AuthLayout>
+      <div className="mb-8">
+        <h1 className="mb-2 text-2xl font-semibold text-ta-gray-800 dark:text-white">
+          Login Manager
+        </h1>
+        <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">
+          Masukkan ID Manager dan password untuk masuk ke dashboard.
+        </p>
+      </div>
+      <form className="space-y-5" onSubmit={submit}>
         <IconField
           icon={Hash}
           aria-label="ID Manager"
@@ -115,6 +115,11 @@ function ManagerLoginPage() {
           {busy ? "Memeriksa..." : "Login"}
         </button>
       </form>
-    </AuthShell>
+      <p className="mt-6 text-center text-sm text-ta-gray-500 dark:text-ta-gray-400">
+        <Link to="/manager/register" className="font-semibold text-brand-500 hover:underline">
+          KLIK DISINI untuk membuat ID MANAGER BARU
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }
