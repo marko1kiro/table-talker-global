@@ -82,7 +82,7 @@ export function SoundboardGrid({
           aria-haspopup="dialog"
           aria-expanded="false"
           disabled={drawerDisabled}
-          className={`brutal-border brutal-shadow-lg brutal-press fixed right-4 z-30 flex items-center gap-2 bg-primary px-4 py-3 font-display text-sm uppercase text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:px-5 sm:text-base ${
+          className={`fixed right-4 z-30 flex items-center gap-2 rounded-full bg-brand-500 px-4 py-3 text-sm font-bold uppercase text-white shadow-theme-md transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 sm:px-5 sm:text-base ${
             announcementTriggerElevated ? "bottom-24" : "bottom-4"
           }`}
         >
@@ -93,7 +93,7 @@ export function SoundboardGrid({
 
       {announcementPanelOpen && (
         <div
-          className="fixed inset-0 z-40 flex justify-end bg-foreground/60"
+          className="fixed inset-0 z-40 flex justify-end bg-black/50"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setAnnouncementPanelOpen(false);
           }}
@@ -102,21 +102,21 @@ export function SoundboardGrid({
             role="dialog"
             aria-modal="true"
             aria-labelledby="announcement-panel-title"
-            className="h-full w-full overflow-y-auto border-l-4 border-foreground bg-background p-4 shadow-[-8px_0_0_0_hsl(var(--foreground))] sm:max-w-xl sm:p-6"
+            className="h-full w-full overflow-y-auto border-l border-ta-gray-200 bg-white p-4 sm:max-w-xl sm:p-6 dark:border-ta-gray-700 dark:bg-ta-gray-800"
           >
-            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-5 flex items-start justify-between gap-3 border-b-4 border-foreground bg-background p-4 sm:-mx-6 sm:-mt-6 sm:p-6">
+            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-5 flex items-start justify-between gap-3 border-b border-ta-gray-200 bg-white p-4 sm:-mx-6 sm:-mt-6 sm:p-6 dark:border-ta-gray-700 dark:bg-ta-gray-800">
               <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-white">
                   <Megaphone className="size-5" aria-hidden="true" />
                 </div>
                 <div>
                   <h2
                     id="announcement-panel-title"
-                    className="font-display text-lg uppercase leading-tight sm:text-xl"
+                    className="text-lg font-bold leading-tight sm:text-xl"
                   >
                     Tombol Pengumuman
                   </h2>
-                  <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                  <p className="mt-1 text-xs text-ta-gray-500 sm:text-sm dark:text-ta-gray-400">
                     Pilih pengumuman yang ingin diputar.
                   </p>
                 </div>
@@ -125,7 +125,7 @@ export function SoundboardGrid({
                 type="button"
                 onClick={() => setAnnouncementPanelOpen(false)}
                 aria-label="Tutup panel pengumuman"
-                className="brutal-border brutal-press flex size-10 shrink-0 items-center justify-center bg-card"
+                className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-ta-gray-200 text-ta-gray-600 transition hover:bg-ta-gray-100 dark:border-ta-gray-700 dark:text-ta-gray-300 dark:hover:bg-ta-gray-700"
               >
                 <X className="size-5" strokeWidth={3} aria-hidden="true" />
               </button>
@@ -140,20 +140,23 @@ export function SoundboardGrid({
                   <div className="mb-3 flex items-center gap-2">
                     <h3
                       id={`announcement-category-${group.category.toLowerCase()}`}
-                      className={`border-2 border-foreground px-2.5 py-1 font-display text-xs uppercase ${
+                      className={`rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
                         group.category === "INFO"
-                          ? "bg-primary text-primary-foreground"
+                          ? "bg-brand-500 text-white"
                           : group.category === "LARANGAN"
-                            ? "bg-destructive text-destructive-foreground"
-                            : "bg-card text-card-foreground"
+                            ? "bg-ta-error text-white"
+                            : "bg-ta-gray-100 text-ta-gray-700 dark:bg-ta-gray-700 dark:text-ta-gray-200"
                       }`}
                     >
                       {group.category}
                     </h3>
-                    <span className="text-xs font-bold text-muted-foreground">
+                    <span className="text-xs font-bold text-ta-gray-500 dark:text-ta-gray-400">
                       {group.items.length} pengumuman
                     </span>
-                    <div className="h-0.5 flex-1 bg-foreground" aria-hidden="true" />
+                    <div
+                      className="h-0.5 flex-1 bg-ta-gray-200 dark:bg-ta-gray-700"
+                      aria-hidden="true"
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -169,12 +172,12 @@ export function SoundboardGrid({
                             announcementDisabled(audioId) || !availableAudioIds.has(audioId)
                           }
                           aria-label={`${status === "playing" ? "Jeda" : "Putar"} ${announcement.label.toLowerCase()}`}
-                          className={`brutal-border brutal-press flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-display text-sm uppercase leading-tight disabled:cursor-not-allowed disabled:opacity-40 sm:text-base ${
+                          className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-sm font-semibold leading-tight transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 sm:text-base ${
                             group.category === "INFO"
-                              ? "bg-accent"
+                              ? "border-brand-500 bg-brand-500 text-white"
                               : group.category === "LARANGAN"
-                                ? "bg-destructive text-destructive-foreground"
-                                : "bg-card text-card-foreground"
+                                ? "border-ta-error bg-ta-error text-white"
+                                : "border-ta-gray-200 bg-white text-ta-gray-900 dark:border-ta-gray-700 dark:bg-ta-gray-800 dark:text-white"
                           }`}
                         >
                           <span>{announcement.label}</span>
@@ -191,14 +194,22 @@ export function SoundboardGrid({
               ))}
             </div>
 
-            <footer className="mt-8 border-t-2 border-foreground px-2 pb-2 pt-4 text-center text-xs leading-relaxed text-muted-foreground sm:text-sm">
+            <footer className="mt-8 border-t border-ta-gray-200 px-2 pb-2 pt-4 text-center text-xs leading-relaxed text-ta-gray-500 sm:text-sm dark:border-ta-gray-700 dark:text-ta-gray-400">
               <p className="italic">
                 - Gak ada orang yang terlahir bodoh, mereka hanya{" "}
-                <strong className="font-bold text-foreground">Malas Belajar</strong>. -
+                <strong className="font-bold text-ta-gray-900 dark:text-white">
+                  Malas Belajar
+                </strong>
+                . -
               </p>
-              <p className="mt-1 font-semibold text-foreground">Semoga Bermanfaat ya gaes!</p>
+              <p className="mt-1 font-semibold text-ta-gray-900 dark:text-white">
+                Semoga Bermanfaat ya gaes!
+              </p>
               <p className="mt-1 text-[11px] sm:text-xs">
-                By <strong className="font-bold text-foreground">Bang Marko Ganteng</strong>
+                By{" "}
+                <strong className="font-bold text-ta-gray-900 dark:text-white">
+                  Bang Marko Ganteng
+                </strong>
               </p>
             </footer>
           </section>
