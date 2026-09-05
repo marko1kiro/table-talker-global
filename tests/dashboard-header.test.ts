@@ -43,6 +43,11 @@ describe("ProfileMenu", () => {
     expect(s).toContain("idManager");
     expect(s).toContain("ID:");
   });
+  it("makes the ID row and password item conditional", () => {
+    const s = src("ProfileMenu.tsx");
+    expect(s).toContain("idManager &&");
+    expect(s).toContain("canChangePassword");
+  });
 });
 
 describe("RoleEmblem", () => {
