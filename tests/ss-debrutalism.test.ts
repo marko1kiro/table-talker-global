@@ -21,6 +21,12 @@ describe("SS/public de-brutalism", () => {
   it("SS station wrapped in ThemeFrame", () => {
     expect(read("../src/routes/index.tsx")).toContain("ThemeFrame");
   });
+  for (const page of ["about", "faq", "contact", "help", "privacy-policy", "terms-of-use"]) {
+    it(`public page ${page}`, () => {
+      clean(`../src/routes/${page}.tsx`);
+      expect(read(`../src/routes/${page}.tsx`)).toContain("ThemeFrame");
+    });
+  }
   it("Header uses the TailAdmin cluster (emblem + toggle), no bell", () => {
     const s = read("../src/components/Header.tsx");
     expect(s).toContain("RoleEmblem");
