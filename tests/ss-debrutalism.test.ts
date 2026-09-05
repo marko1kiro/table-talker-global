@@ -18,6 +18,7 @@ describe("SS/public de-brutalism", () => {
   it("RestaurantCredentialDialog.tsx", () =>
     clean("../src/components/RestaurantCredentialDialog.tsx"));
   it("routes/index.tsx", () => clean("../src/routes/index.tsx"));
+  it("routes/__root.tsx", () => clean("../src/routes/__root.tsx"));
   it("SS station wrapped in ThemeFrame", () => {
     expect(read("../src/routes/index.tsx")).toContain("ThemeFrame");
   });
