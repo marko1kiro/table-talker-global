@@ -1,7 +1,7 @@
 // Pure stale-table logic for the manager dashboard. Reuses the proven
 // client-side occupied-duration helpers from clear-up-queue.ts (zero server/DB
 // cost). Only tables occupied MORE THAN 2 hours are surfaced, as structured
-// items consumed by the header NotificationBell.
+// items consumed by the header NotificationCenter.
 import { formatOccupiedDuration, sortedOccupiedTables } from "./clear-up-queue";
 import type { TableOccupancyRow } from "./table-occupancy.server";
 

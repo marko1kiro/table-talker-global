@@ -15,18 +15,6 @@ describe("ThemeToggle", () => {
   });
 });
 
-describe("NotificationBell", () => {
-  it("shows a count badge and a demo-style dropdown of stale tables", () => {
-    const s = src("NotificationBell.tsx");
-    expect(s).toContain("Bell");
-    expect(s).toContain("Notifikasi");
-    expect(s).toContain("perlu dicek");
-    expect(s).toContain("Tidak ada meja perlu dicek");
-    expect(s).toContain("items.length");
-    expect(s).toContain("Clock");
-  });
-});
-
 describe("ProfileMenu", () => {
   it("shows avatar + name and a menu with disabled password + logout", () => {
     const s = src("ProfileMenu.tsx");

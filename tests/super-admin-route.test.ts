@@ -32,9 +32,8 @@ it("logs out from shared owner navigation without clearing non-owner query cache
 
   expect(source).toContain('import { getAuthStatus, loginSuperAdmin, logout } from "@/lib/auth"');
   expect(source).toContain("useQueryClient");
-  expect(source).toContain('type="button"');
-  expect(source).toContain("Keluar");
-  expect(source).toContain("disabled={loggingOut}");
+  expect(source).toContain("DashboardHeaderRight");
+  expect(source).toContain("onLogout={handleLogout}");
   expect(source).toContain('role="alert"');
   expect(source).toContain("isOwnerQueryKey(query.queryKey)");
   expect(source).toContain("router.invalidate()");
@@ -58,13 +57,13 @@ it("renders the TailAdmin AppShell with a light brand-blue sidebar", () => {
   expect(source).not.toContain("bg-slate-950");
 });
 
-it("header has a theme toggle alongside the existing logout", () => {
+it("header uses the unified cluster (theme toggle + profile live inside it)", () => {
   const source = readFileSync(
     new URL("../src/routes/super-admin/route.tsx", import.meta.url),
     "utf8",
   );
-  expect(source).toContain("ThemeToggle");
-  expect(source).toContain("@/components/dashboard/ThemeToggle");
+  expect(source).toContain("DashboardHeaderRight");
+  expect(source).toContain("@/components/dashboard/DashboardHeaderRight");
 });
 
 it("keeps every owner route query namespace logout-purgeable", () => {
