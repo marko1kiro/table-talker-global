@@ -21,8 +21,7 @@ import { AuthGate } from "@/components/AuthGate";
 import { getAuthStatus, loginSuperAdmin, logout } from "@/lib/auth";
 import { isOwnerQueryKey } from "@/lib/owner-query-cache";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
-import { taSecondaryButtonClass } from "@/components/dashboard/ui";
-import { ThemeToggle } from "@/components/dashboard/ThemeToggle";
+import { DashboardHeaderRight } from "@/components/dashboard/DashboardHeaderRight";
 
 const nav = [
   { label: "Dashboard", to: "/super-admin", icon: CircleGauge, exact: true },
@@ -49,7 +48,6 @@ function OwnerShell() {
   const queryClient = useQueryClient();
   const { pathname } = useLocation();
   const mounted = useRef(true);
-  const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
 
   useEffect(() => {
@@ -73,23 +71,19 @@ function OwnerShell() {
 
   async function handleLogout() {
     setLogoutError("");
-    setLoggingOut(true);
     try {
       const result = await logout();
       if (!result.ok) {
         if (mounted.current) {
           setLogoutError("Logout gagal.");
-          setLoggingOut(false);
         }
         return;
       }
       queryClient.removeQueries({ predicate: (query) => isOwnerQueryKey(query.queryKey) });
-      if (mounted.current) setLoggingOut(false);
       await router.invalidate();
     } catch {
       if (!mounted.current) return;
       setLogoutError("Logout gagal.");
-      setLoggingOut(false);
     }
   }
 
@@ -114,17 +108,11 @@ function OwnerShell() {
       navItems={navItems}
       headerTitle="Owner Console"
       headerRight={
-        <>
-          <ThemeToggle />
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={loggingOut}
-            className={taSecondaryButtonClass}
-          >
-            {loggingOut ? "Keluar..." : "Keluar"}
-          </button>
-        </>
+        <DashboardHeaderRight
+          roleLabel="OWNER"
+          profile={{ name: "Owner", canChangePassword: false }}
+          onLogout={handleLogout}
+        />
       }
     >
       {logoutError && (
