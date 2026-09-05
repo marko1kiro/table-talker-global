@@ -41,4 +41,9 @@ describe("manager dashboard route (TailAdmin)", () => {
     expect(text()).not.toContain('t.status === "kosong"');
     expect(text()).toContain("TABLE_COUNT - terisiCount");
   });
+  it("sizes the mobile table grid like Kasir (aspect-square, full-width 5 cols)", () => {
+    expect(text()).not.toContain("size-10");
+    expect(text()).not.toContain("w-fit");
+    expect(text()).toContain("aspect-square");
+  });
 });

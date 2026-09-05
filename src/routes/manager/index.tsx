@@ -197,13 +197,13 @@ function ManagerDashboard() {
                 </div>
               </>
             ) : (
-              <ul className="mx-auto grid w-fit grid-cols-5 gap-2 md:w-full md:grid-cols-10">
+              <ul className="grid grid-cols-5 gap-2 md:grid-cols-10">
                 {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((n) => {
                   const terisi = statusByNumber.get(n) === "terisi";
                   return (
-                    <li key={n} className="flex items-center justify-center">
+                    <li key={n}>
                       <span
-                        className={`grid size-10 place-items-center rounded-lg text-base font-black ${
+                        className={`grid aspect-square place-items-center rounded-xl text-sm font-extrabold lg:text-base ${
                           terisi
                             ? "border-2 border-ta-error/30 bg-ta-error/10 text-ta-error md:border-0 md:bg-ta-error md:text-white"
                             : "border-2 border-ta-success/30 bg-ta-success/10 text-ta-success md:border-0 md:bg-ta-success md:text-white"

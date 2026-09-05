@@ -61,6 +61,9 @@ export function ManagerLayout({
       brand={<Brand />}
       navItems={navItems}
       headerTitle={headerTitle}
+      headerLogo={
+        <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
+      }
       headerRight={headerRight}
       notice={notice}
       footer={footer}

@@ -35,4 +35,9 @@ describe("ManagerLayout (TailAdmin)", () => {
     expect(text).toContain("dark:bg-ta-gray-800");
     expect(text).toContain("dark:border-ta-gray-700");
   });
+  it("passes the app logo as the mobile header brand", () => {
+    const text = source();
+    expect(text).toContain("headerLogo");
+    expect(text).toContain("lime-logo.webp");
+  });
 });

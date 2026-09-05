@@ -44,6 +44,7 @@ export function AppShell({
   brand,
   navItems,
   headerTitle,
+  headerLogo,
   headerRight,
   notice,
   footer,
@@ -52,6 +53,7 @@ export function AppShell({
   brand: ReactNode;
   navItems: AppShellNavItem[];
   headerTitle: string;
+  headerLogo?: ReactNode;
   headerRight?: ReactNode;
   notice?: OccupancyNotice | null;
   footer?: ReactNode;
@@ -106,9 +108,18 @@ export function AppShell({
 
           <main className="min-w-0 flex-1">
             <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-ta-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 dark:border-ta-gray-700 dark:bg-ta-gray-800/95">
-              <h1 className="truncate text-base font-semibold text-ta-gray-900 dark:text-white">
-                {headerTitle}
-              </h1>
+              {headerLogo ? (
+                <>
+                  <div className="flex md:hidden">{headerLogo}</div>
+                  <h1 className="hidden truncate text-base font-semibold text-ta-gray-900 md:block dark:text-white">
+                    {headerTitle}
+                  </h1>
+                </>
+              ) : (
+                <h1 className="truncate text-base font-semibold text-ta-gray-900 dark:text-white">
+                  {headerTitle}
+                </h1>
+              )}
               <div className="flex shrink-0 items-center gap-2">{headerRight}</div>
             </header>
 
