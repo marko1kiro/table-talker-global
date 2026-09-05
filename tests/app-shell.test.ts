@@ -22,12 +22,9 @@ describe("AppShell", () => {
     expect(s).toContain("md:flex");
     expect(s).toContain("md:hidden");
   });
-  it("owns theme state, provides context, and flips the .dark class on its root", () => {
+  it("delegates theme to ThemeFrame and keeps dark chrome borders", () => {
     const s = src();
-    expect(s).toContain("useTheme");
-    expect(s).toContain("ThemeContext.Provider");
-    expect(s).toContain('isDark && "dark"');
-    expect(s).toContain("dark:bg-ta-gray-900");
+    expect(s).toContain("ThemeFrame");
     expect(s).toContain("dark:border-ta-gray-700");
   });
   it("swaps the header title for a logo on mobile when headerLogo is provided", () => {
