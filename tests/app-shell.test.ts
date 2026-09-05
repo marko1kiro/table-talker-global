@@ -12,10 +12,10 @@ describe("AppShell", () => {
     expect(s).toContain("text-brand-500");
     expect(s).toContain("text-ta-gray-700");
   });
-  it("has a sticky header and a notice banner slot", () => {
+  it("has a sticky header and no standalone notice banner (moved to bell)", () => {
     const s = src();
     expect(s).toContain("sticky top-0");
-    expect(s).toContain("notice");
+    expect(s).not.toContain("notice");
   });
   it("is responsive (desktop rail + mobile drawer)", () => {
     const s = src();

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Table2, Users, ScrollText } from "lucide-react";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
-import type { OccupancyNotice } from "@/lib/occupancy-notice";
 
 export type ManagerMenu = "tables" | "crew" | "log";
 
@@ -24,14 +23,12 @@ export function ManagerLayout({
   restaurantName,
   active,
   onSelect,
-  notice,
   headerRight,
   children,
 }: {
   restaurantName: string;
   active: ManagerMenu;
   onSelect: (m: ManagerMenu) => void;
-  notice?: OccupancyNotice | null;
   headerRight?: ReactNode;
   children: ReactNode;
 }) {
@@ -65,7 +62,6 @@ export function ManagerLayout({
         <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
       }
       headerRight={headerRight}
-      notice={notice}
       footer={footer}
     >
       {children}

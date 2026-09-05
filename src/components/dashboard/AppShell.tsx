@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { OccupancyNotice } from "@/lib/occupancy-notice";
 import { ThemeContext, useTheme } from "./use-theme";
 
 export type AppShellNavItem = {
@@ -46,7 +45,6 @@ export function AppShell({
   headerTitle,
   headerLogo,
   headerRight,
-  notice,
   footer,
   children,
 }: {
@@ -55,7 +53,6 @@ export function AppShell({
   headerTitle: string;
   headerLogo?: ReactNode;
   headerRight?: ReactNode;
-  notice?: OccupancyNotice | null;
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -122,17 +119,6 @@ export function AppShell({
               )}
               <div className="flex shrink-0 items-center gap-2">{headerRight}</div>
             </header>
-
-            {notice && (
-              <div className="border-b border-brand-100 bg-brand-50 px-4 py-2 sm:px-6 md:hidden dark:border-ta-gray-700 dark:bg-brand-500/10">
-                <p className="truncate text-sm font-semibold uppercase text-brand-700 dark:text-brand-300">
-                  {notice.line1}
-                  <span className="ml-2 rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                    {notice.roleLabel}
-                  </span>
-                </p>
-              </div>
-            )}
 
             <div className="w-full px-4 py-5 sm:px-6">{children}</div>
           </main>
