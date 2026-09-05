@@ -28,11 +28,11 @@ import {
   ownerPrimaryButtonClass,
 } from "@/components/OwnerUi";
 import {
-  CrewHeader,
   CrewTableSection,
   crewPrimaryButtonClass,
   crewSecondaryButtonClass,
 } from "@/components/CrewHeader";
+import { CrewShell } from "@/components/dashboard/CrewShell";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
   browserSessionStorage,
@@ -42,7 +42,7 @@ import {
 } from "@/lib/crew-session-identity";
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
-import { useNoticeQueue } from "@/hooks/use-notice-queue";
+import { useNotificationCenter } from "@/hooks/use-notification-center";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
@@ -142,7 +142,7 @@ function SatgasRoute() {
     // Realtime is primary; the hook also owns the visible-only 12-second safety net.
     refetchOnWindowFocus: true,
   });
-  const notices = useNoticeQueue();
+  const { items, unread, push, markRead } = useNotificationCenter();
   const realtimeStatus = useTableOccupancyRealtime(
     restaurantId,
     identity?.roleSessionToken ?? "",
@@ -153,7 +153,7 @@ function SatgasRoute() {
     identity?.roleSessionId ?? null,
     (broadcast) => {
       const notice = formatOccupancyNotice(broadcast);
-      if (notice) notices.push(notice);
+      if (notice) push(notice);
     },
   );
 
@@ -318,187 +318,190 @@ function SatgasRoute() {
   if (!identityHydrated || !identity) return null;
 
   return (
-    <OwnerPage>
-      <CrewHeader
-        role="Satgas"
-        restaurantName={identity.restaurantDisplayName}
-        restaurantCode={identity.restaurantCode}
-        userName={identity.displayName}
-        onLogout={logout}
-        notice={notices.current}
-      />
-
-      {realtimeStatus !== "SUBSCRIBED" && (
-        <OwnerNotice role="status" tone="warning">
-          Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
-        </OwnerNotice>
-      )}
-
-      {actionError && (
-        <OwnerNotice role="alert" tone="danger">
-          {actionError}
-        </OwnerNotice>
-      )}
-
-      {partition.readyToConfirm.length > 0 && (
-        <OwnerPanel
-          title="Menunggu Konfirmasi"
-          description="Sudah 10 menit sejak diantar dan meja masih tercatat kosong. Konfirmasi jika tamu sudah duduk."
-        >
-          <div className="flex flex-col gap-2">
-            {partition.readyToConfirm.map((entry) => {
-              const isConfirming =
-                confirmMutation.isPending && confirmMutation.variables?.intentId === entry.intentId;
-              return (
-                <div
-                  key={entry.intentId}
-                  className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2"
-                >
-                  <span className="text-sm font-bold text-amber-800">Meja {entry.tableNumber}</span>
-                  <button
-                    type="button"
-                    disabled={confirmMutation.isPending}
-                    onClick={() => confirmMutation.mutate(entry)}
-                    className={`${ownerPrimaryButtonClass} flex items-center gap-2`}
-                  >
-                    {isConfirming && <Loader2 className="size-4 animate-spin" />}
-                    {isConfirming ? "Memproses..." : "Konfirmasi"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </OwnerPanel>
-      )}
-
-      <CrewTableSection
-        legend={[
-          { color: "emerald", label: "Kosong" },
-          { color: "amber", label: "Sudah Di-escort" },
-          { color: "red", label: "Terisi" },
-        ]}
-        layoutPreference={layoutPreference}
-        onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
-      >
-        {processingTable !== null && (
-          <OwnerNotice role="status" tone="neutral">
-            <span className="flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin" />
-              Memproses escort Meja {processingTable}...
-            </span>
+    <CrewShell
+      roleLabel="SATGAS"
+      userName={identity.displayName}
+      onLogout={logout}
+      feed={items}
+      unread={unread}
+      onOpen={markRead}
+    >
+      <OwnerPage>
+        {realtimeStatus !== "SUBSCRIBED" && (
+          <OwnerNotice role="status" tone="warning">
+            Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
           </OwnerNotice>
         )}
 
-        {snapshot.isLoading ? (
-          <p className="text-sm text-slate-500">Memuat status meja...</p>
-        ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
-          <>
-            <OwnerNotice role="alert" tone="danger">
-              Status meja tidak dapat dimuat.
-            </OwnerNotice>
-            <div className="mt-4">
-              <OwnerRetry onClick={() => snapshot.refetch()} />
-            </div>
-          </>
-        ) : layoutPreference === "grid" ? (
-          <TableGrid
-            tables={tables}
-            escortedTableNumbers={escortedTableNumbers}
-            pendingTable={processingTable}
-            onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
-            onSelectEscortedTable={(tableNumber, intentId) =>
-              setCancelTarget({ tableNumber, intentId })
-            }
-          />
-        ) : (
-          <TableList
-            tables={tables}
-            escortedTableNumbers={escortedTableNumbers}
-            pendingTable={processingTable}
-            onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
-            onSelectEscortedTable={(tableNumber, intentId) =>
-              setCancelTarget({ tableNumber, intentId })
-            }
-          />
+        {actionError && (
+          <OwnerNotice role="alert" tone="danger">
+            {actionError}
+          </OwnerNotice>
         )}
-      </CrewTableSection>
 
-      <AlertDialog
-        open={escortTable !== null}
-        onOpenChange={(open) => {
-          if (!open) setEscortTable(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Escort ke Meja {escortTable}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Meja ini akan diingatkan untuk dikonfirmasi 10 menit lagi jika belum berubah
-              statusnya.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              className={crewSecondaryButtonClass}
-              onClick={() => setEscortTable(null)}
-            >
-              Batal
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className={crewPrimaryButtonClass}
-              onClick={() => {
-                // AlertDialogAction closes the dialog on click by default
-                // (Radix wraps it in a Dialog.Close) -- that's exactly
-                // what we want here. The "sedang diproses" signal moves
-                // to the table grid/list instead, via `processingTable`,
-                // which is set here so it survives the dialog closing.
-                if (escortTable !== null) {
-                  setProcessingTable(escortTable);
-                  escortMutation.mutate(escortTable);
-                }
-              }}
-            >
-              Ya, Escort
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {partition.readyToConfirm.length > 0 && (
+          <OwnerPanel
+            title="Menunggu Konfirmasi"
+            description="Sudah 10 menit sejak diantar dan meja masih tercatat kosong. Konfirmasi jika tamu sudah duduk."
+          >
+            <div className="flex flex-col gap-2">
+              {partition.readyToConfirm.map((entry) => {
+                const isConfirming =
+                  confirmMutation.isPending &&
+                  confirmMutation.variables?.intentId === entry.intentId;
+                return (
+                  <div
+                    key={entry.intentId}
+                    className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-500/30 dark:bg-amber-500/10"
+                  >
+                    <span className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                      Meja {entry.tableNumber}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={confirmMutation.isPending}
+                      onClick={() => confirmMutation.mutate(entry)}
+                      className={`${ownerPrimaryButtonClass} flex items-center gap-2`}
+                    >
+                      {isConfirming && <Loader2 className="size-4 animate-spin" />}
+                      {isConfirming ? "Memproses..." : "Konfirmasi"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </OwnerPanel>
+        )}
 
-      <AlertDialog
-        open={cancelTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setCancelTarget(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Batalkan Escort untuk Meja {cancelTarget?.tableNumber}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Meja akan kembali berstatus kosong dan bisa di-escort lagi.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              className={crewSecondaryButtonClass}
-              onClick={() => setCancelTarget(null)}
-            >
-              Tidak
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className={crewPrimaryButtonClass}
-              onClick={() => {
-                if (cancelTarget !== null) cancelMutation.mutate(cancelTarget);
-                setCancelTarget(null);
-              }}
-            >
-              Ya, Batalkan
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </OwnerPage>
+        <CrewTableSection
+          legend={[
+            { color: "emerald", label: "Kosong" },
+            { color: "amber", label: "Sudah Di-escort" },
+            { color: "red", label: "Terisi" },
+          ]}
+          layoutPreference={layoutPreference}
+          onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
+        >
+          {processingTable !== null && (
+            <OwnerNotice role="status" tone="neutral">
+              <span className="flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                Memproses escort Meja {processingTable}...
+              </span>
+            </OwnerNotice>
+          )}
+
+          {snapshot.isLoading ? (
+            <p className="text-sm text-slate-500 dark:text-ta-gray-400">Memuat status meja...</p>
+          ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
+            <>
+              <OwnerNotice role="alert" tone="danger">
+                Status meja tidak dapat dimuat.
+              </OwnerNotice>
+              <div className="mt-4">
+                <OwnerRetry onClick={() => snapshot.refetch()} />
+              </div>
+            </>
+          ) : layoutPreference === "grid" ? (
+            <TableGrid
+              tables={tables}
+              escortedTableNumbers={escortedTableNumbers}
+              pendingTable={processingTable}
+              onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
+              onSelectEscortedTable={(tableNumber, intentId) =>
+                setCancelTarget({ tableNumber, intentId })
+              }
+            />
+          ) : (
+            <TableList
+              tables={tables}
+              escortedTableNumbers={escortedTableNumbers}
+              pendingTable={processingTable}
+              onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
+              onSelectEscortedTable={(tableNumber, intentId) =>
+                setCancelTarget({ tableNumber, intentId })
+              }
+            />
+          )}
+        </CrewTableSection>
+
+        <AlertDialog
+          open={escortTable !== null}
+          onOpenChange={(open) => {
+            if (!open) setEscortTable(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Escort ke Meja {escortTable}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Meja ini akan diingatkan untuk dikonfirmasi 10 menit lagi jika belum berubah
+                statusnya.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className={crewSecondaryButtonClass}
+                onClick={() => setEscortTable(null)}
+              >
+                Batal
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className={crewPrimaryButtonClass}
+                onClick={() => {
+                  // AlertDialogAction closes the dialog on click by default
+                  // (Radix wraps it in a Dialog.Close) -- that's exactly
+                  // what we want here. The "sedang diproses" signal moves
+                  // to the table grid/list instead, via `processingTable`,
+                  // which is set here so it survives the dialog closing.
+                  if (escortTable !== null) {
+                    setProcessingTable(escortTable);
+                    escortMutation.mutate(escortTable);
+                  }
+                }}
+              >
+                Ya, Escort
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={cancelTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setCancelTarget(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Batalkan Escort untuk Meja {cancelTarget?.tableNumber}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Meja akan kembali berstatus kosong dan bisa di-escort lagi.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className={crewSecondaryButtonClass}
+                onClick={() => setCancelTarget(null)}
+              >
+                Tidak
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className={crewPrimaryButtonClass}
+                onClick={() => {
+                  if (cancelTarget !== null) cancelMutation.mutate(cancelTarget);
+                  setCancelTarget(null);
+                }}
+              >
+                Ya, Batalkan
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </OwnerPage>
+    </CrewShell>
   );
 }
 
@@ -542,12 +545,12 @@ function TableGrid({
             }
             className={
               occupied
-                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 transition-colors duration-300"
+                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 transition-colors duration-300 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
                 : escorted
-                  ? "flex aspect-square items-center justify-center rounded-xl border-2 border-amber-300 bg-amber-50 text-sm font-extrabold text-amber-800 transition-colors duration-300 hover:border-amber-400 hover:bg-amber-100"
+                  ? "flex aspect-square items-center justify-center rounded-xl border-2 border-amber-300 bg-amber-50 text-sm font-extrabold text-amber-800 transition-colors duration-300 hover:border-amber-400 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:border-amber-500/50 dark:hover:bg-amber-500/20"
                   : isPending
-                    ? "flex aspect-square cursor-wait items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300"
-                    : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 hover:border-emerald-400 hover:bg-emerald-100"
+                    ? "flex aspect-square cursor-wait items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                    : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 hover:border-emerald-400 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:border-emerald-500/50 dark:hover:bg-emerald-500/20"
             }
           >
             {isPending ? <Loader2 className="size-4 animate-spin" /> : tableNumber}
@@ -596,25 +599,25 @@ function TableList({
             }
             className={
               occupied
-                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300"
+                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300 dark:text-red-300"
                 : escorted
-                  ? "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-amber-800 transition-colors duration-300 hover:bg-amber-50"
+                  ? "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-amber-800 transition-colors duration-300 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-500/10"
                   : isPending
-                    ? "flex w-full cursor-wait items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300"
-                    : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 hover:bg-emerald-50"
+                    ? "flex w-full cursor-wait items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 dark:text-emerald-300"
+                    : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
             }
           >
             <span>Meja {tableNumber}</span>
             {isPending ? (
-              <Loader2 className="size-4 animate-spin text-emerald-700" />
+              <Loader2 className="size-4 animate-spin text-emerald-700 dark:text-emerald-400" />
             ) : (
               <span
                 className={
                   occupied
-                    ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
+                    ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700 dark:bg-red-500/15 dark:text-red-300"
                     : escorted
-                      ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700"
-                      : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
+                      ? "rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                      : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
                 }
               >
                 {occupied ? "TERISI" : escorted ? "DI-ESCORT" : "KOSONG"}
