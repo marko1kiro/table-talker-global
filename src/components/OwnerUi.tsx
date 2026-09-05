@@ -4,16 +4,16 @@ import { AlertTriangle, Inbox, LoaderCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const ownerControlClass =
-  "mt-1.5 min-h-11 w-full rounded-xl border-2 border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400";
+  "mt-1.5 min-h-11 w-full rounded-xl border-2 border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-ta-gray-700 dark:bg-ta-gray-800 dark:text-ta-gray-100 dark:placeholder:text-ta-gray-500 dark:hover:border-ta-gray-600 dark:disabled:bg-ta-gray-700 dark:disabled:text-ta-gray-500";
 
 export const ownerPrimaryButtonClass =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-amber-500 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-500/25 disabled:pointer-events-none disabled:opacity-45";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-amber-500 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-500/25 disabled:pointer-events-none disabled:opacity-45 dark:bg-ta-gray-100 dark:text-ta-gray-900 dark:hover:bg-amber-400";
 
 export const ownerSecondaryButtonClass =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200 disabled:pointer-events-none disabled:opacity-45";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200 disabled:pointer-events-none disabled:opacity-45 dark:border-ta-gray-700 dark:bg-ta-gray-800 dark:text-ta-gray-200 dark:hover:border-ta-gray-600 dark:hover:bg-ta-gray-700";
 
 export const ownerDangerButtonClass =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100 disabled:pointer-events-none disabled:opacity-45";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100 disabled:pointer-events-none disabled:opacity-45 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300 dark:hover:border-red-500/40 dark:hover:bg-red-500/20";
 
 export function OwnerPage({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("space-y-6", className)}>{children}</div>;
@@ -34,13 +34,17 @@ export function OwnerPageHeader({
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="max-w-3xl">
         {eyebrow && (
-          <p className="mb-2 text-xs font-extrabold uppercase tracking-[0.18em] text-amber-700">
+          <p className="mb-2 text-xs font-extrabold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-400">
             {eyebrow}
           </p>
         )}
-        <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">{title}</h1>
+        <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl dark:text-white">
+          {title}
+        </h1>
         {description && (
-          <p className="mt-2 text-sm leading-6 text-slate-500 sm:text-base">{description}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-500 sm:text-base dark:text-ta-gray-400">
+            {description}
+          </p>
         )}
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -60,11 +64,20 @@ export function OwnerPanel({
   description?: string;
 }) {
   return (
-    <section className={cn("rounded-2xl border border-slate-200 bg-white shadow-sm", className)}>
+    <section
+      className={cn(
+        "rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-ta-gray-700 dark:bg-ta-gray-800",
+        className,
+      )}
+    >
       {(title || description) && (
-        <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
-          {title && <h2 className="text-base font-extrabold text-slate-950">{title}</h2>}
-          {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+        <div className="border-b border-slate-100 px-5 py-4 sm:px-6 dark:border-ta-gray-700">
+          {title && (
+            <h2 className="text-base font-extrabold text-slate-950 dark:text-white">{title}</h2>
+          )}
+          {description && (
+            <p className="mt-1 text-sm text-slate-500 dark:text-ta-gray-400">{description}</p>
+          )}
         </div>
       )}
       <div className="p-5 sm:p-6">{children}</div>
@@ -82,11 +95,13 @@ export function OwnerField({
   children: ReactNode;
 }) {
   return (
-    <label className="block text-sm font-bold text-slate-700">
+    <label className="block text-sm font-bold text-slate-700 dark:text-ta-gray-200">
       {label}
       {children}
       {hint && (
-        <span className="mt-1.5 block text-xs font-normal leading-5 text-slate-500">{hint}</span>
+        <span className="mt-1.5 block text-xs font-normal leading-5 text-slate-500 dark:text-ta-gray-400">
+          {hint}
+        </span>
       )}
     </label>
   );
@@ -100,11 +115,15 @@ export function StatusBadge({
   tone?: "success" | "danger" | "warning" | "neutral" | "info";
 }) {
   const toneClass = {
-    success: "bg-emerald-50 text-emerald-700 ring-emerald-600/15",
-    danger: "bg-red-50 text-red-700 ring-red-600/15",
-    warning: "bg-amber-50 text-amber-800 ring-amber-600/20",
-    info: "bg-sky-50 text-sky-700 ring-sky-600/15",
-    neutral: "bg-slate-100 text-slate-600 ring-slate-500/10",
+    success:
+      "bg-emerald-50 text-emerald-700 ring-emerald-600/15 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20",
+    danger:
+      "bg-red-50 text-red-700 ring-red-600/15 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/20",
+    warning:
+      "bg-amber-50 text-amber-800 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20",
+    info: "bg-sky-50 text-sky-700 ring-sky-600/15 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/20",
+    neutral:
+      "bg-slate-100 text-slate-600 ring-slate-500/10 dark:bg-ta-gray-700 dark:text-ta-gray-300 dark:ring-ta-gray-600",
   }[tone];
   return (
     <span
@@ -128,10 +147,14 @@ export function OwnerNotice({
   role?: "alert" | "status";
 }) {
   const classes = {
-    danger: "border-red-200 bg-red-50 text-red-800",
-    warning: "border-amber-200 bg-amber-50 text-amber-900",
-    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    neutral: "border-slate-200 bg-slate-50 text-slate-600",
+    danger:
+      "border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300",
+    warning:
+      "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
+    success:
+      "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
+    neutral:
+      "border-slate-200 bg-slate-50 text-slate-600 dark:border-ta-gray-700 dark:bg-ta-gray-800 dark:text-ta-gray-300",
   }[tone];
   return (
     <div
@@ -152,7 +175,7 @@ export function OwnerLoading({ label = "Memuat data..." }: { label?: string }) {
     <OwnerPanel>
       <div
         role="status"
-        className="flex min-h-48 flex-col items-center justify-center gap-3 text-slate-500"
+        className="flex min-h-48 flex-col items-center justify-center gap-3 text-slate-500 dark:text-ta-gray-400"
       >
         <LoaderCircle className="size-6 animate-spin text-amber-500" />
         <p className="text-sm font-semibold">{label}</p>
@@ -163,12 +186,12 @@ export function OwnerLoading({ label = "Memuat data..." }: { label?: string }) {
 
 export function OwnerEmpty({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-6 text-center">
-      <span className="mb-3 grid size-10 place-items-center rounded-xl bg-white text-slate-400 shadow-sm ring-1 ring-slate-200">
+    <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-6 text-center dark:border-ta-gray-600 dark:bg-ta-gray-800/50">
+      <span className="mb-3 grid size-10 place-items-center rounded-xl bg-white text-slate-400 shadow-sm ring-1 ring-slate-200 dark:bg-ta-gray-700 dark:text-ta-gray-400 dark:ring-ta-gray-600">
         <Inbox className="size-5" />
       </span>
-      <p className="font-extrabold text-slate-800">{title}</p>
-      <p className="mt-1 max-w-sm text-sm text-slate-500">{description}</p>
+      <p className="font-extrabold text-slate-800 dark:text-ta-gray-100">{title}</p>
+      <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-ta-gray-400">{description}</p>
     </div>
   );
 }
@@ -206,7 +229,7 @@ export function OwnerPagination({
   return (
     <nav
       aria-label="Paginasi"
-      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-ta-gray-700 dark:bg-ta-gray-800"
     >
       <button
         type="button"
@@ -216,7 +239,9 @@ export function OwnerPagination({
       >
         {previousLabel}
       </button>
-      <span className="text-center text-sm font-bold text-slate-600">Halaman {page}</span>
+      <span className="text-center text-sm font-bold text-slate-600 dark:text-ta-gray-300">
+        Halaman {page}
+      </span>
       <button
         type="button"
         disabled={!hasNext}
