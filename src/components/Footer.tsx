@@ -1,4 +1,3 @@
-import { Coffee } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FooterProps {
@@ -43,31 +42,11 @@ export function Footer({ className, variant = "light" }: FooterProps) {
             </a>
           ))}
         </nav>
-        <div
-          className={cn(
-            "inline-flex items-center gap-2 rounded-full px-3 py-1.5",
-            isDark
-              ? "bg-white/5"
-              : "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300",
-          )}
-        >
-          <span className="text-[11px] font-bold uppercase tracking-wide">JANGAN LUPA</span>
-          <Coffee className="h-4 w-4" strokeWidth={3} aria-label="coffee" />
-          <span className="text-[11px] font-bold uppercase tracking-wide">YA GAES! 😂</span>
-        </div>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-ta-gray-500 dark:text-ta-gray-400">
-          By 👉{" "}
-          <span
-            className={cn(
-              "font-bold",
-              isDark ? "text-ta-gray-100" : "text-ta-gray-900 dark:text-white",
-            )}
-          >
-            BANG MARKO GANTENG 😏
-          </span>
+        <p className="flex items-center justify-center gap-1 text-[11px] text-ta-gray-400">
+          lihatmeja.com <span aria-label="copyright">©</span> {new Date().getFullYear()}
         </p>
-        <p className="text-[9px] font-bold uppercase text-ta-gray-400 dark:text-ta-gray-500">
-          © {new Date().getFullYear()} LIME
+        <p className="text-[11px] font-bold uppercase tracking-wide text-ta-gray-400 dark:text-ta-gray-500">
+          XDIRGA LABS
         </p>
       </div>
     </footer>

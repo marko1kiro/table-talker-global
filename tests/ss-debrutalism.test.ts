@@ -48,4 +48,15 @@ describe("SS/public de-brutalism", () => {
     expect(s).toContain("Bantuan");
     expect(s).toContain("Tema");
   });
+  it("Footer + announcement panel footers are formal, matching the Manager footer", () => {
+    const footer = read("../src/components/Footer.tsx");
+    expect(footer).toContain("lihatmeja.com");
+    expect(footer).toContain("XDIRGA LABS");
+    expect(footer).not.toContain("GANTENG");
+    expect(footer).not.toContain("JANGAN LUPA");
+    const grid = read("../src/components/SoundboardGrid.tsx");
+    expect(grid).toContain("XDIRGA LABS");
+    expect(grid).not.toContain("GANTENG");
+    expect(grid).not.toContain("gaes");
+  });
 });

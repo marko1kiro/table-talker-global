@@ -191,22 +191,10 @@ export function SoundboardGrid({
             </div>
 
             <footer className="mt-8 border-t border-ta-gray-200 px-2 pb-2 pt-4 text-center text-xs leading-relaxed text-ta-gray-500 sm:text-sm dark:border-ta-gray-700 dark:text-ta-gray-400">
-              <p className="italic">
-                - Gak ada orang yang terlahir bodoh, mereka hanya{" "}
-                <strong className="font-bold text-ta-gray-900 dark:text-white">
-                  Malas Belajar
-                </strong>
-                . -
+              <p className="flex items-center justify-center gap-1">
+                lihatmeja.com <span aria-label="copyright">©</span> {new Date().getFullYear()}
               </p>
-              <p className="mt-1 font-semibold text-ta-gray-900 dark:text-white">
-                Semoga Bermanfaat ya gaes!
-              </p>
-              <p className="mt-1 text-[11px] sm:text-xs">
-                By{" "}
-                <strong className="font-bold text-ta-gray-900 dark:text-white">
-                  Bang Marko Ganteng
-                </strong>
-              </p>
+              <p className="mt-1 text-[11px] font-bold uppercase tracking-wide">XDIRGA LABS</p>
             </footer>
           </section>
         </div>
