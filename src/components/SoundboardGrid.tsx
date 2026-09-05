@@ -18,7 +18,6 @@ type SoundboardGridProps = {
   announcementDisabled: (audioId: AudioId) => boolean;
   tableStatus: (tableNumber: number) => TableStatus;
   announcementStatus: (announcementId: AnnouncementId) => AnnouncementStatus;
-  announcementTriggerElevated?: boolean;
   onSelect: (audioId: AudioId) => void;
 };
 
@@ -29,7 +28,6 @@ export function SoundboardGrid({
   announcementDisabled,
   tableStatus,
   announcementStatus,
-  announcementTriggerElevated = false,
   onSelect,
 }: SoundboardGridProps) {
   const [announcementPanelOpen, setAnnouncementPanelOpen] = useState(false);
@@ -82,9 +80,7 @@ export function SoundboardGrid({
           aria-haspopup="dialog"
           aria-expanded="false"
           disabled={drawerDisabled}
-          className={`fixed right-4 z-30 flex items-center gap-2 rounded-full bg-brand-500 px-4 py-3 text-sm font-bold uppercase text-white shadow-theme-md transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 sm:px-5 sm:text-base ${
-            announcementTriggerElevated ? "bottom-24" : "bottom-4"
-          }`}
+          className="fixed bottom-4 right-4 z-30 flex items-center gap-2 rounded-full bg-brand-500 px-4 py-3 text-sm font-bold uppercase text-white shadow-theme-md transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 sm:px-5 sm:text-base"
         >
           <Megaphone className="size-5 shrink-0" aria-hidden="true" />
           Lihat Pengumuman

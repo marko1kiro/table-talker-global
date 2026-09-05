@@ -470,7 +470,7 @@ function SoundboardPage() {
             <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <h1 className="text-xl font-black leading-tight sm:text-2xl">Pilih Nomor Meja</h1>
+                  <h1 className="text-xl font-bold leading-tight sm:text-2xl">Pilih Nomor Meja</h1>
                   <p className="text-xs text-ta-gray-500 dark:text-ta-gray-400">
                     Tap tombol untuk memanggil pelanggan mengambil pesanan.
                   </p>
@@ -480,7 +480,6 @@ function SoundboardPage() {
               <SoundboardGrid
                 availableAudioIds={availableAudioIds}
                 drawerDisabled={false}
-                announcementTriggerElevated={activeAudioId !== null}
                 tableDisabled={() => activeAudioId !== null}
                 announcementDisabled={(audioId) =>
                   loading !== null || (activeAudioId !== null && activeAudioId !== audioId)
@@ -523,12 +522,12 @@ function SoundboardPage() {
             <Footer />
 
             {activeAudioId !== null && (
-              <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+              <div className="fixed bottom-20 right-4 z-50">
                 <button
                   onClick={stop}
-                  className="flex items-center gap-2 rounded-full bg-ta-error px-5 py-3 font-bold uppercase text-white shadow-theme-md transition active:scale-[0.99]"
+                  className="flex items-center gap-2.5 rounded-full bg-ta-error px-6 py-4 text-base font-bold uppercase text-white shadow-theme-md transition active:scale-[0.99]"
                 >
-                  <Square className="h-4 w-4" fill="currentColor" strokeWidth={3} />
+                  <Square className="size-5" fill="currentColor" strokeWidth={3} />
                   Stop{" "}
                   {typeof activeAudioId === "number" ? `Meja ${activeAudioId}` : activeAudioLabel}
                 </button>

@@ -10,38 +10,58 @@ interface TableButtonProps {
   disabled?: boolean;
 }
 
+// Gradient border matches the LIME logo: blue -> cyan -> magenta.
+const GRADIENT_FRAME =
+  "rounded-xl bg-gradient-to-br from-blue-500 via-cyan-400 to-fuchsia-500 p-[2px]";
+
 export function TableButton({ tableNumber, status, onClick, disabled = false }: TableButtonProps) {
   const isEmpty = status === "empty";
   const isPlaying = status === "playing";
   const isLoading = status === "loading";
+  // While another table is playing, every other table is disabled; their ready
+  // numbers gray out so the single red "playing" number stands out.
+  const dimmedReady = status === "ready" && disabled;
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled || isEmpty || isLoading}
-      aria-label={`Meja nomor ${tableNumber}`}
-      className={cn(
-        "relative flex aspect-square w-full select-none flex-col items-center justify-center rounded-xl border shadow-theme-sm transition active:scale-[0.99] disabled:cursor-not-allowed",
-        isPlaying
-          ? "border-brand-500 bg-brand-500 text-white shadow-theme-md"
-          : isEmpty
-            ? "border-ta-gray-200 bg-ta-gray-100 text-ta-gray-400 dark:border-ta-gray-700 dark:bg-ta-gray-700 dark:text-ta-gray-500"
-            : "border-ta-gray-200 bg-white text-ta-gray-900 hover:border-brand-300 dark:border-ta-gray-700 dark:bg-ta-gray-800 dark:text-white",
-      )}
-    >
-      <span className="absolute left-1.5 top-1.5 text-[9px] font-bold leading-none">
-        {isEmpty ? "KOSONG" : isPlaying ? "PLAY" : "SIAP"}
-      </span>
-      <span className="absolute right-1.5 top-1.5">
-        {isEmpty ? (
-          <VolumeX className="h-3 w-3 opacity-50" strokeWidth={3} />
-        ) : (
-          <Volume2 className={cn("h-3 w-3", isPlaying && "animate-pulse")} strokeWidth={3} />
+    <div className={cn("relative aspect-square w-full", GRADIENT_FRAME)}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled || isEmpty || isLoading}
+        aria-label={`Meja nomor ${tableNumber}`}
+        className={cn(
+          "relative flex size-full select-none flex-col items-center justify-center rounded-[10px] transition active:scale-[0.99] disabled:cursor-not-allowed",
+          isPlaying
+            ? "bg-red-50 dark:bg-red-500/10"
+            : isEmpty
+              ? "bg-ta-gray-100 dark:bg-ta-gray-700"
+              : "bg-white dark:bg-ta-gray-800",
         )}
-      </span>
-      <span className="text-[clamp(1.4rem,4vw,2.2rem)] leading-none font-black">{tableNumber}</span>
-      {isLoading && <span className="absolute bottom-1.5 text-[8px] font-bold">MEMUAT…</span>}
-    </button>
+      >
+        <span className="absolute left-1.5 top-1.5 text-[9px] font-bold leading-none">
+          {isEmpty ? "KOSONG" : isPlaying ? "PLAY" : "SIAP"}
+        </span>
+        <span className="absolute right-1.5 top-1.5">
+          {isEmpty ? (
+            <VolumeX className="h-3 w-3 opacity-50" strokeWidth={3} />
+          ) : (
+            <Volume2 className={cn("h-3 w-3", isPlaying && "animate-pulse")} strokeWidth={3} />
+          )}
+        </span>
+        <span
+          className={cn(
+            "text-[clamp(1.4rem,4vw,2.2rem)] leading-none font-black",
+            isPlaying
+              ? "text-red-600 dark:text-red-400"
+              : status === "ready" && !dimmedReady && !isLoading
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-ta-gray-400 dark:text-ta-gray-500",
+          )}
+        >
+          {tableNumber}
+        </span>
+        {isLoading && <span className="absolute bottom-1.5 text-[8px] font-bold">MEMUAT…</span>}
+      </button>
+    </div>
   );
 }

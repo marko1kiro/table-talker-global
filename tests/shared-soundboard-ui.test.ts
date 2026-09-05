@@ -12,9 +12,11 @@ const source = readFileSync(
 );
 const compactSource = source.replace(/\s+/g, " ");
 
-it("keeps the announcement trigger at the default bottom position", () => {
-  expect(compactSource).toContain("announcementTriggerElevated = false");
-  expect(compactSource).toContain('announcementTriggerElevated ? "bottom-24" : "bottom-4"');
+it("keeps the announcement trigger pinned bottom-right (stop button floats above it)", () => {
+  // The trigger never shifts: the stop button is positioned above it instead
+  // of elevating the trigger while audio plays.
+  expect(compactSource).not.toContain("announcementTriggerElevated");
+  expect(compactSource).toContain("bottom-4 right-4");
 });
 
 it("derives all table and categorized announcement controls from shared metadata", () => {
