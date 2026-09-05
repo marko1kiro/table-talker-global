@@ -20,11 +20,11 @@ describe("TailAdmin tokens", () => {
     expect(root).toContain("family=Outfit");
     expect(css()).not.toContain("@import url");
   });
-  it("keeps the existing neo-brutalism tokens (crew/SS untouched)", () => {
+  it("keeps brutal color vars + display font but drops the brutal border utility (SP3)", () => {
     const s = css();
     expect(s).toContain("--brutal-bg");
     expect(s).toContain("--font-display");
-    expect(s).toContain("brutal-border");
+    expect(s).not.toContain("brutal-border");
   });
   it("uses a class-based dark variant that matches the .dark element itself", () => {
     expect(css()).toContain("@custom-variant dark (&:where(.dark, .dark *));");

@@ -12,13 +12,15 @@ it("supports a dark variant with dark-mode classes", () => {
   const source = footer();
   expect(source).toContain('variant?: "light" | "dark"');
   expect(source).toContain('variant === "dark"');
-  expect(source).toContain("bg-slate-950");
+  expect(source).toContain("bg-ta-gray-900");
   expect(source).toContain("border-white/10");
 });
 
-it("keeps the light neo-brutalism default untouched", () => {
+it("uses a TailAdmin light default (de-brutalized in SP3)", () => {
   const source = footer();
-  expect(source).toContain("border-t-[3px] border-foreground bg-brutal-bg");
+  expect(source).toContain("bg-white");
+  expect(source).toContain("dark:bg-ta-gray-800");
+  expect(source).not.toContain("bg-brutal-bg");
   expect(source).toContain('variant = "light"');
 });
 

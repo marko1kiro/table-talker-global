@@ -22,15 +22,13 @@ describe("Header.tsx: onLogout is optional and only rendered when supplied", () 
     expect(header).not.toMatch(/onLogout:\s*\(\)\s*=>\s*void;\n/);
   });
 
-  it("guards both the desktop and mobile logout buttons behind onLogout", () => {
+  it("guards the logout affordance behind onLogout (TailAdmin header, SP3)", () => {
     const header = source("../src/components/Header.tsx");
-    const logoutButtonBlocks = header.split('aria-label="Keluar"').slice(1);
-    expect(logoutButtonBlocks.length).toBe(2);
-    // Each occurrence of the Keluar button must be wrapped in an
-    // `{onLogout && ( ... )}` guard rather than always rendering with a
-    // possibly-undefined onClick.
-    const guardedCount = (header.match(/\{onLogout && \(/g) ?? []).length;
-    expect(guardedCount).toBe(2);
+    // The TailAdmin header renders a single sign-out affordance: a ProfileMenu
+    // when a userName is present, otherwise one logout button guarded by
+    // `{onLogout && ( ... )}` so it is never wired to an undefined handler.
+    expect(header).toContain("onLogout && (");
+    expect(header).toContain('aria-label="Keluar"');
   });
 });
 
