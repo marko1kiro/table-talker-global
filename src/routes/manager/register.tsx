@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { CheckCircle2, Eye, EyeOff, Hash, Loader2, Lock, Store, User } from "lucide-react";
-import { AuthShell, IconField } from "@/components/dashboard/auth";
+import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { registerManager } from "@/lib/manager-auth.server";
 import { loginToRestaurant } from "@/lib/restaurants.server";
@@ -106,15 +106,16 @@ function ManagerRegisterPage() {
   }
 
   return (
-    <AuthShell
-      title="Buat ID MANAGER BARU"
-      footer={
-        <Link to="/manager/login" className="font-semibold text-brand-500 hover:underline">
-          Kembali ke Login Manager
-        </Link>
-      }
-    >
-      <form className="space-y-3" onSubmit={submit}>
+    <AuthLayout>
+      <div className="mb-8">
+        <h1 className="mb-2 text-2xl font-semibold text-ta-gray-800 dark:text-white">
+          Buat ID MANAGER BARU
+        </h1>
+        <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">
+          Daftarkan manager untuk restoran kamu.
+        </p>
+      </div>
+      <form className="space-y-4" onSubmit={submit}>
         <IconField
           icon={User}
           aria-label="Nama Lengkap"
@@ -208,6 +209,11 @@ function ManagerRegisterPage() {
           {busy ? "Menyimpan..." : "Submit"}
         </button>
       </form>
-    </AuthShell>
+      <p className="mt-6 text-center text-sm text-ta-gray-500 dark:text-ta-gray-400">
+        <Link to="/manager/login" className="font-semibold text-brand-500 hover:underline">
+          Kembali ke Login Manager
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }

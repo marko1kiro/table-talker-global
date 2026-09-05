@@ -58,7 +58,7 @@ describe("manager register route", () => {
     expect(text()).toContain("tidak cocok");
   });
   it("uses TailAdmin auth primitives", () => {
-    expect(text()).toContain("AuthShell");
+    expect(text()).toContain("AuthLayout");
     expect(text()).toContain("IconField");
     expect(text()).toContain("taPrimaryButtonClass");
   });
