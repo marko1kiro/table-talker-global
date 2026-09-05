@@ -36,6 +36,10 @@ describe("ProfileMenu", () => {
     expect(s).toContain("idManager &&");
     expect(s).toContain("canChangePassword");
   });
+  it("supports extras rows in the dropdown (rendered above logout)", () => {
+    const s = src("ProfileMenu.tsx");
+    expect(s).toContain("extras");
+  });
 });
 
 describe("RoleEmblem", () => {

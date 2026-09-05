@@ -1,15 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, KeyRound, LogOut, UserRound } from "lucide-react";
 
 export function ProfileMenu({
   name,
   idManager,
   canChangePassword = true,
+  extras,
   onLogout,
 }: {
   name: string;
   idManager?: string;
   canChangePassword?: boolean;
+  // Extra dropdown rows (e.g. Help / theme toggle), rendered between the
+  // identity block and the change-password/logout actions.
+  extras?: ReactNode;
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -54,6 +58,7 @@ export function ProfileMenu({
               </p>
             )}
           </div>
+          {extras}
           {canChangePassword && (
             <button
               type="button"

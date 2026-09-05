@@ -41,4 +41,11 @@ describe("SS/public de-brutalism", () => {
     expect(s).not.toContain("readyCount");
     expect(s).not.toContain("totalCount");
   });
+  it("Header SS: Help + Tema live inside the profile dropdown; resto name drops the chain prefix", () => {
+    const s = read("../src/components/Header.tsx");
+    expect(s).toContain("formatRestaurantLabel");
+    expect(s).toContain("extras=");
+    expect(s).toContain("Bantuan");
+    expect(s).toContain("Tema");
+  });
 });
