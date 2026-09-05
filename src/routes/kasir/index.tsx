@@ -18,11 +18,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { OwnerNotice, OwnerPage, OwnerRetry } from "@/components/OwnerUi";
 import {
-  CrewHeader,
   CrewTableSection,
   crewPrimaryButtonClass,
   crewSecondaryButtonClass,
 } from "@/components/CrewHeader";
+import { CrewShell } from "@/components/dashboard/CrewShell";
 import { TABLE_COUNT } from "@/lib/audio";
 import {
   browserSessionStorage,
@@ -32,7 +32,7 @@ import {
 } from "@/lib/crew-session-identity";
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
-import { useNoticeQueue } from "@/hooks/use-notice-queue";
+import { useNotificationCenter } from "@/hooks/use-notification-center";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
@@ -72,7 +72,7 @@ function KasirRoute() {
   const [processingTable, setProcessingTable] = useState<number | null>(null);
   const [actionError, setActionError] = useState("");
   const { layoutPreference, setLayoutPreference } = useLayoutPreference("kasir");
-  const notices = useNoticeQueue();
+  const { items, unread, push, markRead } = useNotificationCenter();
 
   // Client-only hydration, same pattern as src/routes/index.tsx: reading
   // sessionStorage during SSR would always return null and mismatch the
@@ -112,7 +112,7 @@ function KasirRoute() {
     identity?.roleSessionId ?? null,
     (broadcast) => {
       const notice = formatOccupancyNotice(broadcast);
-      if (notice) notices.push(notice);
+      if (notice) push(notice);
     },
   );
 
@@ -157,17 +157,15 @@ function KasirRoute() {
   const tables = snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] sm:px-6 sm:py-2 lg:px-10 lg:py-4">
+    <CrewShell
+      roleLabel="KASIR"
+      userName={identity.displayName}
+      onLogout={logout}
+      feed={items}
+      unread={unread}
+      onOpen={markRead}
+    >
       <OwnerPage>
-        <CrewHeader
-          role="Kasir"
-          restaurantName={identity.restaurantDisplayName}
-          restaurantCode={identity.restaurantCode}
-          userName={identity.displayName}
-          onLogout={logout}
-          notice={notices.current}
-        />
-
         {realtimeStatus !== "SUBSCRIBED" && (
           <OwnerNotice role="status" tone="warning">
             Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
@@ -199,7 +197,7 @@ function KasirRoute() {
           )}
 
           {snapshot.isLoading ? (
-            <p className="text-sm text-slate-500">Memuat status meja...</p>
+            <p className="text-sm text-slate-500 dark:text-ta-gray-400">Memuat status meja...</p>
           ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
             <>
               <OwnerNotice role="alert" tone="danger">
@@ -264,7 +262,7 @@ function KasirRoute() {
           </AlertDialogContent>
         </AlertDialog>
       </OwnerPage>
-    </div>
+    </CrewShell>
   );
 }
 
@@ -293,10 +291,10 @@ function TableGrid({
             onClick={() => onSelectEmptyTable(tableNumber)}
             className={
               occupied
-                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 transition-colors duration-300 lg:text-base"
+                ? "flex aspect-square cursor-not-allowed items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 text-sm font-extrabold text-red-700 transition-colors duration-300 lg:text-base dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
                 : isPending
-                  ? "flex aspect-square cursor-wait items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 lg:text-base"
-                  : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-100 hover:shadow-sm active:translate-y-0 lg:text-base"
+                  ? "flex aspect-square cursor-wait items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 lg:text-base dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                  : "flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-emerald-50 text-sm font-extrabold text-emerald-800 transition-colors duration-300 hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-100 hover:shadow-sm active:translate-y-0 lg:text-base dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:border-emerald-500/50 dark:hover:bg-emerald-500/20"
             }
           >
             {isPending ? <Loader2 className="size-4 animate-spin" /> : tableNumber}
@@ -332,21 +330,21 @@ function TableList({
             onClick={() => onSelectEmptyTable(tableNumber)}
             className={
               occupied
-                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300"
+                ? "flex w-full cursor-not-allowed items-center justify-between px-3 py-3 text-left text-sm font-bold text-red-700 transition-colors duration-300 dark:text-red-300"
                 : isPending
-                  ? "flex w-full cursor-wait items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300"
-                  : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 hover:bg-emerald-50"
+                  ? "flex w-full cursor-wait items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 dark:text-emerald-300"
+                  : "flex w-full items-center justify-between px-3 py-3 text-left text-sm font-bold text-emerald-800 transition-colors duration-300 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
             }
           >
             <span>Meja {tableNumber}</span>
             {isPending ? (
-              <Loader2 className="size-4 animate-spin text-emerald-700" />
+              <Loader2 className="size-4 animate-spin text-emerald-700 dark:text-emerald-400" />
             ) : (
               <span
                 className={
                   occupied
-                    ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700"
-                    : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700"
+                    ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700 dark:bg-red-500/15 dark:text-red-300"
+                    : "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
                 }
               >
                 {occupied ? "TERISI" : "KOSONG"}
