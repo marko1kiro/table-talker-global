@@ -20,20 +20,14 @@ describe("ManagerLayout (TailAdmin)", () => {
   });
   it("keeps the footer branding with a copyright glyph", () => {
     const text = source();
-    expect(text).toContain("©");
-    expect(text).toContain("XDIRGA LABS");
+    expect(text).toContain('from "@/components/Footer"');
+    expect(text).toContain("<Footer");
     expect(text).not.toContain("MIE GACOAN");
   });
-  it("keeps the restaurant name on one line, tight to the domain", () => {
+  it("does not use inline footer anymore", () => {
     const text = source();
-    expect(text).toContain("truncate");
-    expect(text).toContain("whitespace-nowrap");
-    expect(text).toContain("mt-0.5");
-  });
-  it("footer card follows dark mode", () => {
-    const text = source();
-    expect(text).toContain("dark:bg-ta-gray-800");
-    expect(text).toContain("dark:border-ta-gray-700");
+    expect(text).not.toContain("truncate whitespace-nowrap");
+    expect(text).not.toContain("lihatmeja.com");
   });
   it("passes the app logo as the mobile header brand", () => {
     const text = source();

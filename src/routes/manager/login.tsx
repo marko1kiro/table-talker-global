@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { ArrowLeft, Eye, EyeOff, Hash, Loader2, Lock } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
+import { Footer } from "@/components/Footer";
 import { loginManager } from "@/lib/manager-auth.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { browserManagerStorage, writeManagerIdentity } from "@/lib/manager-session-identity";
@@ -127,6 +128,7 @@ function ManagerLoginPage() {
           KLIK DISINI untuk membuat ID MANAGER BARU
         </Link>
       </p>
+      <Footer className="mt-6" />
     </AuthLayout>
   );
 }

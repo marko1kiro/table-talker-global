@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { CheckCircle2, Eye, EyeOff, Hash, Loader2, Lock, Store, User } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
+import { Footer } from "@/components/Footer";
 import { registerManager } from "@/lib/manager-auth.server";
 import { loginToRestaurant } from "@/lib/restaurants.server";
 
@@ -214,6 +215,7 @@ function ManagerRegisterPage() {
           Kembali ke Login Manager
         </Link>
       </p>
+      <Footer className="mt-6" />
     </AuthLayout>
   );
 }

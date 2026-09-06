@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ThemeFrame } from "./ThemeFrame";
 import { DashboardHeaderRight } from "./DashboardHeaderRight";
+import { Footer } from "@/components/Footer";
 import type { OccupancyNotice } from "@/lib/occupancy-notice";
 
 export function CrewShell({
@@ -32,6 +33,7 @@ export function CrewShell({
         />
       </header>
       <main className="mx-auto w-full max-w-[720px] px-4 py-4">{children}</main>
+      <Footer />
     </ThemeFrame>
   );
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Table2, Users, ScrollText } from "lucide-react";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
+import { Footer } from "@/components/Footer";
 
 export type ManagerMenu = "tables" | "crew" | "log";
 
@@ -39,19 +40,6 @@ export function ManagerLayout({
     active: active === id,
     onSelect: () => onSelect(id),
   }));
-  const footer = (
-    <div className="rounded-xl border border-ta-gray-200 bg-white p-4 text-center dark:border-ta-gray-700 dark:bg-ta-gray-800">
-      <p className="truncate whitespace-nowrap text-[13px] font-bold uppercase text-ta-gray-900 dark:text-white">
-        {restaurantName}
-      </p>
-      <p className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-ta-gray-400">
-        lihatmeja.com <span aria-label="copyright">©</span> 2026
-      </p>
-      <p className="text-[11px] font-bold uppercase tracking-wide text-ta-gray-400 dark:text-ta-gray-500">
-        XDIRGA LABS
-      </p>
-    </div>
-  );
   return (
     <AppShell
       brand={<Brand />}
@@ -60,7 +48,7 @@ export function ManagerLayout({
         <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
       }
       headerRight={headerRight}
-      footer={footer}
+      footer={<Footer className="mt-0 border-0 dark:bg-transparent" />}
     >
       {children}
     </AppShell>

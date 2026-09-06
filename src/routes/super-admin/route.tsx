@@ -22,6 +22,7 @@ import { getAuthStatus, loginSuperAdmin, logout } from "@/lib/auth";
 import { isOwnerQueryKey } from "@/lib/owner-query-cache";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
 import { DashboardHeaderRight } from "@/components/dashboard/DashboardHeaderRight";
+import { Footer } from "@/components/Footer";
 
 const nav = [
   { label: "Dashboard", to: "/super-admin", icon: CircleGauge, exact: true },
@@ -114,6 +115,7 @@ function OwnerShell() {
           onLogout={handleLogout}
         />
       }
+      footer={<Footer className="mt-0 border-0 dark:bg-transparent" />}
     >
       {logoutError && (
         <p role="alert" className="mb-4 text-sm font-semibold text-ta-error">
