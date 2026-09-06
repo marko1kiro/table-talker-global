@@ -65,23 +65,33 @@ export const getManagerSnapshot = createServerFn({ method: "GET" })
     );
   });
 
-export const managerActiveCrewInputSchema = z.object({
+export const managerCrewHistoryInputSchema = z.object({
   managerToken: z.string().min(1),
   accessToken: z.string().min(1),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
-export type ActiveCrewRow = { role: string; displayName: string; checkedInAt: string };
-export type ManagerActiveCrewResult =
-  | { ok: true; crew: ActiveCrewRow[] }
+export type CrewHistoryRow = {
+  role: string;
+  displayName: string;
+  checkedInAt: string;
+  isActive: boolean;
+};
+export type ManagerCrewHistoryResult =
+  | { ok: true; crew: CrewHistoryRow[] }
   | { ok: false; code: "INVALID_SESSION" | "UNAVAILABLE"; message: string };
 
-export async function getManagerActiveCrewCore(
-  data: { managerToken: string },
+export async function getManagerCrewHistoryCore(
+  data: { managerToken: string; date?: string },
   rpc: RpcCaller,
-): Promise<ManagerActiveCrewResult> {
+): Promise<ManagerCrewHistoryResult> {
   try {
-    const { data: rows, error } = await rpc("get_manager_active_crew", {
+    const { data: rows, error } = await rpc("get_manager_crew_history", {
       p_manager_token: data.managerToken,
+      p_date: data.date ?? null,
     });
     if (error) {
       return {
@@ -97,6 +107,7 @@ export async function getManagerActiveCrewCore(
         role: String(r.role),
         displayName: String(r.display_name),
         checkedInAt: String(r.checked_in_at),
+        isActive: Boolean(r.is_active),
       };
     });
     return { ok: true, crew };
@@ -105,12 +116,13 @@ export async function getManagerActiveCrewCore(
   }
 }
 
-export const getManagerActiveCrew = createServerFn({ method: "GET" })
-  .validator(managerActiveCrewInputSchema)
-  .handler(async ({ data }): Promise<ManagerActiveCrewResult> => {
+export const getManagerCrewHistory = createServerFn({ method: "GET" })
+  .validator(managerCrewHistoryInputSchema)
+  .handler(async ({ data }): Promise<ManagerCrewHistoryResult> => {
     const client = getAnonAuthedSupabaseClient(data.accessToken);
     if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
-    return getManagerActiveCrewCore({ managerToken: data.managerToken }, async (fn, params) =>
-      client.rpc(fn, params),
+    return getManagerCrewHistoryCore(
+      { managerToken: data.managerToken, date: data.date },
+      async (fn, params) => client.rpc(fn, params),
     );
   });

@@ -10,12 +10,18 @@ import {
   removeManagerIdentity,
   type ManagerIdentity,
 } from "@/lib/manager-session-identity";
-import { getManagerSnapshot, getManagerActiveCrew } from "@/lib/manager-dashboard.server";
+import { getManagerSnapshot, getManagerCrewHistory } from "@/lib/manager-dashboard.server";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
 import { useNotificationCenter } from "@/hooks/use-notification-center";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { buildStaleNotices } from "@/lib/manager-reminder";
 import { groupActiveCrewByStation, formatWibClock } from "@/lib/manager-crew-groups";
+import {
+  crewEmptyText,
+  scopeQueryKey,
+  scopeToParams,
+  type CrewScope,
+} from "@/lib/crew-history-scope";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { TABLE_COUNT } from "@/lib/audio";
 
@@ -46,6 +52,7 @@ function ManagerDashboard() {
   const [hydrated, setHydrated] = useState(false);
   const [menu, setMenu] = useState<ManagerMenu>("tables");
   const [activeStation, setActiveStation] = useState(0);
+  const [crewScope, setCrewScope] = useState<CrewScope>({ kind: "today" });
   const [now, setNow] = useState(() => Date.now());
   const { items, unread, push, markRead } = useNotificationCenter();
   const [stuck, setStuck] = useState(false);
@@ -81,12 +88,13 @@ function ManagerDashboard() {
     refetchOnWindowFocus: true,
   });
   const crew = useQuery({
-    queryKey: ["manager-crew", restaurantId],
+    queryKey: ["manager-crew-history", restaurantId, scopeQueryKey(crewScope)],
     queryFn: async () =>
-      getManagerActiveCrew({
+      getManagerCrewHistory({
         data: {
           managerToken: identity!.managerToken,
           accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          ...scopeToParams(crewScope),
         },
       }),
     enabled: Boolean(identity) && menu === "crew",
@@ -348,7 +356,7 @@ function ManagerDashboard() {
                                 colSpan={2}
                                 className="border border-black/10 px-3 py-3 text-center text-xs text-ta-gray-400"
                               >
-                                Tidak ada crew aktif.
+                                {crewEmptyText(crewScope)}
                               </td>
                             </tr>
                           )}

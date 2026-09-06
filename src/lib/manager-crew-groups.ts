@@ -1,7 +1,7 @@
 // Pure grouping for the manager "CREW AKTIF" view: bucket active crew by
 // station in a fixed display order, and format the check-in instant as a
 // WIB wall-clock string. No server/DB work; operates on getManagerActiveCrew rows.
-import type { ActiveCrewRow } from "./manager-dashboard.server";
+import type { CrewHistoryRow } from "./manager-dashboard.server";
 
 const STATIONS: { role: string; label: string }[] = [
   { role: "ss", label: "SELF SERVICE" },
@@ -10,9 +10,9 @@ const STATIONS: { role: string; label: string }[] = [
   { role: "clear_up", label: "CLEAR UP" },
 ];
 
-export type CrewStationGroup = { label: string; members: ActiveCrewRow[] };
+export type CrewStationGroup = { label: string; members: CrewHistoryRow[] };
 
-export function groupActiveCrewByStation(rows: readonly ActiveCrewRow[]): CrewStationGroup[] {
+export function groupActiveCrewByStation(rows: readonly CrewHistoryRow[]): CrewStationGroup[] {
   return STATIONS.map(({ role, label }) => ({
     label,
     members: rows.filter((r) => r.role === role),
