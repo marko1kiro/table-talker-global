@@ -8,11 +8,11 @@ interface FooterProps {
 }
 
 const footerLinks = [
-  { to: "/about", label: "Tentang" },
+  { to: "/about", label: "About" },
   { to: "/faq", label: "FAQ" },
-  { to: "/contact", label: "Kontak" },
-  { to: "/privacy-policy", label: "Kebijakan Privasi" },
-  { to: "/terms-of-use", label: "Syarat Penggunaan" },
+  { to: "/contact", label: "Contact" },
+  { to: "/privacy-policy", label: "Privacy Policy" },
+  { to: "/terms-of-use", label: "Terms of Use" },
 ];
 
 export function Footer({ className, variant = "light" }: FooterProps) {
@@ -27,10 +27,10 @@ export function Footer({ className, variant = "light" }: FooterProps) {
         className,
       )}
     >
-      <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-4 py-5 text-center">
+      <div className="mx-auto flex max-w-6xl flex-col items-center gap-2.5 px-4 py-4 text-center">
         <nav
           aria-label="Tautan footer"
-          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1"
+          className="flex max-w-xs flex-wrap items-center justify-center gap-x-3 gap-y-1 sm:max-w-sm"
         >
           {footerLinks.map(({ to, label }) => (
             <a
@@ -42,12 +42,15 @@ export function Footer({ className, variant = "light" }: FooterProps) {
             </a>
           ))}
         </nav>
-        <p className="flex items-center justify-center gap-1 text-[11px] text-ta-gray-400">
-          lihatmeja.com <span aria-label="copyright">©</span> {new Date().getFullYear()}
-        </p>
-        <p className="text-[11px] font-bold uppercase tracking-wide text-ta-gray-400 dark:text-ta-gray-500">
-          XDIRGA LABS <span className="font-normal not-italic">· Simplify Your Mind</span>
-        </p>
+        <div className="flex flex-col items-center justify-center gap-0.5 text-[11px] text-ta-gray-400 sm:flex-row sm:gap-2">
+          <p className="flex items-center justify-center gap-1">
+            lihatmeja.com <span aria-label="copyright">©</span> {new Date().getFullYear()}
+          </p>
+          <span className="hidden text-ta-gray-300 dark:text-ta-gray-600 sm:inline">·</span>
+          <p className="font-bold uppercase tracking-wide text-ta-gray-400 dark:text-ta-gray-500">
+            XDIRGA LABS <span className="font-normal not-italic">· Simplify Your Mind</span>
+          </p>
+        </div>
       </div>
     </footer>
   );
