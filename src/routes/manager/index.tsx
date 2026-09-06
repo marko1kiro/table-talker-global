@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CalendarDays } from "lucide-react";
 import { parseISO } from "date-fns";
@@ -114,6 +114,7 @@ function ManagerDashboard() {
         },
       }),
     enabled: Boolean(identity) && menu === "crew",
+    placeholderData: keepPreviousData,
   });
 
   const realtimeStatus = useTableOccupancyRealtime(
@@ -308,8 +309,11 @@ function ManagerDashboard() {
                 Semua
               </button>
             </div>
-            {crew.isLoading && (
+            {(crew.isLoading || crew.isFetching) && (
               <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">Memuat crew...</p>
+            )}
+            {crew.isError && (
+              <TaRetry label="Gagal memuat riwayat crew" onClick={() => void crew.refetch()} />
             )}
             {crew.data &&
               crew.data.ok &&

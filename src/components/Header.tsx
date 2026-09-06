@@ -61,7 +61,7 @@ export function Header({ restaurantDisplayName, userName, onLogout }: HeaderProp
               <Link
                 to="/help"
                 aria-label="Butuh bantuan?"
-                className="grid size-9 place-items-center rounded-lg text-ta-gray-500 transition hover:bg-ta-gray-100 hover:text-brand-500 dark:text-ta-gray-400 dark:hover:bg-ta-gray-700"
+                className="grid size-10 place-items-center rounded-lg text-ta-gray-500 transition hover:bg-ta-gray-100 hover:text-brand-500 dark:text-ta-gray-400 dark:hover:bg-ta-gray-700"
               >
                 <LifeBuoy className="size-5" />
               </Link>
@@ -72,7 +72,7 @@ export function Header({ restaurantDisplayName, userName, onLogout }: HeaderProp
                   onClick={onLogout}
                   aria-label="Keluar"
                   title="Keluar"
-                  className="grid size-9 place-items-center rounded-lg border border-ta-gray-200 text-ta-error transition hover:bg-ta-error/10 dark:border-ta-gray-700"
+                  className="grid size-10 place-items-center rounded-lg border border-ta-gray-200 text-ta-error transition hover:bg-ta-error/10 dark:border-ta-gray-700"
                 >
                   <LogOut className="size-5" />
                 </button>
