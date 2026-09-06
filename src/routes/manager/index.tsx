@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Download } from "lucide-react";
 import { parseISO } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { ManagerLayout, type ManagerMenu } from "@/components/ManagerLayout";
@@ -16,6 +16,8 @@ import {
   type ManagerIdentity,
 } from "@/lib/manager-session-identity";
 import { getManagerSnapshot, getManagerCrewHistory } from "@/lib/manager-dashboard.server";
+import { getManagerDailyStats } from "@/lib/manager-stats.server";
+import { buildManagerCsv, downloadCsv } from "@/lib/manager-csv-export";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
 import { useNotificationCenter } from "@/hooks/use-notification-center";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
@@ -68,7 +70,9 @@ function ManagerDashboard() {
   const [menu, setMenu] = useState<ManagerMenu>("tables");
   const [activeStation, setActiveStation] = useState(0);
   const [crewScope, setCrewScope] = useState<CrewScope>({ kind: "today" });
+  const [statsScope, setStatsScope] = useState<CrewScope>({ kind: "today" });
   const [calOpen, setCalOpen] = useState(false);
+  const [statsCalOpen, setStatsCalOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const { items, unread, push, markRead } = useNotificationCenter();
   const [stuck, setStuck] = useState(false);
@@ -114,6 +118,34 @@ function ManagerDashboard() {
         },
       }),
     enabled: Boolean(identity) && menu === "crew",
+    placeholderData: keepPreviousData,
+  });
+
+  const stats = useQuery({
+    queryKey: ["manager-daily-stats", restaurantId, scopeQueryKey(statsScope)],
+    queryFn: async () =>
+      getManagerDailyStats({
+        data: {
+          managerToken: identity!.managerToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          date: scopeToParams(statsScope).date ?? wibDateKey(),
+        },
+      }),
+    enabled: Boolean(identity) && menu === "stats",
+    placeholderData: keepPreviousData,
+  });
+
+  const statsCrew = useQuery({
+    queryKey: ["manager-crew-history", restaurantId, scopeQueryKey(statsScope)],
+    queryFn: async () =>
+      getManagerCrewHistory({
+        data: {
+          managerToken: identity!.managerToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          ...scopeToParams(statsScope),
+        },
+      }),
+    enabled: Boolean(identity) && menu === "stats",
     placeholderData: keepPreviousData,
   });
 
@@ -454,6 +486,159 @@ function ManagerDashboard() {
                   </>
                 );
               })()}
+          </TaCard>
+        </>
+      )}
+
+      {menu === "stats" && (
+        <>
+          <TaCard title="Statistik Harian">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setStatsScope({ kind: "today" })}
+                className={crewScopePillClass(statsScope.kind === "today")}
+              >
+                Hari ini
+              </button>
+              <Popover open={statsCalOpen} onOpenChange={setStatsCalOpen}>
+                <PopoverTrigger asChild>
+                  <button type="button" className={crewScopePillClass(statsScope.kind === "date")}>
+                    <CalendarDays className="size-3.5" />
+                    {statsScope.kind === "date"
+                      ? formatScopeDate(statsScope.date)
+                      : "Pilih tanggal"}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    locale={localeId}
+                    selected={
+                      statsScope.kind === "date"
+                        ? parseISO(statsScope.date)
+                        : statsScope.kind === "today"
+                          ? parseISO(wibDateKey())
+                          : undefined
+                    }
+                    defaultMonth={
+                      statsScope.kind === "date" ? parseISO(statsScope.date) : undefined
+                    }
+                    onSelect={(d) => {
+                      if (!d) return;
+                      const key = wibDateKey(d);
+                      setStatsCalOpen(false);
+                      setStatsScope(
+                        key === wibDateKey() ? { kind: "today" } : { kind: "date", date: key },
+                      );
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {(stats.isLoading || stats.isFetching) && (
+              <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">Memuat statistik...</p>
+            )}
+            {stats.isError && (
+              <TaRetry label="Gagal memuat statistik" onClick={() => void stats.refetch()} />
+            )}
+
+            {stats.data && stats.data.ok && (
+              <>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <TaStatCard label="Total Tamu" value={stats.data.totalServed} compact />
+                  <TaStatCard
+                    label="Avg Durasi"
+                    value={
+                      stats.data.avgDurationMinutes !== null
+                        ? `${Math.floor(stats.data.avgDurationMinutes)}m`
+                        : "-"
+                    }
+                    compact
+                  />
+                  <TaStatCard
+                    label="Peak Hour"
+                    value={
+                      stats.data.peakHour !== null
+                        ? `${String(stats.data.peakHour).padStart(2, "0")}:00`
+                        : "-"
+                    }
+                    compact
+                  />
+                  <TaStatCard
+                    label="Crew Aktif"
+                    value={
+                      statsCrew.data && statsCrew.data.ok
+                        ? statsCrew.data.crew.filter((c) => c.isActive).length
+                        : "-"
+                    }
+                    compact
+                  />
+                </div>
+
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="text-[11px] uppercase text-ta-gray-400">
+                        <th className="border border-black/10 px-3 py-1 text-center">No. Meja</th>
+                        <th className="border border-black/10 px-3 py-1 text-center">
+                          Kali Terisi
+                        </th>
+                        <th className="border border-black/10 px-3 py-1 text-center">
+                          Total Durasi
+                        </th>
+                        <th className="border border-black/10 px-3 py-1 text-center">Avg Durasi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.data.perTable.map((t) => (
+                        <tr
+                          key={t.tableNumber}
+                          className={
+                            t.timesOccupied === 0
+                              ? "text-ta-gray-300 dark:text-ta-gray-600"
+                              : "text-ta-gray-800 dark:text-ta-gray-100"
+                          }
+                        >
+                          <td className="border border-black/10 px-3 py-2 text-center font-bold">
+                            {t.tableNumber}
+                          </td>
+                          <td className="border border-black/10 px-3 py-2 text-center">
+                            {t.timesOccupied}
+                          </td>
+                          <td className="border border-black/10 px-3 py-2 text-center">
+                            {t.totalMinutes > 0 ? `${t.totalMinutes}m` : "-"}
+                          </td>
+                          <td className="border border-black/10 px-3 py-2 text-center">
+                            {t.avgMinutes !== null ? `${t.avgMinutes}m` : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={!stats.data || !stats.data.ok}
+                  onClick={() => {
+                    if (!stats.data?.ok) return;
+                    const crewRows = statsCrew.data && statsCrew.data.ok ? statsCrew.data.crew : [];
+                    const dateKey = scopeToParams(statsScope).date ?? wibDateKey();
+                    const csv = buildManagerCsv(stats.data, crewRows, dateKey);
+                    downloadCsv(
+                      csv,
+                      `LIME-statistik-${identity.restaurantDisplayName.replace(/\s+/g, "-")}-${dateKey}.csv`,
+                    );
+                  }}
+                  className="mt-4 inline-flex w-full min-h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-theme-sm transition hover:bg-brand-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25 disabled:pointer-events-none disabled:opacity-45"
+                >
+                  <Download className="size-4" />
+                  Download Laporan CSV
+                </button>
+              </>
+            )}
           </TaCard>
         </>
       )}

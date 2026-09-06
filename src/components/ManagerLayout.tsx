@@ -1,14 +1,15 @@
 import type { ReactNode } from "react";
-import { Table2, Users, ScrollText } from "lucide-react";
+import { Table2, Users, ScrollText, BarChart3 } from "lucide-react";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
 import { Footer } from "@/components/Footer";
 
-export type ManagerMenu = "tables" | "crew" | "log";
+export type ManagerMenu = "tables" | "crew" | "log" | "stats";
 
-const ICONS = { tables: Table2, crew: Users, log: ScrollText } as const;
+const ICONS = { tables: Table2, crew: Users, log: ScrollText, stats: BarChart3 } as const;
 const LABELS: { id: ManagerMenu; label: string }[] = [
   { id: "tables", label: "LIHAT STATUS MEJA LIVE" },
   { id: "crew", label: "LIHAT CREW AKTIF" },
+  { id: "stats", label: "STATISTIK" },
   { id: "log", label: "LOG AKTIVITAS CREW" },
 ];
 
