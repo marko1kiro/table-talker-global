@@ -43,11 +43,9 @@ export function ManagerLayout({
   }));
   return (
     <AppShell
-      brand={<Brand />}
+      brand={<img src="/lime-logo.webp" alt="LIME" className="h-8 w-auto shrink-0 select-none" />}
       navItems={navItems}
-      headerLogo={
-        <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
-      }
+      headerLogo={<Brand />}
       headerRight={headerRight}
       footer={<Footer className="mt-0 border-0 dark:bg-transparent" />}
     >

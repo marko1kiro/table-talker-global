@@ -29,9 +29,12 @@ describe("ManagerLayout (TailAdmin)", () => {
     expect(text).not.toContain("truncate whitespace-nowrap");
     expect(text).not.toContain("lihatmeja.com");
   });
-  it("passes the app logo as the mobile header brand", () => {
+  it("passes the app logo as the sidebar brand", () => {
     const text = source();
-    expect(text).toContain("headerLogo");
-    expect(text).toContain("lime-logo.webp");
+    expect(text).toContain('brand={<img src="/lime-logo.webp"');
+  });
+  it("passes the DASHBOARD text gradient as headerLogo", () => {
+    const text = source();
+    expect(text).toContain("headerLogo={<Brand />}");
   });
 });
