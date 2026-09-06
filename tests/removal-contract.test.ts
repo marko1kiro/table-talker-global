@@ -65,6 +65,8 @@ const historicalMigrationTestExemptions = [
   // literal text includes the banned token; the assertion itself is what
   // proves the removal, so it must keep quoting the token forever.
   "tests/owner-history-error-source.test.ts",
+  // Purge test data migration asserts deletion of legacy tables if they exist
+  "tests/super-admin-purge-test-data-migration.test.ts",
 ];
 
 it("removed obsolete test files no longer exist", () => {
