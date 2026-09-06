@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
+import { Footer } from "@/components/Footer";
 import { loginToRestaurant, verifyRestaurantPin } from "@/lib/restaurants.server";
 import { normalizeCrewName } from "@/lib/remote-audio-domain";
 import {
@@ -531,6 +532,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
       <p className="mt-6 text-center text-xs leading-5 text-ta-gray-400">
         Aktivitas login dapat dicatat untuk keamanan operasional.
       </p>
+      <Footer className="mt-6" />
     </AuthLayout>
   );
 }
