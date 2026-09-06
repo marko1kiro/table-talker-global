@@ -88,6 +88,27 @@ function AboutPage() {
                 </div>
               ))}
             </div>
+
+            <div className="mt-8 rounded-xl border border-ta-gray-200 bg-ta-gray-50 p-5 dark:border-ta-gray-700 dark:bg-ta-gray-900">
+              <h2 className="text-base font-bold text-ta-gray-900 dark:text-white">Pengembang</h2>
+              <p className="mt-2 text-sm leading-relaxed text-ta-gray-500 dark:text-ta-gray-400">
+                LIME dikembangkan oleh{" "}
+                <span className="font-semibold text-ta-gray-700 dark:text-ta-gray-200">
+                  XDIRGA LABS
+                </span>{" "}
+                — <em>Simplify Your Mind</em>. Berlokasi di Bekasi, Indonesia, kami membangun
+                aplikasi ini dengan pendekatan{" "}
+                <span className="font-semibold text-ta-gray-700 dark:text-ta-gray-200">
+                  low-code
+                </span>{" "}
+                untuk efisiensi pengerjaan berbagai skala proyek. Butuh aplikasi custom untuk bisnis
+                Anda?{" "}
+                <a href="/contact" className="font-semibold text-brand-500 hover:underline">
+                  Hubungi kami
+                </a>
+                .
+              </p>
+            </div>
           </div>
         </main>
         <Footer />

@@ -46,7 +46,7 @@ export function Footer({ className, variant = "light" }: FooterProps) {
           lihatmeja.com <span aria-label="copyright">©</span> {new Date().getFullYear()}
         </p>
         <p className="text-[11px] font-bold uppercase tracking-wide text-ta-gray-400 dark:text-ta-gray-500">
-          XDIRGA LABS
+          XDIRGA LABS <span className="font-normal not-italic">· Simplify Your Mind</span>
         </p>
       </div>
     </footer>

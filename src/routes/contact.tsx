@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Mail, MessageCircle, Clock } from "lucide-react";
+import { Mail, MessageCircle, Clock, MapPin, Send } from "lucide-react";
 
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -70,6 +70,62 @@ function ContactPage() {
                 Waktu respons dapat bervariasi tergantung jam operasional restoran dan tim
                 pendukung.
               </p>
+            </div>
+
+            <div className="mt-8 rounded-xl border border-ta-gray-200 bg-ta-gray-50 p-5 dark:border-ta-gray-700 dark:bg-ta-gray-900">
+              <h2 className="text-base font-bold text-ta-gray-900 dark:text-white">
+                Developer Contact
+              </h2>
+              <p className="mt-1.5 text-sm text-ta-gray-500 dark:text-ta-gray-400">
+                <span className="font-semibold text-ta-gray-700 dark:text-ta-gray-200">
+                  XDIRGA LABS
+                </span>{" "}
+                — Simplify Your Mind · Bekasi, Indonesia
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <a
+                  href="mailto:support@lihatmeja.com"
+                  className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-ta-gray-700 transition hover:bg-brand-50 hover:text-brand-600 dark:bg-ta-gray-800 dark:text-ta-gray-300 dark:hover:bg-brand-500/10"
+                >
+                  <Mail className="h-4 w-4 shrink-0" />
+                  support@lihatmeja.com
+                </a>
+                <a
+                  href="https://t.me/miraclemarko"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-ta-gray-700 transition hover:bg-brand-50 hover:text-brand-600 dark:bg-ta-gray-800 dark:text-ta-gray-300 dark:hover:bg-brand-500/10"
+                >
+                  <Send className="h-4 w-4 shrink-0" />
+                  @miraclemarko
+                </a>
+                <a
+                  href="https://instagram.com/fajarcardicians"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-ta-gray-700 transition hover:bg-brand-50 hover:text-brand-600 dark:bg-ta-gray-800 dark:text-ta-gray-300 dark:hover:bg-brand-500/10"
+                >
+                  <img
+                    src="https://cdn.simpleicons.org/instagram/e1306c"
+                    alt=""
+                    className="h-4 w-4 shrink-0"
+                  />
+                  @fajarcardicians
+                </a>
+                <a
+                  href="https://facebook.com/hipnotismagic"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-ta-gray-700 transition hover:bg-brand-50 hover:text-brand-600 dark:bg-ta-gray-800 dark:text-ta-gray-300 dark:hover:bg-brand-500/10"
+                >
+                  <img
+                    src="https://cdn.simpleicons.org/facebook/1877f2"
+                    alt=""
+                    className="h-4 w-4 shrink-0"
+                  />
+                  facebook.com/hipnotismagic
+                </a>
+              </div>
             </div>
           </div>
         </main>

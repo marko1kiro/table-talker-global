@@ -62,6 +62,14 @@ const faqs = [
     q: "Apakah data restoran saya aman?",
     a: "Setiap restoran memiliki data, katalog audio, dan sesi yang terpisah secara ketat per tenant. Akses crew diverifikasi lewat kode resto, sesi Manager divalidasi di server, dan login Owner dibatasi percobaan untuk mencegah penyalahgunaan.",
   },
+  {
+    q: "Apakah audio yang digunakan memiliki lisensi?",
+    a: "Ya. Semua audio di stasiun SS menggunakan lisensi Pro / Commercial Use. Audio dihasilkan melalui aplikasi pihak ketiga, yaitu ElevenLabs (elevenlabs.io), sehingga aman digunakan untuk operasional komersial restoran.",
+  },
+  {
+    q: "Siapa pengembang LIME?",
+    a: "LIME dikembangkan oleh XDIRGA LABS (Simplify Your Mind), sebuah tim pengembang yang berlokasi di Bekasi, Indonesia. Kami menggunakan pendekatan low-code untuk efisiensi pengerjaan proyek berbagai skala. Untuk kebutuhan aplikasi custom, silakan kunjungi halaman Kontak.",
+  },
 ];
 
 function FaqPage() {
