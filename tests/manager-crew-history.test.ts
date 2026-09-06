@@ -33,4 +33,14 @@ describe("manager crew history", () => {
     expect(page).toContain("crew-history-scope");
     expect(page).not.toContain("getManagerActiveCrew");
   });
+
+  it("menyediakan switcher scope dengan kalender di menu crew", () => {
+    const page = read("../src/routes/manager/index.tsx");
+    expect(page).toContain("Hari ini");
+    expect(page).toContain("Semua");
+    expect(page).toContain("Popover");
+    expect(page).toContain("<Calendar");
+    expect(page).toContain("formatScopeDate");
+    expect(page).toContain("AKTIF");
+  });
 });

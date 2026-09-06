@@ -1,8 +1,13 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { CalendarDays } from "lucide-react";
+import { parseISO } from "date-fns";
+import { id as localeId } from "date-fns/locale";
 import { ManagerLayout, type ManagerMenu } from "@/components/ManagerLayout";
 import { TaCard, TaNotice, TaEmpty, TaRetry, TaStatCard } from "@/components/dashboard/ui";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DashboardHeaderRight } from "@/components/dashboard/DashboardHeaderRight";
 import {
   browserManagerStorage,
@@ -18,8 +23,10 @@ import { buildStaleNotices } from "@/lib/manager-reminder";
 import { groupActiveCrewByStation, formatWibClock } from "@/lib/manager-crew-groups";
 import {
   crewEmptyText,
+  formatScopeDate,
   scopeQueryKey,
   scopeToParams,
+  wibDateKey,
   type CrewScope,
 } from "@/lib/crew-history-scope";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -34,6 +41,14 @@ export const Route = createFileRoute("/manager/")({
 
 function snapshotKey(id: string) {
   return ["manager-snapshot", id] as const;
+}
+
+function crewScopePillClass(active: boolean) {
+  return `inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-xs font-bold uppercase transition ${
+    active
+      ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+      : "border-ta-gray-200 bg-white text-ta-gray-500 hover:border-brand-300 hover:text-brand-500 dark:border-ta-gray-700 dark:bg-ta-gray-800 dark:text-ta-gray-400"
+  }`;
 }
 
 function MobileStat({ label, value, color }: { label: string; value: number; color: string }) {
@@ -53,6 +68,7 @@ function ManagerDashboard() {
   const [menu, setMenu] = useState<ManagerMenu>("tables");
   const [activeStation, setActiveStation] = useState(0);
   const [crewScope, setCrewScope] = useState<CrewScope>({ kind: "today" });
+  const [calOpen, setCalOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const { items, unread, push, markRead } = useNotificationCenter();
   const [stuck, setStuck] = useState(false);
@@ -246,6 +262,52 @@ function ManagerDashboard() {
       {menu === "crew" && (
         <>
           <TaCard>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCrewScope({ kind: "today" })}
+                className={crewScopePillClass(crewScope.kind === "today")}
+              >
+                Hari ini
+              </button>
+              <Popover open={calOpen} onOpenChange={setCalOpen}>
+                <PopoverTrigger asChild>
+                  <button type="button" className={crewScopePillClass(crewScope.kind === "date")}>
+                    <CalendarDays className="size-4" />
+                    {crewScope.kind === "date" ? formatScopeDate(crewScope.date) : "Pilih Tanggal"}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    locale={localeId}
+                    selected={
+                      crewScope.kind === "date"
+                        ? parseISO(crewScope.date)
+                        : crewScope.kind === "today"
+                          ? parseISO(wibDateKey())
+                          : undefined
+                    }
+                    defaultMonth={crewScope.kind === "date" ? parseISO(crewScope.date) : undefined}
+                    onSelect={(d) => {
+                      if (!d) return;
+                      const key = wibDateKey(d);
+                      setCalOpen(false);
+                      setCrewScope(
+                        key === wibDateKey() ? { kind: "today" } : { kind: "date", date: key },
+                      );
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+              <button
+                type="button"
+                onClick={() => setCrewScope({ kind: "all" })}
+                className={crewScopePillClass(crewScope.kind === "all")}
+              >
+                Semua
+              </button>
+            </div>
             {crew.isLoading && (
               <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">Memuat crew...</p>
             )}
@@ -297,8 +359,19 @@ function ManagerDashboard() {
                                 const m = g.members[r];
                                 return (
                                   <Fragment key={g.label}>
-                                    <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-ta-gray-800 dark:text-ta-gray-100">
+                                    <td
+                                      className={`border border-black/10 px-3 py-2 text-center font-bold uppercase ${
+                                        m && !m.isActive
+                                          ? "text-ta-gray-400 dark:text-ta-gray-500"
+                                          : "text-ta-gray-800 dark:text-ta-gray-100"
+                                      }`}
+                                    >
                                       {m?.displayName ?? ""}
+                                      {m?.isActive && (
+                                        <span className="ml-1 inline-flex rounded-full bg-ta-success/15 px-1.5 py-0.5 align-middle text-[9px] font-black uppercase text-ta-success">
+                                          AKTIF
+                                        </span>
+                                      )}
                                     </td>
                                     <td className="border border-black/10 px-3 py-2 text-center text-ta-gray-600 dark:text-ta-gray-300">
                                       {m ? formatWibClock(m.checkedInAt) : ""}
@@ -342,8 +415,19 @@ function ManagerDashboard() {
                           {current && current.members.length > 0 ? (
                             current.members.map((m, i) => (
                               <tr key={`${m.displayName}-${i}`}>
-                                <td className="border border-black/10 px-3 py-2 text-center font-bold uppercase text-ta-gray-800 dark:text-ta-gray-100">
+                                <td
+                                  className={`border border-black/10 px-3 py-2 text-center font-bold uppercase ${
+                                    m.isActive
+                                      ? "text-ta-gray-800 dark:text-ta-gray-100"
+                                      : "text-ta-gray-400 dark:text-ta-gray-500"
+                                  }`}
+                                >
                                   {m.displayName}
+                                  {m.isActive && (
+                                    <span className="ml-1 inline-flex rounded-full bg-ta-success/15 px-1.5 py-0.5 align-middle text-[9px] font-black uppercase text-ta-success">
+                                      AKTIF
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="border border-black/10 px-3 py-2 text-center text-ta-gray-600 dark:text-ta-gray-300">
                                   {formatWibClock(m.checkedInAt)}
