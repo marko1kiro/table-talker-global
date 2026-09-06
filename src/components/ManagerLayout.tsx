@@ -39,7 +39,6 @@ export function ManagerLayout({
     active: active === id,
     onSelect: () => onSelect(id),
   }));
-  const headerTitle = LABELS.find((l) => l.id === active)?.label ?? "Dashboard";
   const footer = (
     <div className="rounded-xl border border-ta-gray-200 bg-white p-4 text-center dark:border-ta-gray-700 dark:bg-ta-gray-800">
       <p className="truncate whitespace-nowrap text-[13px] font-bold uppercase text-ta-gray-900 dark:text-white">
@@ -57,7 +56,6 @@ export function ManagerLayout({
     <AppShell
       brand={<Brand />}
       navItems={navItems}
-      headerTitle={headerTitle}
       headerLogo={
         <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
       }
