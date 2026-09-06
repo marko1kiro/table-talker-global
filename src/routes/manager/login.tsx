@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { Eye, EyeOff, Hash, Loader2, Lock } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Hash, Loader2, Lock } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { loginManager } from "@/lib/manager-auth.server";
@@ -59,6 +59,13 @@ function ManagerLoginPage() {
 
   return (
     <AuthLayout>
+      <Link
+        to="/"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-ta-gray-500 transition hover:text-brand-500 dark:text-ta-gray-400 dark:hover:text-brand-400"
+      >
+        <ArrowLeft className="size-4" />
+        Kembali
+      </Link>
       <div className="mb-8">
         <h1 className="mb-2 text-2xl font-semibold text-ta-gray-800 dark:text-white">
           Login Manager
