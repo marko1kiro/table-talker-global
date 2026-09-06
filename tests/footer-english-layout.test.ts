@@ -23,8 +23,9 @@ describe("footer english labels and layout", () => {
     expect(footer).toMatch(/max-w-(?:xs|sm|md)/);
   });
 
-  it("copyright dan branding rapat dan 1 baris di desktop", () => {
-    expect(footer).toContain("sm:flex-row");
-    expect(footer).toContain("Simplify Your Mind");
+  it("branding XDIRGA LABS · SIMPLIFY YOUR MIND tidak wrap (1 baris utuh)", () => {
+    expect(footer).toContain("whitespace-nowrap");
+    expect(footer).toContain("XDIRGA LABS");
+    expect(footer).toContain("SIMPLIFY YOUR MIND");
   });
 });

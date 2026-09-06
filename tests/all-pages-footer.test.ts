@@ -42,6 +42,6 @@ describe("consistent footer across all pages", () => {
 
   it("Footer memiliki tagline Simplify Your Mind", () => {
     const footer = read("../src/components/Footer.tsx");
-    expect(footer).toContain("Simplify Your Mind");
+    expect(footer).toMatch(/simplify your mind/i);
   });
 });

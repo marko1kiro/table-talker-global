@@ -42,13 +42,12 @@ export function Footer({ className, variant = "light" }: FooterProps) {
             </a>
           ))}
         </nav>
-        <div className="flex flex-col items-center justify-center gap-0.5 text-[11px] text-ta-gray-400 sm:flex-row sm:gap-2">
+        <div className="flex flex-col items-center justify-center gap-0.5 text-[11px] text-ta-gray-400">
           <p className="flex items-center justify-center gap-1">
             lihatmeja.com <span aria-label="copyright">©</span> {new Date().getFullYear()}
           </p>
-          <span className="hidden text-ta-gray-300 dark:text-ta-gray-600 sm:inline">·</span>
-          <p className="font-bold uppercase tracking-wide text-ta-gray-400 dark:text-ta-gray-500">
-            XDIRGA LABS <span className="font-normal not-italic">· Simplify Your Mind</span>
+          <p className="whitespace-nowrap font-bold uppercase tracking-wide text-ta-gray-400 dark:text-ta-gray-500">
+            XDIRGA LABS <span className="font-normal not-italic">· SIMPLIFY YOUR MIND</span>
           </p>
         </div>
       </div>

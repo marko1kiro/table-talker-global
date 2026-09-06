@@ -269,7 +269,7 @@ function ManagerDashboard() {
                 </div>
               </>
             ) : (
-              <ul className="grid grid-cols-5 gap-2 md:grid-cols-10">
+              <ul className="grid grid-cols-5 gap-2 sm:grid-cols-8 sm:gap-2.5 md:grid-cols-10 lg:grid-cols-12 lg:gap-3 xl:grid-cols-[repeat(15,minmax(0,1fr))] 2xl:grid-cols-[repeat(18,minmax(0,1fr))]">
                 {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((n) => {
                   const terisi = statusByNumber.get(n) === "terisi";
                   return (

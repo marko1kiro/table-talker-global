@@ -10,7 +10,7 @@ describe("public info developer refresh", () => {
   const contact = read("../src/routes/contact.tsx");
 
   it("Footer menampilkan tagline Simplify Your Mind", () => {
-    expect(footer).toContain("Simplify Your Mind");
+    expect(footer).toMatch(/simplify your mind/i);
   });
 
   it("About menampilkan info developer XDIRGA LABS + low-code + custom app", () => {
