@@ -35,6 +35,11 @@ it("uses immutable cache headers and only accepts NotFound from HeadObject", () 
   expect(source).toContain('error.name === "NotFound"');
 });
 
+it("validates QR export key with pdf extension", () => {
+  const source = r2Server();
+  expect(source).toContain("pdf|xlsx|csv|docx");
+});
+
 it("r2Key generates path with restaurant ID and hash", () => {
   const source = r2Server();
   expect(source).toContain("restaurants/${restaurantId}");
