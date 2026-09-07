@@ -280,12 +280,10 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
 
       {step === "code" && (
         <>
-          <div className="mb-6">
-            <h1 className="mb-2 text-2xl font-semibold text-ta-gray-800 dark:text-white">
-              Login Dulu
-            </h1>
-            <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">
-              Masuk ke station kamu untuk mulai bertugas.
+          <div className="mb-6 flex flex-col items-center text-center">
+            <img src="/lime-logo.webp" alt="LIME" className="mb-3 h-10 w-auto" />
+            <p className="text-sm font-medium text-ta-gray-500 dark:text-ta-gray-400">
+              Simplify Your Workflow
             </p>
           </div>
           <Link

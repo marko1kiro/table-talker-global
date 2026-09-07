@@ -176,7 +176,9 @@ describe("RoleLoginFlow: TailAdmin split layout", () => {
   });
   it("renames the code heading and drops the helper copy + hero icon boxes", () => {
     const text = source();
-    expect(text).toContain("Login Dulu");
+    expect(text).not.toContain("Login Dulu");
+    expect(text).toContain("Simplify Your Workflow");
+    expect(text).toContain("/lime-logo.webp");
     expect(text).not.toContain("Masuk ke Resto");
     expect(text).not.toContain("Masukkan Kode Resto yang diberikan admin.");
     expect(text).not.toContain("from-sky-500");
