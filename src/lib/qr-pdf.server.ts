@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import { toBuffer } from "qrcode";
 import { A2_COLUMNS, A2_ROWS, buildA2QrSlots, type DynamicQrRow } from "./qr-pdf-domain";
+import { getRobotoBoldFontBuffer } from "./embedded-font.server";
 
 // 1 mm = 72 / 25.4 pt = 2.83464567 pt
 const MM_TO_PT = 72 / 25.4;
@@ -47,6 +48,9 @@ export async function generateA2QrPdfBuffer(rows: DynamicQrRow[], domain: string
         margin: 0,
         autoFirstPage: true,
       });
+
+      // Register embedded font to completely avoid filesystem AFM lookups
+      doc.registerFont("Roboto-Bold", getRobotoBoldFontBuffer());
 
       const chunks: Buffer[] = [];
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -108,7 +112,7 @@ export async function generateA2QrPdfBuffer(rows: DynamicQrRow[], domain: string
 
         // Table number text in center of badge
         const fontSize = item.tableNumber >= 100 ? 9 : 10.5;
-        doc.save().font("Helvetica-Bold").fontSize(fontSize).fillColor("#000000");
+        doc.save().font("Roboto-Bold").fontSize(fontSize).fillColor("#000000");
 
         const text = String(item.tableNumber);
         const textWidth = doc.widthOfString(text);
