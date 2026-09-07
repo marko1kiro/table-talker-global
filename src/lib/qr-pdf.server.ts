@@ -87,30 +87,20 @@ export async function generateA2QrPdfBuffer(rows: DynamicQrRow[], domain: string
           doc.image(png, qrX, qrY, { width: qrSizePt, height: qrSizePt });
         }
 
-        // 3. Draw center badge for Table Number (No white background, magenta border, blue-cyan text)
+        // 3. Draw Table Number in center of QR (No box/border, blue-cyan fill with magenta stroke)
         // Center of sticker
         const centerX = stickerX + STICKER_SIZE_PT / 2;
         const centerY = stickerY + STICKER_SIZE_PT / 2;
 
-        const badgeWidthMm = item.tableNumber >= 100 ? 9.5 : 8.5;
-        const badgeHeightMm = 8.5;
-        const badgeWidthPt = badgeWidthMm * MM_TO_PT;
-        const badgeHeightPt = badgeHeightMm * MM_TO_PT;
-        const badgeX = centerX - badgeWidthPt / 2;
-        const badgeY = centerY - badgeHeightPt / 2;
-
-        // Magenta border outline without solid white fill
+        // Larger font size for prominence
+        const fontSize = item.tableNumber >= 100 ? 11.5 : 13.5;
         doc
           .save()
-          .roundedRect(badgeX, badgeY, badgeWidthPt, badgeHeightPt, 1.5)
-          .lineWidth(0.75)
-          .strokeColor("#d946ef") // Magenta border
-          .stroke()
-          .restore();
-
-        // Table number text in blue-cyan
-        const fontSize = item.tableNumber >= 100 ? 9 : 10.5;
-        doc.save().font("Roboto-Bold").fontSize(fontSize).fillColor("#0284c7"); // Blue-cyan text
+          .font("Roboto-Bold")
+          .fontSize(fontSize)
+          .fillColor("#00b4d8") // Blue-cyan fill
+          .strokeColor("#d946ef") // Magenta stroke outline
+          .lineWidth(0.6);
 
         const text = String(item.tableNumber);
         const textWidth = doc.widthOfString(text);
@@ -118,6 +108,8 @@ export async function generateA2QrPdfBuffer(rows: DynamicQrRow[], domain: string
 
         doc.text(text, centerX - textWidth / 2, centerY - textHeight / 2 + 0.5, {
           lineBreak: false,
+          stroke: true,
+          fill: true,
         });
         doc.restore();
       }
