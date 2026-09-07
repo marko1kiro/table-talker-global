@@ -42,6 +42,8 @@ import {
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
 import { useNotificationCenter } from "@/hooks/use-notification-center";
+import { usePendingInstructions } from "@/hooks/use-pending-instructions";
+import { InstructionBanner } from "@/components/InstructionBanner";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
@@ -112,6 +114,12 @@ function ClearUpRoute() {
     refetchOnWindowFocus: true,
   });
   const { items, unread, push, markRead } = useNotificationCenter();
+  const { pending: pendingInstructions, dismiss: dismissInstruction } = usePendingInstructions(
+    identity?.roleSessionToken ?? "",
+    identity?.accessToken ?? "",
+    identity?.restaurantId ?? "",
+    identity?.roleSessionId ?? "",
+  );
   const realtimeStatus = useTableOccupancyRealtime(
     restaurantId,
     identity?.roleSessionToken ?? "",
@@ -170,114 +178,124 @@ function ClearUpRoute() {
   if (!identityHydrated || !identity) return null;
 
   return (
-    <CrewShell
-      roleLabel="CLEAR UP"
-      userName={identity.displayName}
-      onLogout={logout}
-      feed={items}
-      unread={unread}
-      onOpen={markRead}
-    >
-      <OwnerPage>
-        {realtimeStatus !== "SUBSCRIBED" && (
-          <OwnerNotice role="status" tone="warning">
-            Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
-          </OwnerNotice>
-        )}
-
-        {actionError && (
-          <OwnerNotice role="alert" tone="danger">
-            {actionError}
-          </OwnerNotice>
-        )}
-
-        <CrewTableSection
-          legend={[{ color: "red", label: "Perlu Dibersihkan" }]}
-          layoutPreference={layoutPreference}
-          onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
-        >
-          {processingTable !== null && (
-            <OwnerNotice role="status" tone="neutral">
-              <span className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
-                Memproses Meja {processingTable}...
-              </span>
+    <>
+      <InstructionBanner
+        instructions={pendingInstructions}
+        roleSessionToken={identity.roleSessionToken}
+        accessToken={identity.accessToken}
+        onDismiss={dismissInstruction}
+      />
+      <CrewShell
+        roleLabel="CLEAR UP"
+        userName={identity.displayName}
+        onLogout={logout}
+        feed={items}
+        unread={unread}
+        onOpen={markRead}
+      >
+        <OwnerPage>
+          {realtimeStatus !== "SUBSCRIBED" && (
+            <OwnerNotice role="status" tone="warning">
+              Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
             </OwnerNotice>
           )}
 
-          {snapshot.isLoading ? (
-            <p className="text-sm text-slate-500 dark:text-ta-gray-400">Memuat status meja...</p>
-          ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
-            <>
-              <OwnerNotice role="alert" tone="danger">
-                Status meja tidak dapat dimuat.
-              </OwnerNotice>
-              <div className="mt-4">
-                <OwnerRetry onClick={() => snapshot.refetch()} />
-              </div>
-            </>
-          ) : queue.length === 0 ? (
-            <OwnerEmpty
-              title="Tidak ada meja yang perlu dibersihkan"
-              description="Semua meja saat ini KOSONG. Daftar ini otomatis muncul begitu ada meja TERISI."
-            />
-          ) : layoutPreference === "grid" ? (
-            <TableGrid
-              queue={queue}
-              pendingTable={processingTable}
-              onSelectTable={(tableNumber) => setConfirmTable(tableNumber)}
-            />
-          ) : (
-            <TableList
-              queue={queue}
-              pendingTable={processingTable}
-              onSelectTable={(tableNumber) => setConfirmTable(tableNumber)}
-            />
+          {actionError && (
+            <OwnerNotice role="alert" tone="danger">
+              {actionError}
+            </OwnerNotice>
           )}
-        </CrewTableSection>
 
-        <AlertDialog
-          open={confirmTable !== null}
-          onOpenChange={(open) => {
-            if (!open) setConfirmTable(null);
-          }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Tandai Meja {confirmTable} Sudah Dibersihkan?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Gunakan ini hanya setelah meja benar-benar selesai dibersihkan dan siap dipakai
-                kembali.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                className={crewSecondaryButtonClass}
-                onClick={() => setConfirmTable(null)}
-              >
-                Batal
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className={crewPrimaryButtonClass}
-                onClick={() => {
-                  // AlertDialogAction closes the dialog on click by default
-                  // (Radix wraps it in a Dialog.Close) -- that's exactly
-                  // what we want here. The "sedang diproses" signal moves
-                  // to the table grid/list instead, via `processingTable`,
-                  // which is set here so it survives the dialog closing.
-                  if (confirmTable !== null) {
-                    setProcessingTable(confirmTable);
-                    markEmpty.mutate(confirmTable);
-                  }
-                }}
-              >
-                Ya, Tandai Kosong
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </OwnerPage>
-    </CrewShell>
+          <CrewTableSection
+            legend={[{ color: "red", label: "Perlu Dibersihkan" }]}
+            layoutPreference={layoutPreference}
+            onToggleLayout={() =>
+              setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")
+            }
+          >
+            {processingTable !== null && (
+              <OwnerNotice role="status" tone="neutral">
+                <span className="flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  Memproses Meja {processingTable}...
+                </span>
+              </OwnerNotice>
+            )}
+
+            {snapshot.isLoading ? (
+              <p className="text-sm text-slate-500 dark:text-ta-gray-400">Memuat status meja...</p>
+            ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
+              <>
+                <OwnerNotice role="alert" tone="danger">
+                  Status meja tidak dapat dimuat.
+                </OwnerNotice>
+                <div className="mt-4">
+                  <OwnerRetry onClick={() => snapshot.refetch()} />
+                </div>
+              </>
+            ) : queue.length === 0 ? (
+              <OwnerEmpty
+                title="Tidak ada meja yang perlu dibersihkan"
+                description="Semua meja saat ini KOSONG. Daftar ini otomatis muncul begitu ada meja TERISI."
+              />
+            ) : layoutPreference === "grid" ? (
+              <TableGrid
+                queue={queue}
+                pendingTable={processingTable}
+                onSelectTable={(tableNumber) => setConfirmTable(tableNumber)}
+              />
+            ) : (
+              <TableList
+                queue={queue}
+                pendingTable={processingTable}
+                onSelectTable={(tableNumber) => setConfirmTable(tableNumber)}
+              />
+            )}
+          </CrewTableSection>
+
+          <AlertDialog
+            open={confirmTable !== null}
+            onOpenChange={(open) => {
+              if (!open) setConfirmTable(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Tandai Meja {confirmTable} Sudah Dibersihkan?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Gunakan ini hanya setelah meja benar-benar selesai dibersihkan dan siap dipakai
+                  kembali.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel
+                  className={crewSecondaryButtonClass}
+                  onClick={() => setConfirmTable(null)}
+                >
+                  Batal
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className={crewPrimaryButtonClass}
+                  onClick={() => {
+                    // AlertDialogAction closes the dialog on click by default
+                    // (Radix wraps it in a Dialog.Close) -- that's exactly
+                    // what we want here. The "sedang diproses" signal moves
+                    // to the table grid/list instead, via `processingTable`,
+                    // which is set here so it survives the dialog closing.
+                    if (confirmTable !== null) {
+                      setProcessingTable(confirmTable);
+                      markEmpty.mutate(confirmTable);
+                    }
+                  }}
+                >
+                  Ya, Tandai Kosong
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </OwnerPage>
+      </CrewShell>
+    </>
   );
 }
 

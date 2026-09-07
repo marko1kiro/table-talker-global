@@ -35,6 +35,8 @@ import {
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
 import { useNotificationCenter } from "@/hooks/use-notification-center";
+import { usePendingInstructions } from "@/hooks/use-pending-instructions";
+import { InstructionBanner } from "@/components/InstructionBanner";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
@@ -75,6 +77,12 @@ function KasirRoute() {
   const [actionError, setActionError] = useState("");
   const { layoutPreference, setLayoutPreference } = useLayoutPreference("kasir");
   const { items, unread, push, markRead } = useNotificationCenter();
+  const { pending: pendingInstructions, dismiss: dismissInstruction } = usePendingInstructions(
+    identity?.roleSessionToken ?? "",
+    identity?.accessToken ?? "",
+    identity?.restaurantId ?? "",
+    identity?.roleSessionId ?? "",
+  );
 
   // Client-only hydration, same pattern as src/routes/index.tsx: reading
   // sessionStorage during SSR would always return null and mismatch the
@@ -170,121 +178,131 @@ function KasirRoute() {
   const footer = <Footer className="mt-0 border-0 dark:bg-transparent" />;
 
   return (
-    <AppShell
-      brand={brand}
-      navItems={navItems}
-      headerTitle="Status Meja"
-      headerLogo={
-        <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
-      }
-      headerRight={
-        <DashboardHeaderRight
-          roleLabel="KASIR"
-          profile={{ name: identity.displayName, canChangePassword: false }}
-          notifications={{ stale: [], feed: items, unread, onOpen: markRead }}
-          onLogout={logout}
-        />
-      }
-      footer={footer}
-    >
-      <OwnerPage>
-        {realtimeStatus !== "SUBSCRIBED" && (
-          <OwnerNotice role="status" tone="warning">
-            Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
-          </OwnerNotice>
-        )}
-
-        {actionError && (
-          <OwnerNotice role="alert" tone="danger">
-            {actionError}
-          </OwnerNotice>
-        )}
-
-        <CrewTableSection
-          legend={[
-            { color: "emerald", label: "Kosong" },
-            { color: "red", label: "Terisi" },
-          ]}
-          layoutPreference={layoutPreference}
-          onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
-          desktopHint="Tap nomor meja untuk mengubah status dari KOSONG (Hijau) menjadi TERISI (Merah)."
-        >
-          {processingTable !== null && (
-            <OwnerNotice role="status" tone="neutral">
-              <span className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
-                Memproses Meja {processingTable}...
-              </span>
+    <>
+      <InstructionBanner
+        instructions={pendingInstructions}
+        roleSessionToken={identity.roleSessionToken}
+        accessToken={identity.accessToken}
+        onDismiss={dismissInstruction}
+      />
+      <AppShell
+        brand={brand}
+        navItems={navItems}
+        headerTitle="Status Meja"
+        headerLogo={
+          <img src="/lime-logo.webp" alt="LIME" className="h-7 w-auto shrink-0 select-none" />
+        }
+        headerRight={
+          <DashboardHeaderRight
+            roleLabel="KASIR"
+            profile={{ name: identity.displayName, canChangePassword: false }}
+            notifications={{ stale: [], feed: items, unread, onOpen: markRead }}
+            onLogout={logout}
+          />
+        }
+        footer={footer}
+      >
+        <OwnerPage>
+          {realtimeStatus !== "SUBSCRIBED" && (
+            <OwnerNotice role="status" tone="warning">
+              Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
             </OwnerNotice>
           )}
 
-          {snapshot.isLoading ? (
-            <p className="text-sm text-slate-500 dark:text-ta-gray-400">Memuat status meja...</p>
-          ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
-            <>
-              <OwnerNotice role="alert" tone="danger">
-                Status meja tidak dapat dimuat.
-              </OwnerNotice>
-              <div className="mt-4">
-                <OwnerRetry onClick={() => snapshot.refetch()} />
-              </div>
-            </>
-          ) : layoutPreference === "grid" ? (
-            <TableGrid
-              tables={tables}
-              pendingTable={processingTable}
-              onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
-            />
-          ) : (
-            <TableList
-              tables={tables}
-              pendingTable={processingTable}
-              onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
-            />
+          {actionError && (
+            <OwnerNotice role="alert" tone="danger">
+              {actionError}
+            </OwnerNotice>
           )}
-        </CrewTableSection>
 
-        <AlertDialog
-          open={confirmTable !== null}
-          onOpenChange={(open) => {
-            if (!open) setConfirmTable(null);
-          }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Tandai Meja {confirmTable} Terisi?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Gunakan ini hanya untuk pelanggan yang bayar langsung di kasir tanpa scan QR.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                className={crewSecondaryButtonClass}
-                onClick={() => setConfirmTable(null)}
-              >
-                Batal
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className={crewPrimaryButtonClass}
-                onClick={() => {
-                  // AlertDialogAction closes the dialog on click by default
-                  // (Radix wraps it in a Dialog.Close) -- that's exactly
-                  // what we want here. The "sedang diproses" signal moves
-                  // to the table grid/list instead, via `processingTable`,
-                  // which is set here so it survives the dialog closing.
-                  if (confirmTable !== null) {
-                    setProcessingTable(confirmTable);
-                    markOccupied.mutate(confirmTable);
-                  }
-                }}
-              >
-                Ya, Tandai Terisi
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </OwnerPage>
-    </AppShell>
+          <CrewTableSection
+            legend={[
+              { color: "emerald", label: "Kosong" },
+              { color: "red", label: "Terisi" },
+            ]}
+            layoutPreference={layoutPreference}
+            onToggleLayout={() =>
+              setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")
+            }
+            desktopHint="Tap nomor meja untuk mengubah status dari KOSONG (Hijau) menjadi TERISI (Merah)."
+          >
+            {processingTable !== null && (
+              <OwnerNotice role="status" tone="neutral">
+                <span className="flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  Memproses Meja {processingTable}...
+                </span>
+              </OwnerNotice>
+            )}
+
+            {snapshot.isLoading ? (
+              <p className="text-sm text-slate-500 dark:text-ta-gray-400">Memuat status meja...</p>
+            ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
+              <>
+                <OwnerNotice role="alert" tone="danger">
+                  Status meja tidak dapat dimuat.
+                </OwnerNotice>
+                <div className="mt-4">
+                  <OwnerRetry onClick={() => snapshot.refetch()} />
+                </div>
+              </>
+            ) : layoutPreference === "grid" ? (
+              <TableGrid
+                tables={tables}
+                pendingTable={processingTable}
+                onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
+              />
+            ) : (
+              <TableList
+                tables={tables}
+                pendingTable={processingTable}
+                onSelectEmptyTable={(tableNumber) => setConfirmTable(tableNumber)}
+              />
+            )}
+          </CrewTableSection>
+
+          <AlertDialog
+            open={confirmTable !== null}
+            onOpenChange={(open) => {
+              if (!open) setConfirmTable(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Tandai Meja {confirmTable} Terisi?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Gunakan ini hanya untuk pelanggan yang bayar langsung di kasir tanpa scan QR.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel
+                  className={crewSecondaryButtonClass}
+                  onClick={() => setConfirmTable(null)}
+                >
+                  Batal
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className={crewPrimaryButtonClass}
+                  onClick={() => {
+                    // AlertDialogAction closes the dialog on click by default
+                    // (Radix wraps it in a Dialog.Close) -- that's exactly
+                    // what we want here. The "sedang diproses" signal moves
+                    // to the table grid/list instead, via `processingTable`,
+                    // which is set here so it survives the dialog closing.
+                    if (confirmTable !== null) {
+                      setProcessingTable(confirmTable);
+                      markOccupied.mutate(confirmTable);
+                    }
+                  }}
+                >
+                  Ya, Tandai Terisi
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </OwnerPage>
+      </AppShell>
+    </>
   );
 }
 

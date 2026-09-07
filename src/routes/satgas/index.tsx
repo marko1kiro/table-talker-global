@@ -43,6 +43,8 @@ import {
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
 import { useNotificationCenter } from "@/hooks/use-notification-center";
+import { usePendingInstructions } from "@/hooks/use-pending-instructions";
+import { InstructionBanner } from "@/components/InstructionBanner";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
@@ -143,6 +145,12 @@ function SatgasRoute() {
     refetchOnWindowFocus: true,
   });
   const { items, unread, push, markRead } = useNotificationCenter();
+  const { pending: pendingInstructions, dismiss: dismissInstruction } = usePendingInstructions(
+    identity?.roleSessionToken ?? "",
+    identity?.accessToken ?? "",
+    identity?.restaurantId ?? "",
+    identity?.roleSessionId ?? "",
+  );
   const realtimeStatus = useTableOccupancyRealtime(
     restaurantId,
     identity?.roleSessionToken ?? "",
@@ -318,190 +326,200 @@ function SatgasRoute() {
   if (!identityHydrated || !identity) return null;
 
   return (
-    <CrewShell
-      roleLabel="SATGAS"
-      userName={identity.displayName}
-      onLogout={logout}
-      feed={items}
-      unread={unread}
-      onOpen={markRead}
-    >
-      <OwnerPage>
-        {realtimeStatus !== "SUBSCRIBED" && (
-          <OwnerNotice role="status" tone="warning">
-            Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
-          </OwnerNotice>
-        )}
-
-        {actionError && (
-          <OwnerNotice role="alert" tone="danger">
-            {actionError}
-          </OwnerNotice>
-        )}
-
-        {partition.readyToConfirm.length > 0 && (
-          <OwnerPanel
-            title="Menunggu Konfirmasi"
-            description="Sudah 10 menit sejak diantar dan meja masih tercatat kosong. Konfirmasi jika tamu sudah duduk."
-          >
-            <div className="flex flex-col gap-2">
-              {partition.readyToConfirm.map((entry) => {
-                const isConfirming =
-                  confirmMutation.isPending &&
-                  confirmMutation.variables?.intentId === entry.intentId;
-                return (
-                  <div
-                    key={entry.intentId}
-                    className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-500/30 dark:bg-amber-500/10"
-                  >
-                    <span className="text-sm font-bold text-amber-800 dark:text-amber-300">
-                      Meja {entry.tableNumber}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={confirmMutation.isPending}
-                      onClick={() => confirmMutation.mutate(entry)}
-                      className={`${ownerPrimaryButtonClass} flex items-center gap-2`}
-                    >
-                      {isConfirming && <Loader2 className="size-4 animate-spin" />}
-                      {isConfirming ? "Memproses..." : "Konfirmasi"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </OwnerPanel>
-        )}
-
-        <CrewTableSection
-          legend={[
-            { color: "emerald", label: "Kosong" },
-            { color: "amber", label: "Sudah Di-escort" },
-            { color: "red", label: "Terisi" },
-          ]}
-          layoutPreference={layoutPreference}
-          onToggleLayout={() => setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")}
-        >
-          {processingTable !== null && (
-            <OwnerNotice role="status" tone="neutral">
-              <span className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
-                Memproses escort Meja {processingTable}...
-              </span>
+    <>
+      <InstructionBanner
+        instructions={pendingInstructions}
+        roleSessionToken={identity.roleSessionToken}
+        accessToken={identity.accessToken}
+        onDismiss={dismissInstruction}
+      />
+      <CrewShell
+        roleLabel="SATGAS"
+        userName={identity.displayName}
+        onLogout={logout}
+        feed={items}
+        unread={unread}
+        onOpen={markRead}
+      >
+        <OwnerPage>
+          {realtimeStatus !== "SUBSCRIBED" && (
+            <OwnerNotice role="status" tone="warning">
+              Menunggu koneksi realtime -- data tetap diperbarui otomatis setiap beberapa detik.
             </OwnerNotice>
           )}
 
-          {snapshot.isLoading ? (
-            <p className="text-sm text-slate-500 dark:text-ta-gray-400">Memuat status meja...</p>
-          ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
-            <>
-              <OwnerNotice role="alert" tone="danger">
-                Status meja tidak dapat dimuat.
-              </OwnerNotice>
-              <div className="mt-4">
-                <OwnerRetry onClick={() => snapshot.refetch()} />
-              </div>
-            </>
-          ) : layoutPreference === "grid" ? (
-            <TableGrid
-              tables={tables}
-              escortedTableNumbers={escortedTableNumbers}
-              pendingTable={processingTable}
-              onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
-              onSelectEscortedTable={(tableNumber, intentId) =>
-                setCancelTarget({ tableNumber, intentId })
-              }
-            />
-          ) : (
-            <TableList
-              tables={tables}
-              escortedTableNumbers={escortedTableNumbers}
-              pendingTable={processingTable}
-              onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
-              onSelectEscortedTable={(tableNumber, intentId) =>
-                setCancelTarget({ tableNumber, intentId })
-              }
-            />
+          {actionError && (
+            <OwnerNotice role="alert" tone="danger">
+              {actionError}
+            </OwnerNotice>
           )}
-        </CrewTableSection>
 
-        <AlertDialog
-          open={escortTable !== null}
-          onOpenChange={(open) => {
-            if (!open) setEscortTable(null);
-          }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Escort ke Meja {escortTable}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Meja ini akan diingatkan untuk dikonfirmasi 10 menit lagi jika belum berubah
-                statusnya.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                className={crewSecondaryButtonClass}
-                onClick={() => setEscortTable(null)}
-              >
-                Batal
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className={crewPrimaryButtonClass}
-                onClick={() => {
-                  // AlertDialogAction closes the dialog on click by default
-                  // (Radix wraps it in a Dialog.Close) -- that's exactly
-                  // what we want here. The "sedang diproses" signal moves
-                  // to the table grid/list instead, via `processingTable`,
-                  // which is set here so it survives the dialog closing.
-                  if (escortTable !== null) {
-                    setProcessingTable(escortTable);
-                    escortMutation.mutate(escortTable);
-                  }
-                }}
-              >
-                Ya, Escort
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          {partition.readyToConfirm.length > 0 && (
+            <OwnerPanel
+              title="Menunggu Konfirmasi"
+              description="Sudah 10 menit sejak diantar dan meja masih tercatat kosong. Konfirmasi jika tamu sudah duduk."
+            >
+              <div className="flex flex-col gap-2">
+                {partition.readyToConfirm.map((entry) => {
+                  const isConfirming =
+                    confirmMutation.isPending &&
+                    confirmMutation.variables?.intentId === entry.intentId;
+                  return (
+                    <div
+                      key={entry.intentId}
+                      className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-500/30 dark:bg-amber-500/10"
+                    >
+                      <span className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                        Meja {entry.tableNumber}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={confirmMutation.isPending}
+                        onClick={() => confirmMutation.mutate(entry)}
+                        className={`${ownerPrimaryButtonClass} flex items-center gap-2`}
+                      >
+                        {isConfirming && <Loader2 className="size-4 animate-spin" />}
+                        {isConfirming ? "Memproses..." : "Konfirmasi"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </OwnerPanel>
+          )}
 
-        <AlertDialog
-          open={cancelTarget !== null}
-          onOpenChange={(open) => {
-            if (!open) setCancelTarget(null);
-          }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                Batalkan Escort untuk Meja {cancelTarget?.tableNumber}?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                Meja akan kembali berstatus kosong dan bisa di-escort lagi.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                className={crewSecondaryButtonClass}
-                onClick={() => setCancelTarget(null)}
-              >
-                Tidak
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className={crewPrimaryButtonClass}
-                onClick={() => {
-                  if (cancelTarget !== null) cancelMutation.mutate(cancelTarget);
-                  setCancelTarget(null);
-                }}
-              >
-                Ya, Batalkan
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </OwnerPage>
-    </CrewShell>
+          <CrewTableSection
+            legend={[
+              { color: "emerald", label: "Kosong" },
+              { color: "amber", label: "Sudah Di-escort" },
+              { color: "red", label: "Terisi" },
+            ]}
+            layoutPreference={layoutPreference}
+            onToggleLayout={() =>
+              setLayoutPreference(layoutPreference === "grid" ? "list" : "grid")
+            }
+          >
+            {processingTable !== null && (
+              <OwnerNotice role="status" tone="neutral">
+                <span className="flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  Memproses escort Meja {processingTable}...
+                </span>
+              </OwnerNotice>
+            )}
+
+            {snapshot.isLoading ? (
+              <p className="text-sm text-slate-500 dark:text-ta-gray-400">Memuat status meja...</p>
+            ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
+              <>
+                <OwnerNotice role="alert" tone="danger">
+                  Status meja tidak dapat dimuat.
+                </OwnerNotice>
+                <div className="mt-4">
+                  <OwnerRetry onClick={() => snapshot.refetch()} />
+                </div>
+              </>
+            ) : layoutPreference === "grid" ? (
+              <TableGrid
+                tables={tables}
+                escortedTableNumbers={escortedTableNumbers}
+                pendingTable={processingTable}
+                onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
+                onSelectEscortedTable={(tableNumber, intentId) =>
+                  setCancelTarget({ tableNumber, intentId })
+                }
+              />
+            ) : (
+              <TableList
+                tables={tables}
+                escortedTableNumbers={escortedTableNumbers}
+                pendingTable={processingTable}
+                onSelectEmptyTable={(tableNumber) => setEscortTable(tableNumber)}
+                onSelectEscortedTable={(tableNumber, intentId) =>
+                  setCancelTarget({ tableNumber, intentId })
+                }
+              />
+            )}
+          </CrewTableSection>
+
+          <AlertDialog
+            open={escortTable !== null}
+            onOpenChange={(open) => {
+              if (!open) setEscortTable(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Escort ke Meja {escortTable}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Meja ini akan diingatkan untuk dikonfirmasi 10 menit lagi jika belum berubah
+                  statusnya.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel
+                  className={crewSecondaryButtonClass}
+                  onClick={() => setEscortTable(null)}
+                >
+                  Batal
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className={crewPrimaryButtonClass}
+                  onClick={() => {
+                    // AlertDialogAction closes the dialog on click by default
+                    // (Radix wraps it in a Dialog.Close) -- that's exactly
+                    // what we want here. The "sedang diproses" signal moves
+                    // to the table grid/list instead, via `processingTable`,
+                    // which is set here so it survives the dialog closing.
+                    if (escortTable !== null) {
+                      setProcessingTable(escortTable);
+                      escortMutation.mutate(escortTable);
+                    }
+                  }}
+                >
+                  Ya, Escort
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog
+            open={cancelTarget !== null}
+            onOpenChange={(open) => {
+              if (!open) setCancelTarget(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Batalkan Escort untuk Meja {cancelTarget?.tableNumber}?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Meja akan kembali berstatus kosong dan bisa di-escort lagi.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel
+                  className={crewSecondaryButtonClass}
+                  onClick={() => setCancelTarget(null)}
+                >
+                  Tidak
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className={crewPrimaryButtonClass}
+                  onClick={() => {
+                    if (cancelTarget !== null) cancelMutation.mutate(cancelTarget);
+                    setCancelTarget(null);
+                  }}
+                >
+                  Ya, Batalkan
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </OwnerPage>
+      </CrewShell>
+    </>
   );
 }
 
