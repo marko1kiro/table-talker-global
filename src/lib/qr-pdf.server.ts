@@ -87,7 +87,7 @@ export async function generateA2QrPdfBuffer(rows: DynamicQrRow[], domain: string
           doc.image(png, qrX, qrY, { width: qrSizePt, height: qrSizePt });
         }
 
-        // 3. Draw high-contrast center badge for Table Number (Center Badge Overlay)
+        // 3. Draw center badge for Table Number (No white background, magenta border, blue-cyan text)
         // Center of sticker
         const centerX = stickerX + STICKER_SIZE_PT / 2;
         const centerY = stickerY + STICKER_SIZE_PT / 2;
@@ -99,21 +99,18 @@ export async function generateA2QrPdfBuffer(rows: DynamicQrRow[], domain: string
         const badgeX = centerX - badgeWidthPt / 2;
         const badgeY = centerY - badgeHeightPt / 2;
 
-        // White background box with subtle dark border
+        // Magenta border outline without solid white fill
         doc
           .save()
           .roundedRect(badgeX, badgeY, badgeWidthPt, badgeHeightPt, 1.5)
-          .fillColor("#ffffff")
-          .fill()
-          .roundedRect(badgeX, badgeY, badgeWidthPt, badgeHeightPt, 1.5)
-          .lineWidth(0.5)
-          .strokeColor("#1e293b")
+          .lineWidth(0.75)
+          .strokeColor("#d946ef") // Magenta border
           .stroke()
           .restore();
 
-        // Table number text in center of badge
+        // Table number text in blue-cyan
         const fontSize = item.tableNumber >= 100 ? 9 : 10.5;
-        doc.save().font("Roboto-Bold").fontSize(fontSize).fillColor("#000000");
+        doc.save().font("Roboto-Bold").fontSize(fontSize).fillColor("#0284c7"); // Blue-cyan text
 
         const text = String(item.tableNumber);
         const textWidth = doc.widthOfString(text);
