@@ -2,7 +2,7 @@
 // Realtime is an invalidation hint only: snapshots remain authorized by the
 // role-session RPC, and visible pages keep the 12-second polling safety net.
 import { useEffect, useRef, useState } from "react";
-import { getSupabaseBrowserClient } from "../lib/supabase-browser";
+import { ensureAnonAccessToken, getSupabaseBrowserClient } from "../lib/supabase-browser";
 import { parseOccupancyBroadcast, type OccupancyBroadcast } from "../lib/occupancy-notice";
 
 export type TableOccupancyRealtimeStatus =
@@ -165,24 +165,50 @@ export function createTableOccupancyRealtimeController({
   };
 
   if (client && restaurantId && sessionToken) {
-    void client
-      .rpc(bindRpc, {
-        p_restaurant_id: restaurantId,
-        p_session_token: sessionToken,
-      })
-      .then(
-        ({ data, error }) => {
-          if (disposed) return;
-          if (error || data !== true) {
-            handleStatus("CHANNEL_ERROR");
-            return;
-          }
-          subscribePrivate();
-        },
-        () => {
-          if (!disposed) handleStatus("CHANNEL_ERROR");
-        },
-      );
+    const onRpcResult = ({ data, error }: { data?: unknown; error?: unknown }) => {
+      if (disposed) return;
+      if (error || data !== true) {
+        handleStatus("CHANNEL_ERROR");
+        return;
+      }
+      subscribePrivate();
+    };
+    const onRpcReject = () => {
+      if (!disposed) handleStatus("CHANNEL_ERROR");
+    };
+
+    const hasAuth =
+      "auth" in client &&
+      typeof (client as unknown as { auth?: { getSession?: () => Promise<unknown> } }).auth
+        ?.getSession === "function";
+
+    if (hasAuth) {
+      void (client as unknown as { auth: { getSession: () => Promise<unknown> } }).auth
+        .getSession()
+        .then(
+          () =>
+            client
+              .rpc(bindRpc, {
+                p_restaurant_id: restaurantId,
+                p_session_token: sessionToken,
+              })
+              .then(onRpcResult, onRpcReject),
+          () =>
+            client
+              .rpc(bindRpc, {
+                p_restaurant_id: restaurantId,
+                p_session_token: sessionToken,
+              })
+              .then(onRpcResult, onRpcReject),
+        );
+    } else {
+      void client
+        .rpc(bindRpc, {
+          p_restaurant_id: restaurantId,
+          p_session_token: sessionToken,
+        })
+        .then(onRpcResult, onRpcReject);
+    }
   } else {
     handleStatus("CHANNEL_ERROR");
   }
