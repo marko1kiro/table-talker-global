@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildQrExportCsv,
-  buildQrExportXlsxBuffer,
   DEFAULT_QR_EXPORT_DOMAIN,
   serveQrExport,
 } from "../src/lib/qr-export.server";

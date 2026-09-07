@@ -49,6 +49,6 @@ describe("generateQrBatchCore for A2 PDF", () => {
     expect(uploaded[0].bytes).toBeGreaterThan(5000);
 
     expect(committed).not.toBeNull();
-    expect(committed?.tableNumbers).toHaveLength(68);
+    expect((committed as unknown as CommitQrBatchInput).tableNumbers).toHaveLength(68);
   }, 15000);
 });

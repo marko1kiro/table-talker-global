@@ -24,20 +24,21 @@ export async function generateA2QrPdfBuffer(rows: DynamicQrRow[], domain: string
   const base = domain.trim().replace(/\/+$/, "");
   const slots = buildA2QrSlots(rows);
 
-  // Pre-generate QR PNG buffers per unique table token to optimize speed
-  const qrCache = new Map<string, Buffer>();
-  for (const row of rows) {
-    if (!qrCache.has(row.token)) {
+  // Parallel pre-generation of unique QR PNG buffers
+  const uniqueRows = Array.from(new Map(rows.map((row) => [row.token, row])).values());
+  const pngBuffers = await Promise.all(
+    uniqueRows.map(async (row) => {
       const url = `${base}/q/${row.token}`;
-      const pngBuffer = await toBuffer(url, {
+      const buf = await toBuffer(url, {
         errorCorrectionLevel: "H",
         type: "png",
         margin: 1,
-        width: 320,
+        width: 200,
       });
-      qrCache.set(row.token, pngBuffer);
-    }
-  }
+      return [row.token, buf] as const;
+    }),
+  );
+  const qrCache = new Map<string, Buffer>(pngBuffers);
 
   return new Promise((resolve, reject) => {
     try {
