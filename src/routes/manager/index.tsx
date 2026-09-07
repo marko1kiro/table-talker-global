@@ -196,11 +196,24 @@ function ManagerDashboard() {
           message: msgText,
         },
       }),
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (result.ok) {
         setMsgText("");
         setMsgError("");
         void queryClient.invalidateQueries({ queryKey: ["instruction-thread", restaurantId] });
+        const client = getSupabaseBrowserClient();
+        if (client && restaurantId && identity) {
+          const token = await getLiveAccessToken(client, identity.accessToken);
+          if (token) client.realtime.setAuth(token);
+          const ch = client.channel(`table-occupancy:${restaurantId}`, {
+            config: { private: true },
+          });
+          void ch.send({
+            type: "broadcast",
+            event: "instruction",
+            payload: { target_session_id: msgTarget === "all" ? null : msgTarget },
+          });
+        }
       } else {
         setMsgError(
           result.code === "NO_ACTIVE_CREW" ? "Tidak ada crew aktif saat ini." : result.message,

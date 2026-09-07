@@ -44,27 +44,41 @@ export function usePendingInstructions(
   // Realtime subscription via the primary restaurant broadcast channel
   useEffect(() => {
     const client = getSupabaseBrowserClient();
-    if (!client || !restaurantId) return;
-    const typed = client as unknown as ClientWithChannel;
-    const channelName = `table-occupancy:${restaurantId}`;
-    const channel = typed.channel(channelName, {
-      config: { private: true },
-    });
+    if (!client || !restaurantId || !accessToken) return;
 
-    channel
-      .on("broadcast", { event: "instruction" }, (msg: unknown) => {
-        const payload = (msg as { payload?: Record<string, unknown> })?.payload;
-        if (!payload) return;
-        const targetId = payload.target_session_id as string | null;
-        if (targetId && targetId !== roleSessionId) return;
-        void fetchPending();
-      })
-      .subscribe(() => {});
+    let channel: BroadcastCh | null = null;
+    let cancelled = false;
+
+    void (async () => {
+      const liveToken = await getLiveAccessToken(client, accessToken);
+      if (cancelled) return;
+      if (liveToken) client.realtime.setAuth(liveToken);
+
+      const typed = client as unknown as ClientWithChannel;
+      const channelName = `table-occupancy:${restaurantId}`;
+      channel = typed.channel(channelName, {
+        config: { private: true },
+      });
+
+      channel
+        .on("broadcast", { event: "instruction" }, (msg: unknown) => {
+          const payload = (msg as { payload?: Record<string, unknown> })?.payload;
+          if (!payload) return;
+          const targetId = payload.target_session_id as string | null;
+          if (targetId && targetId !== roleSessionId) return;
+          void fetchPending();
+        })
+        .subscribe(() => {});
+    })();
 
     return () => {
-      typed.removeChannel(channel);
+      cancelled = true;
+      if (channel) {
+        const typed = client as unknown as ClientWithChannel;
+        typed.removeChannel(channel);
+      }
     };
-  }, [restaurantId, roleSessionId, fetchPending]);
+  }, [restaurantId, accessToken, roleSessionId, fetchPending]);
 
   // Safety net: periodic background poll + visibility change
   useEffect(() => {
