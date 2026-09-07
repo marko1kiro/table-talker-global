@@ -26,16 +26,6 @@ describe("buildQrExportCsv", () => {
   });
 });
 
-describe("buildQrExportXlsxBuffer", () => {
-  it("produces a non-empty Buffer (a real .xlsx file)", async () => {
-    const buffer = await buildQrExportXlsxBuffer(RESTAURANT_ID, DOMAIN);
-    expect(Buffer.isBuffer(buffer)).toBe(true);
-    expect(buffer.byteLength).toBeGreaterThan(0);
-    // .xlsx files are zip archives -- PK\x03\x04 magic bytes.
-    expect(buffer.subarray(0, 2).toString("latin1")).toBe("PK");
-  });
-});
-
 describe("serveQrExport", () => {
   const lookup = vi.fn(async () => ({ displayName: "Mie Gacoan Kampung Bulu" }));
 
@@ -44,7 +34,7 @@ describe("serveQrExport", () => {
       throw new Error("UNAUTHORIZED");
     });
     const response = await serveQrExport(
-      { restaurantId: RESTAURANT_ID, format: "xlsx", domain: DOMAIN },
+      { restaurantId: RESTAURANT_ID, format: "csv", domain: DOMAIN },
       { requireAuth, lookup },
     );
     expect(response.status).toBe(401);
@@ -66,27 +56,10 @@ describe("serveQrExport", () => {
   it("returns 400 for an invalid format", async () => {
     const requireAuth = vi.fn(async () => {});
     const response = await serveQrExport(
-      { restaurantId: RESTAURANT_ID, format: "pdf" as never, domain: DOMAIN },
+      { restaurantId: RESTAURANT_ID, format: "invalid" as never, domain: DOMAIN },
       { requireAuth, lookup },
     );
     expect(response.status).toBe(400);
-  });
-
-  it("serves .xlsx with the correct Content-Type, Content-Disposition and no-store cache header", async () => {
-    const requireAuth = vi.fn(async () => {});
-    const response = await serveQrExport(
-      { restaurantId: RESTAURANT_ID, format: "xlsx", domain: DOMAIN },
-      { requireAuth, lookup },
-    );
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe(
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-    expect(response.headers.get("content-disposition")).toContain("attachment");
-    expect(response.headers.get("content-disposition")).toContain(".xlsx");
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    const buffer = Buffer.from(await response.arrayBuffer());
-    expect(buffer.subarray(0, 2).toString("latin1")).toBe("PK");
   });
 
   it("serves .csv with the correct Content-Type and Content-Disposition", async () => {
@@ -99,6 +72,7 @@ describe("serveQrExport", () => {
     expect(response.headers.get("content-type")).toBe("text/csv; charset=utf-8");
     expect(response.headers.get("content-disposition")).toContain("attachment");
     expect(response.headers.get("content-disposition")).toContain(".csv");
+    expect(response.headers.get("cache-control")).toBe("no-store");
     const text = await response.text();
     expect(text.split("\n")[0]).toBe("table_number,url");
   });

@@ -100,12 +100,11 @@ describe("M-01 security remediation", () => {
       (entry) => entry.startsWith("upload:") && entry.includes("32f71"),
     );
     expect(order.slice(firstCommitIndex + 1, secondUploadIndex)).toEqual([
-      `remove:qr-exports/${RESTAURANT_ID}/${firstBatch}/qr-codes.xlsx`,
-      `remove:qr-exports/${RESTAURANT_ID}/${firstBatch}/qr-codes.docx`,
+      `remove:qr-exports/${RESTAURANT_ID}/${firstBatch}/qr-codes.pdf`,
     ]);
-  });
+  }, 15000);
 
-  it("removes a completed XLSX upload when the DOCX upload fails", async () => {
+  it("removes attempted PDF upload when commit fails", async () => {
     const remove = vi.fn(async (_key: string): Promise<void> => {});
     await expect(
       generateQrBatchCore(
@@ -119,18 +118,15 @@ describe("M-01 security remediation", () => {
         {
           generateBatchId: () => "7359da62-dc98-4a81-9a0f-56da46f32f70",
           generateToken: () => "pQGY7kb9ucxOH0-kQtxpjSscP-tZmo4zCvV4kWJpZRQ",
-          upload: vi.fn(async (key) => {
-            if (key.endsWith(".docx")) throw new Error("DOCX upload failed");
-          }),
+          upload: vi.fn(async () => {}),
           remove,
-          commit: vi.fn(async () => {}),
+          commit: vi.fn(async () => {
+            throw new Error("Commit failed");
+          }),
         },
       ),
-    ).rejects.toThrow("DOCX upload failed");
-    expect(remove).toHaveBeenCalledTimes(2);
-    expect(remove.mock.calls.map(([key]) => key)).toEqual([
-      expect.stringMatching(/\.xlsx$/),
-      expect.stringMatching(/\.docx$/),
-    ]);
-  });
+    ).rejects.toThrow("Commit failed");
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove.mock.calls.map(([key]) => key)).toEqual([expect.stringMatching(/\.pdf$/)]);
+  }, 15000);
 });

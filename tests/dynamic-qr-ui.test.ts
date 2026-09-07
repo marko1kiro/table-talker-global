@@ -16,22 +16,21 @@ describe("M-01 UI and route contracts", () => {
     ).toBe(false);
   });
 
-  it("offers all-table and selected-table generation with recent-admin confirmation", () => {
+  it("offers real table count input with recent-admin confirmation", () => {
     const source = ui();
-    expect(source).toContain("Semua meja");
-    expect(source).toContain("Meja tertentu");
+    expect(source).toContain("Jumlah Meja Real di Resto");
+    expect(source).toContain("realTableCount");
     expect(source).toContain("superAdminPassword");
-    expect(source).toContain("Generate QR");
+    expect(source).toContain("Generate PDF A2");
     expect(source).toContain("COBA LAGI");
   });
 
-  it("shows permanent batch history, computed statuses, and both downloads", () => {
+  it("shows permanent batch history, computed statuses, and PDF download", () => {
     const source = ui();
     expect(source).toContain("Riwayat QR");
     expect(source).toContain("ACTIVE");
     expect(source).toContain("EXPIRED");
     expect(source).toContain("SEBAGIAN AKTIF");
-    expect(source).toContain("XLSX");
-    expect(source).toContain("DOCX");
+    expect(source).toContain("Download PDF (A2)");
   });
 });

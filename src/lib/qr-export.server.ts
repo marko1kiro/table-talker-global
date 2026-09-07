@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { buildQrExportRows } from "./qr-export-domain";
-import { buildDynamicQrExportDocxBuffer } from "./qr-docx.server";
+import { generateA2QrPdfBuffer } from "./qr-pdf.server";
 import {
   deletePrivateQrExportObject,
   readPrivateQrExportObject,
@@ -12,7 +12,7 @@ import {
 import { getServiceClient } from "./remote-audio.server";
 
 export const DEFAULT_QR_EXPORT_DOMAIN = "https://qris-order.lihatmeja.com";
-export type QrExportFormat = "xlsx" | "csv" | "docx";
+export type QrExportFormat = "pdf" | "xlsx" | "csv" | "docx";
 export type QrGenerationScope = "all" | "selected";
 export type DynamicQrRow = { tableNumber: number; token: string };
 
@@ -29,17 +29,6 @@ function normalizedDomain(domain: string): string {
 export function buildQrExportCsv(restaurantId: string, domain: string): string {
   const rows = buildQrExportRows(restaurantId, domain);
   return `${["table_number,url", ...rows.map((row) => `${row.tableNumber},${csvEscape(row.url)}`)].join("\n")}\n`;
-}
-
-export async function buildQrExportXlsxBuffer(
-  restaurantId: string,
-  domain: string,
-): Promise<Buffer> {
-  const rows = buildQrExportRows(restaurantId, domain).map((row) => ({
-    tableNumber: row.tableNumber,
-    url: row.url,
-  }));
-  return buildXlsx(rows);
 }
 
 export function normalizeQrGenerationSelection(
@@ -67,31 +56,6 @@ export function buildDynamicQrExportCsv(rows: DynamicQrRow[], domain: string): s
   ].join("\n")}\n`;
 }
 
-async function buildXlsx(rows: Array<{ tableNumber: number; url: string }>): Promise<Buffer> {
-  const writeXlsxFile = (await import("write-excel-file/node")).default;
-  const sheetData = [
-    [
-      { value: "Nomor Meja", type: String },
-      { value: "URL QR", type: String },
-    ],
-    ...rows.map((row) => [
-      { value: row.tableNumber, type: Number },
-      { value: row.url, type: String },
-    ]),
-  ];
-  return writeXlsxFile(sheetData).toBuffer();
-}
-
-export async function buildDynamicQrExportXlsxBuffer(
-  rows: DynamicQrRow[],
-  domain: string,
-): Promise<Buffer> {
-  const base = normalizedDomain(domain);
-  return buildXlsx(
-    rows.map((row) => ({ tableNumber: row.tableNumber, url: `${base}/q/${row.token}` })),
-  );
-}
-
 export function qrExportKey(restaurantId: string, batchId: string, format: QrExportFormat): string {
   return `qr-exports/${restaurantId}/${batchId}/qr-codes.${format}`;
 }
@@ -104,8 +68,9 @@ export type CommitQrBatchInput = {
   scope: QrGenerationScope;
   tableNumbers: number[];
   tokens: string[];
-  r2KeyXlsx: string;
-  r2KeyDocx: string;
+  r2KeyPdf: string;
+  r2KeyXlsx?: string;
+  r2KeyDocx?: string;
 };
 
 type GenerateQrBatchInput = {
@@ -135,8 +100,9 @@ async function defaultCommitQrBatch(input: CommitQrBatchInput): Promise<void> {
     p_scope: input.scope,
     p_table_numbers: input.tableNumbers,
     p_tokens: input.tokens,
-    p_r2_key_xlsx: input.r2KeyXlsx,
-    p_r2_key_docx: input.r2KeyDocx,
+    p_r2_key_pdf: input.r2KeyPdf,
+    p_r2_key_docx: input.r2KeyDocx ?? null,
+    p_r2_key_xlsx: input.r2KeyXlsx ?? null,
   });
   if (error) throw error;
 }
@@ -165,12 +131,8 @@ export async function generateQrBatchCore(
       tableNumber,
       token: tokens[index],
     }));
-    const r2KeyXlsx = qrExportKey(input.restaurantId, batchId, "xlsx");
-    const r2KeyDocx = qrExportKey(input.restaurantId, batchId, "docx");
-    const [xlsx, docx] = await Promise.all([
-      buildDynamicQrExportXlsxBuffer(rows, domain),
-      buildDynamicQrExportDocxBuffer(rows, domain),
-    ]);
+    const r2KeyPdf = qrExportKey(input.restaurantId, batchId, "pdf");
+    const pdfBuffer = await generateA2QrPdfBuffer(rows, domain);
 
     const attemptedKeys: string[] = [];
     const commitInput: CommitQrBatchInput = {
@@ -181,29 +143,14 @@ export async function generateQrBatchCore(
       scope: input.scope,
       tableNumbers,
       tokens,
-      r2KeyXlsx,
-      r2KeyDocx,
+      r2KeyPdf,
     };
     try {
-      // Deliberately sequential: a database commit is impossible until both
-      // encrypted objects have completed successfully.
-      attemptedKeys.push(r2KeyXlsx);
-      await upload(
-        r2KeyXlsx,
-        new Uint8Array(xlsx),
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      );
-      attemptedKeys.push(r2KeyDocx);
-      await upload(
-        r2KeyDocx,
-        new Uint8Array(docx),
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      );
+      attemptedKeys.push(r2KeyPdf);
+      await upload(r2KeyPdf, new Uint8Array(pdfBuffer), "application/pdf");
       await commit(commitInput);
       return commitInput;
     } catch (error) {
-      // Delete every attempted key: an upload can reach R2 even if its response
-      // is interrupted. Do not retry until cleanup succeeds.
       for (const key of attemptedKeys) await remove(key);
       if (!isUniqueViolation(error) || attempt === 2) throw error;
     }
@@ -312,7 +259,7 @@ export async function serveQrExport(
   } catch {
     return response("Tidak diizinkan.", 401);
   }
-  if (format !== "xlsx" && format !== "csv") return response("Format export tidak dikenal.", 400);
+  if (format !== "csv") return response("Format export tidak dikenal.", 400);
   let restaurant: RestaurantExportLookupResult;
   try {
     restaurant = await lookup(restaurantId);
@@ -322,36 +269,25 @@ export async function serveQrExport(
   if (!restaurant) return response("Resto tidak ditemukan.", 404);
   const resolvedDomain = domain?.trim() || DEFAULT_QR_EXPORT_DOMAIN;
   const fileNameBase = `qr-export-${slugifyFileNamePart(restaurant.displayName)}`;
-  if (format === "csv") {
-    return new Response(buildQrExportCsv(restaurantId, resolvedDomain), {
-      headers: {
-        "Cache-Control": "no-store",
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${fileNameBase}.csv"`,
-      },
-    });
-  }
-  const buffer = await buildQrExportXlsxBuffer(restaurantId, resolvedDomain);
-  return new Response(new Uint8Array(buffer), {
+  return new Response(buildQrExportCsv(restaurantId, resolvedDomain), {
     headers: {
       "Cache-Control": "no-store",
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="${fileNameBase}.xlsx"`,
-      "Content-Length": String(buffer.byteLength),
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${fileNameBase}.csv"`,
     },
   });
 }
 
 export async function serveQrBatchDownload(
   batchId: string,
-  format: "xlsx" | "docx" | "csv",
+  format: "pdf" | "xlsx" | "docx" | "csv",
 ): Promise<Response> {
   try {
     await requireSuperAdmin();
   } catch {
     return response("Tidak diizinkan.", 401);
   }
-  if (format !== "xlsx" && format !== "docx" && format !== "csv")
+  if (format !== "pdf" && format !== "xlsx" && format !== "docx" && format !== "csv")
     return response("Format export tidak dikenal.", 400);
   const client = getServiceClient();
   if (!client) return response("File tidak tersedia.", 503);
@@ -364,11 +300,13 @@ export async function serveQrBatchDownload(
   try {
     const bytes = await readPrivateQrExportObject(key);
     const contentType =
-      format === "xlsx"
-        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        : format === "docx"
-          ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          : "text/csv; charset=utf-8";
+      format === "pdf"
+        ? "application/pdf"
+        : format === "xlsx"
+          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          : format === "docx"
+            ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            : "text/csv; charset=utf-8";
     const body = new Uint8Array(bytes.byteLength);
     body.set(bytes);
     return new Response(body.buffer, {

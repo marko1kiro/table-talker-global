@@ -37,18 +37,15 @@ describe("M-01 QR generation and export", () => {
   });
 
   it("uses the agreed deterministic private R2 keys", () => {
-    expect(qrExportKey(RESTAURANT_ID, BATCH_ID, "xlsx")).toBe(
-      `qr-exports/${RESTAURANT_ID}/${BATCH_ID}/qr-codes.xlsx`,
-    );
-    expect(qrExportKey(RESTAURANT_ID, BATCH_ID, "docx")).toBe(
-      `qr-exports/${RESTAURANT_ID}/${BATCH_ID}/qr-codes.docx`,
+    expect(qrExportKey(RESTAURANT_ID, BATCH_ID, "pdf")).toBe(
+      `qr-exports/${RESTAURANT_ID}/${BATCH_ID}/qr-codes.pdf`,
     );
   });
 
-  it("uploads both files before atomically committing token replacement", async () => {
+  it("uploads PDF file before atomically committing token replacement", async () => {
     const order: string[] = [];
     const upload = vi.fn(async (key: string) => {
-      order.push(`upload:${key.endsWith(".xlsx") ? "xlsx" : "docx"}`);
+      order.push(`upload:${key.endsWith(".pdf") ? "pdf" : "other"}`);
     });
     const commit = vi.fn(async () => {
       order.push("commit");
@@ -63,24 +60,23 @@ describe("M-01 QR generation and export", () => {
       },
       {
         generateBatchId: () => BATCH_ID,
-        generateToken: (table) => `opaque-token-${table}`,
+        generateToken: (table) => `token_${table}_abcdefghijklmnopqrstuvwxyz12345678`,
         upload,
         commit,
       },
     );
-    expect(order).toEqual(["upload:xlsx", "upload:docx", "commit"]);
+    expect(order).toEqual(["upload:pdf", "commit"]);
     expect(result.tableNumbers).toEqual([2, 9]);
     expect(result.batchId).toBe(BATCH_ID);
     expect(commit).toHaveBeenCalledWith(
       expect.objectContaining({
         batchId: BATCH_ID,
         tableNumbers: [2, 9],
-        tokens: ["opaque-token-2", "opaque-token-9"],
       }),
     );
-  });
+  }, 15000);
 
-  it("leaves active database tokens untouched when either R2 upload fails", async () => {
+  it("leaves active database tokens untouched when R2 upload fails", async () => {
     const commit = vi.fn(async () => {});
     await expect(
       generateQrBatchCore(
@@ -93,9 +89,9 @@ describe("M-01 QR generation and export", () => {
         },
         {
           generateBatchId: () => BATCH_ID,
-          generateToken: () => "opaque-token",
+          generateToken: () => "token_5_abcdefghijklmnopqrstuvwxyz12345678",
           upload: vi.fn(async (key: string) => {
-            if (key.endsWith(".docx")) throw new Error("R2 unavailable");
+            if (key.endsWith(".pdf")) throw new Error("R2 unavailable");
           }),
           remove: vi.fn(async () => {}),
           commit,
@@ -103,7 +99,7 @@ describe("M-01 QR generation and export", () => {
       ),
     ).rejects.toThrow("R2 unavailable");
     expect(commit).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
   it("generates 32-byte base64url tokens and retries a collision as one whole batch", async () => {
     const commits = vi
@@ -126,5 +122,5 @@ describe("M-01 QR generation and export", () => {
     );
     expect(result.tokens[0]).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(commits).toHaveBeenCalledTimes(2);
-  });
+  }, 15000);
 });

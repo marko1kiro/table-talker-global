@@ -39,15 +39,13 @@ import {
 export const Route = createFileRoute("/super-admin/esb-export")({ component: EsbExport });
 
 type RestaurantRow = { id: string; display_name: string; esb_app_id: string | null };
-const TABLES = Array.from({ length: 100 }, (_, index) => index + 1);
 
 function EsbExport() {
   const queryClient = useQueryClient();
   const [restaurantId, setRestaurantId] = useState("");
   const [esbAppIdInput, setEsbAppIdInput] = useState("");
   const [domain, setDomain] = useState(DEFAULT_QR_EXPORT_DOMAIN);
-  const [scope, setScope] = useState<"all" | "selected">("all");
-  const [selectedTables, setSelectedTables] = useState<number[]>([]);
+  const [realTableCount, setRealTableCount] = useState(100);
   const [superAdminPassword, setSuperAdminPassword] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -92,16 +90,19 @@ function EsbExport() {
   });
 
   const generate = useMutation({
-    mutationFn: () =>
-      generateQrExport({
+    mutationFn: () => {
+      const count = Math.max(1, Math.min(100, Math.floor(realTableCount) || 100));
+      const tableNumbers = Array.from({ length: count }, (_, i) => i + 1);
+      return generateQrExport({
         data: {
           restaurantId,
           domain: domain.trim() || DEFAULT_QR_EXPORT_DOMAIN,
-          scope,
-          tableNumbers: scope === "all" ? [] : selectedTables,
+          scope: count === 100 ? "all" : "selected",
+          tableNumbers: count === 100 ? [] : tableNumbers,
           superAdminPassword,
         },
-      }),
+      });
+    },
     onSuccess: async () => {
       setGenerateError("");
       setGenerateSuccess(true);
@@ -123,19 +124,11 @@ function EsbExport() {
     setSaveSuccess(false);
     setGenerateError("");
     setGenerateSuccess(false);
-    setSelectedTables([]);
+    setRealTableCount(100);
     setEsbAppIdInput(rows.find((row) => row.id === id)?.esb_app_id ?? "");
   }
 
-  function toggleTable(tableNumber: number) {
-    setSelectedTables((current) =>
-      current.includes(tableNumber)
-        ? current.filter((value) => value !== tableNumber)
-        : [...current, tableNumber].sort((a, b) => a - b),
-    );
-  }
-
-  function downloadBatch(batchId: string, format: "xlsx" | "docx") {
+  function downloadBatch(batchId: string, format: "pdf" | "xlsx" | "docx" = "pdf") {
     window.location.assign(`/api/super-admin/qr-export/${batchId}/${format}`);
   }
 
@@ -225,51 +218,58 @@ function EsbExport() {
           )}
 
           <div className="mt-6 border-t border-slate-100 pt-6">
-            <h3 className="text-base font-extrabold text-slate-950">Generate QR</h3>
+            <h3 className="text-base font-extrabold text-slate-950">
+              Generate QR (Kertas A2 Siap Cetak)
+            </h3>
             <p className="mt-1 text-sm text-slate-500">
-              QR lama baru dinonaktifkan setelah file XLSX dan DOCX baru berhasil disimpan.
+              Format lembar A2 (10×15 = 150 slot stiker 35×35mm dengan gap potong 3mm & badge nomor
+              meja di tengah).
             </p>
-            <TaField label="Domain untuk link QR">
-              <input
-                className={taControlClass}
-                value={domain}
-                placeholder={DEFAULT_QR_EXPORT_DOMAIN}
-                onChange={(event) => setDomain(event.target.value)}
-              />
-            </TaField>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <TaField label="Domain untuk link QR">
+                <input
+                  className={taControlClass}
+                  value={domain}
+                  placeholder={DEFAULT_QR_EXPORT_DOMAIN}
+                  onChange={(event) => setDomain(event.target.value)}
+                />
+              </TaField>
+              <TaField
+                label="Jumlah Meja Real di Resto"
+                hint="Misal isi 68 untuk cetak meja 1..68 (akan diulang round-robin sampai 150 slot A2 penuh)."
+              >
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  className={taControlClass}
+                  value={realTableCount}
+                  onChange={(event) => {
+                    const val = parseInt(event.target.value, 10);
+                    setRealTableCount(Number.isNaN(val) ? 1 : Math.max(1, Math.min(100, val)));
+                  }}
+                />
+              </TaField>
+            </div>
 
-            <fieldset className="mt-5">
-              <legend className="text-sm font-bold text-slate-900">Cakupan meja</legend>
-              <div className="mt-2 flex flex-wrap gap-4">
-                <label className="flex items-center gap-2 text-sm font-semibold">
-                  <input type="radio" checked={scope === "all"} onChange={() => setScope("all")} />
-                  Semua meja
-                </label>
-                <label className="flex items-center gap-2 text-sm font-semibold">
-                  <input
-                    type="radio"
-                    checked={scope === "selected"}
-                    onChange={() => setScope("selected")}
-                  />
-                  Meja tertentu
-                </label>
-              </div>
-            </fieldset>
-
-            {scope === "selected" && (
-              <div className="mt-4 grid max-h-64 grid-cols-4 gap-2 overflow-y-auto rounded-xl border p-3 sm:grid-cols-10">
-                {TABLES.map((tableNumber) => (
-                  <label key={tableNumber} className="flex items-center gap-1.5 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selectedTables.includes(tableNumber)}
-                      onChange={() => toggleTable(tableNumber)}
-                    />
-                    {tableNumber}
-                  </label>
-                ))}
-              </div>
-            )}
+            <div className="mt-3 rounded-lg border border-brand-100 bg-brand-50/50 p-3 text-xs leading-relaxed text-slate-700 dark:border-brand-900/50 dark:bg-brand-950/20 dark:text-slate-300">
+              <p className="font-bold text-brand-700 dark:text-brand-400">
+                Simulasi Lembar A2 (Total 150 Stiker):
+              </p>
+              <p className="mt-0.5">
+                Meja 1 sampai {realTableCount} akan dicetak{" "}
+                <strong>{Math.floor(150 / realTableCount)} lembar penuh</strong>
+                {150 % realTableCount > 0 ? (
+                  <>
+                    {" "}
+                    + sisa <strong>{150 % realTableCount} slot</strong> untuk Meja 1 sampai{" "}
+                    {150 % realTableCount}.
+                  </>
+                ) : (
+                  <> (pas 150 slot tanpa sisa).</>
+                )}
+              </p>
+            </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
               <TaField label="Konfirmasi password Super Admin">
@@ -284,15 +284,15 @@ function EsbExport() {
               <button
                 type="button"
                 className={taPrimaryButtonClass}
-                disabled={
-                  generate.isPending ||
-                  !superAdminPassword ||
-                  (scope === "selected" && selectedTables.length === 0)
-                }
+                disabled={generate.isPending || !superAdminPassword}
                 onClick={() => generate.mutate()}
               >
                 <QrCode className="size-4" />
-                {generate.isPending ? "Membuat..." : generateError ? "COBA LAGI" : "Generate QR"}
+                {generate.isPending
+                  ? "Membuat PDF A2..."
+                  : generateError
+                    ? "COBA LAGI"
+                    : "Generate PDF A2"}
               </button>
             </div>
             {generateError && (
@@ -302,7 +302,8 @@ function EsbExport() {
             )}
             {generateSuccess && (
               <TaNotice role="status" tone="success">
-                QR dan kedua file berhasil dibuat. Silakan ganti stiker meja yang dipilih.
+                File PDF A2 siap cetak berhasil dibuat dan tersimpan. Silakan unduh file PDF di
+                tabel riwayat di bawah.
               </TaNotice>
             )}
           </div>
@@ -340,7 +341,7 @@ function EsbExport() {
                     </TableCell>
                     <TableCell className="text-slate-600">{batch.created_by}</TableCell>
                     <TableCell className="text-slate-600">
-                      {batch.scope === "all" ? "Semua meja" : `${batch.table_numbers.length} meja`}
+                      {batch.scope === "all" ? "100 meja" : `${batch.table_numbers.length} meja`}
                     </TableCell>
                     <TableCell>
                       <TaBadge tone={batch.status === "ACTIVE" ? "success" : "neutral"}>
@@ -355,17 +356,10 @@ function EsbExport() {
                       <div className="inline-flex gap-2">
                         <button
                           type="button"
-                          className={taSecondaryButtonClass}
-                          onClick={() => downloadBatch(batch.id, "xlsx")}
+                          className={taPrimaryButtonClass}
+                          onClick={() => downloadBatch(batch.id, "pdf")}
                         >
-                          <Download className="size-4" /> XLSX
-                        </button>
-                        <button
-                          type="button"
-                          className={taSecondaryButtonClass}
-                          onClick={() => downloadBatch(batch.id, "docx")}
-                        >
-                          <Download className="size-4" /> DOCX
+                          <Download className="size-4" /> Download PDF (A2)
                         </button>
                       </div>
                     </TableCell>
