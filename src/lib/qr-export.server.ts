@@ -174,14 +174,19 @@ export const generateQrExport = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { requireRecentSuperAdmin } = await import("./auth.server");
     await requireRecentSuperAdmin(data.superAdminPassword);
-    const result = await generateQrBatchCore({
-      restaurantId: data.restaurantId,
-      domain: data.domain,
-      scope: data.scope,
-      tableNumbers: data.tableNumbers,
-      createdBy: "super-admin",
-    });
-    return { ok: true as const, batchId: result.batchId };
+    try {
+      const result = await generateQrBatchCore({
+        restaurantId: data.restaurantId,
+        domain: data.domain,
+        scope: data.scope,
+        tableNumbers: data.tableNumbers,
+        createdBy: "super-admin",
+      });
+      return { ok: true as const, batchId: result.batchId };
+    } catch (err) {
+      console.error("[generateQrExport] FAILED:", err);
+      throw err;
+    }
   });
 
 export type QrBatchHistoryRow = {
