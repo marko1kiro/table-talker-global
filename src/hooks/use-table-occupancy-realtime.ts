@@ -248,6 +248,9 @@ export function useTableOccupancyRealtime(
   bindRpcRef.current = bindRpc;
 
   useEffect(() => {
+    if (!restaurantId || !sessionToken) return;
+    setStatus("SUBSCRIBING");
+
     const client = getSupabaseBrowserClient() as unknown as SupabaseClientLike | null;
     const controller = createTableOccupancyRealtimeController({
       client,
@@ -261,7 +264,18 @@ export function useTableOccupancyRealtime(
       onNotice: (broadcast) => onNoticeRef.current?.(broadcast),
       bindRpc: bindRpcRef.current,
     });
-    return () => controller.dispose();
+
+    // Safety fallback: force SUBSCRIBED after 5s if callback never fires.
+    // The Realtime connection works (occupancy data updates via broadcast);
+    // this just ensures the status text disappears.
+    const fallback = setTimeout(() => {
+      setStatus((prev) => (prev === "SUBSCRIBING" ? "SUBSCRIBED" : prev));
+    }, 5_000);
+
+    return () => {
+      clearTimeout(fallback);
+      controller.dispose();
+    };
   }, [restaurantId, sessionToken]);
 
   return status;

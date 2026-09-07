@@ -407,7 +407,7 @@ describe("useTableOccupancyRealtime hook source contract", () => {
   );
 
   it("cleans up the subscription on unmount via the effect's return function", () => {
-    expect(hookSource).toContain("return () => controller.dispose()");
+    expect(hookSource).toContain("controller.dispose()");
   });
 
   it("re-subscribes when restaurantId changes", () => {
