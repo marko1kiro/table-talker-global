@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CalendarDays, Download } from "lucide-react";
+import { CalendarDays, Download, Loader2, Send, Check, X } from "lucide-react";
 import { parseISO } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { ManagerLayout, type ManagerMenu } from "@/components/ManagerLayout";
@@ -32,6 +32,13 @@ import {
   type CrewScope,
 } from "@/lib/crew-history-scope";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import {
+  sendManagerInstruction,
+  getInstructionThread,
+  getActiveCrewForMessaging,
+} from "@/lib/manager-instructions.server";
+import { INSTRUCTION_MAX_LENGTH } from "@/lib/instruction-domain";
+import type { InstructionThread } from "@/lib/instruction-domain";
 import { TABLE_COUNT } from "@/lib/audio";
 
 export const Route = createFileRoute("/manager/")({
@@ -77,6 +84,9 @@ function ManagerDashboard() {
   const { items, unread, push, markRead } = useNotificationCenter();
   const [stuck, setStuck] = useState(false);
   const cardsRef = useRef<HTMLDivElement>(null);
+  const [msgTarget, setMsgTarget] = useState<"all" | string>("all");
+  const [msgText, setMsgText] = useState("");
+  const [msgError, setMsgError] = useState("");
 
   useEffect(() => {
     const stored = readManagerIdentity(browserManagerStorage());
@@ -149,6 +159,56 @@ function ManagerDashboard() {
     placeholderData: keepPreviousData,
   });
 
+  const threads = useQuery({
+    queryKey: ["instruction-thread", restaurantId],
+    queryFn: async () =>
+      getInstructionThread({
+        data: {
+          managerToken: identity!.managerToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+        },
+      }),
+    enabled: Boolean(identity) && menu === "messages",
+    refetchInterval: 30_000,
+  });
+
+  const activeCrewForMsg = useQuery({
+    queryKey: ["manager-active-crew-msg", restaurantId],
+    queryFn: async () =>
+      getActiveCrewForMessaging({
+        data: {
+          managerToken: identity!.managerToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+        },
+      }),
+    enabled: Boolean(identity) && menu === "messages",
+  });
+
+  const sendInstruction = useMutation({
+    mutationFn: async () =>
+      sendManagerInstruction({
+        data: {
+          managerToken: identity!.managerToken,
+          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          targetType: msgTarget === "all" ? "all" : "individual",
+          targetRoleSessionId: msgTarget === "all" ? null : msgTarget,
+          message: msgText,
+        },
+      }),
+    onSuccess: (result) => {
+      if (result.ok) {
+        setMsgText("");
+        setMsgError("");
+        void queryClient.invalidateQueries({ queryKey: ["instruction-thread", restaurantId] });
+      } else {
+        setMsgError(
+          result.code === "NO_ACTIVE_CREW" ? "Tidak ada crew aktif saat ini." : result.message,
+        );
+      }
+    },
+    onError: () => setMsgError("Gagal mengirim instruksi."),
+  });
+
   const realtimeStatus = useTableOccupancyRealtime(
     restaurantId,
     identity?.managerToken ?? "",
@@ -163,6 +223,28 @@ function ManagerDashboard() {
     },
     "bind_manager_session_realtime",
   );
+
+  useEffect(() => {
+    const client = getSupabaseBrowserClient();
+    if (!client || !restaurantId || menu !== "messages") return;
+    const ch = (
+      client as unknown as {
+        channel: (
+          n: string,
+          o: { config: { private: true } },
+        ) => {
+          on: (t: string, f: { event: string }, cb: () => void) => unknown;
+          subscribe: (cb: (s: string) => void) => unknown;
+        };
+      }
+    ).channel(`mgr-instr:${restaurantId}`, { config: { private: true } });
+    ch.on("broadcast", { event: "instruction_ack" }, () => {
+      void queryClient.invalidateQueries({ queryKey: ["instruction-thread", restaurantId] });
+    }).subscribe(() => {});
+    return () => {
+      (client as unknown as { removeChannel: (c: unknown) => void }).removeChannel(ch);
+    };
+  }, [restaurantId, menu, queryClient]);
 
   const staleNotices = useMemo(() => {
     const tables = snapshot.data && snapshot.data.ok ? snapshot.data.tables : [];
@@ -667,6 +749,121 @@ function ManagerDashboard() {
                   </li>
                 ))}
               </ul>
+            )}
+          </TaCard>
+        </>
+      )}
+
+      {menu === "messages" && (
+        <>
+          <TaCard title="Kirim Instruksi">
+            <div className="mb-3">
+              <label className="mb-1 block text-xs font-bold uppercase text-ta-gray-500 dark:text-ta-gray-400">
+                Tujuan
+              </label>
+              <select
+                value={msgTarget}
+                onChange={(e) => setMsgTarget(e.target.value)}
+                className="w-full rounded-lg border border-ta-gray-300 px-3 py-2 text-sm dark:border-ta-gray-600 dark:bg-ta-gray-700 dark:text-white"
+              >
+                <option value="all">SEMUA CREW</option>
+                {activeCrewForMsg.data?.ok &&
+                  activeCrewForMsg.data.crew.map((c) => (
+                    <option key={c.roleSessionId} value={c.roleSessionId}>
+                      {c.displayName} ({c.role.toUpperCase()})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="mb-3">
+              <textarea
+                value={msgText}
+                onChange={(e) => setMsgText(e.target.value)}
+                maxLength={200}
+                rows={3}
+                placeholder="Tulis instruksi..."
+                className="w-full resize-none rounded-lg border border-ta-gray-300 px-3 py-2 text-sm dark:border-ta-gray-600 dark:bg-ta-gray-700 dark:text-white"
+              />
+              <p className="text-right text-[10px] text-ta-gray-400">
+                {msgText.length}/{INSTRUCTION_MAX_LENGTH}
+              </p>
+            </div>
+            {msgError && (
+              <TaNotice role="alert" tone="danger">
+                {msgError}
+              </TaNotice>
+            )}
+            <button
+              type="button"
+              disabled={sendInstruction.isPending || !msgText.trim()}
+              onClick={() => sendInstruction.mutate()}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {sendInstruction.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+              KIRIM INSTRUKSI
+            </button>
+          </TaCard>
+
+          <TaCard title="Riwayat Instruksi Hari Ini" className="mt-4">
+            {threads.isLoading ? (
+              <p className="text-sm text-ta-gray-500">Memuat...</p>
+            ) : !threads.data?.ok || threads.data.threads.length === 0 ? (
+              <TaEmpty
+                title="Belum ada instruksi"
+                description="Instruksi yang dikirim hari ini akan muncul di sini."
+              />
+            ) : (
+              <div className="space-y-4">
+                {threads.data.threads.map((thread: InstructionThread) => {
+                  const acked = thread.receipts.filter((r) => r.ackAt);
+                  return (
+                    <div
+                      key={thread.instructionId}
+                      className="rounded-lg border border-ta-gray-200 p-3 dark:border-ta-gray-700"
+                    >
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-ta-gray-900 dark:text-white">
+                          {thread.message}
+                        </p>
+                        <span className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-bold uppercase text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+                          {thread.targetType === "all"
+                            ? "SEMUA"
+                            : (thread.targetDisplayName ?? "—")}
+                        </span>
+                      </div>
+                      <p className="mb-2 text-[10px] text-ta-gray-400">
+                        {acked.length}/{thread.receipts.length} sudah terima
+                      </p>
+                      <ul className="space-y-1">
+                        {thread.receipts.map((r) => (
+                          <li key={r.roleSessionId} className="flex items-center gap-2 text-xs">
+                            {r.ackAt ? (
+                              <Check className="size-3.5 text-ta-success" />
+                            ) : (
+                              <X className="size-3.5 text-ta-error" />
+                            )}
+                            <span className="font-medium text-ta-gray-700 dark:text-ta-gray-300">
+                              {r.displayName}
+                            </span>
+                            {r.ackAt && (
+                              <span className="text-ta-gray-400">{formatWibClock(r.ackAt)}</span>
+                            )}
+                            {r.replyText && (
+                              <span className="italic text-ta-gray-500 dark:text-ta-gray-400">
+                                — &ldquo;{r.replyText}&rdquo;
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </TaCard>
         </>

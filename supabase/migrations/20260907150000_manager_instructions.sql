@@ -347,6 +347,38 @@ $$;
 revoke all on function public.cleanup_expired_instructions() from public, anon, authenticated;
 grant execute on function public.cleanup_expired_instructions() to service_role;
 
+-- 7b. Extend get_manager_active_crew to also return role_session_id
+create or replace function public.get_manager_active_crew(p_manager_token text)
+returns table (role text, display_name text, checked_in_at timestamptz, role_session_id uuid)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_restaurant uuid;
+begin
+  select ms.restaurant_id into v_restaurant
+  from public.manager_sessions ms
+  join public.manager_accounts ma on ma.id = ms.manager_id
+  join public.restaurants r on r.id = ms.restaurant_id
+  where ms.token_hash = encode(extensions.digest(p_manager_token, 'sha256'), 'hex')
+    and ma.status = 'aktif'
+    and ms.expires_at > now()
+    and r.is_active;
+  if v_restaurant is null then raise exception 'INVALID_SESSION'; end if;
+
+  return query
+  select rst.role, crs.display_name, crs.checked_in_at, crs.id as role_session_id
+  from public.role_session_tokens rst
+  join public.crew_role_sessions crs on crs.id = rst.role_session_id
+  where rst.restaurant_id = v_restaurant
+    and rst.expires_at > now()
+  order by rst.role, crs.checked_in_at;
+end;
+$$;
+revoke all on function public.get_manager_active_crew(text) from public, anon, service_role;
+grant execute on function public.get_manager_active_crew(text) to authenticated;
+
 do $$
 begin
   create extension if not exists pg_cron;

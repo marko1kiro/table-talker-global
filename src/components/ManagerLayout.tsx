@@ -1,14 +1,21 @@
 import type { ReactNode } from "react";
-import { Table2, Users, ScrollText, BarChart3 } from "lucide-react";
+import { Table2, Users, ScrollText, BarChart3, MessageSquare } from "lucide-react";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
 import { Footer } from "@/components/Footer";
 
-export type ManagerMenu = "tables" | "crew" | "log" | "stats";
+export type ManagerMenu = "tables" | "crew" | "log" | "stats" | "messages";
 
-const ICONS = { tables: Table2, crew: Users, log: ScrollText, stats: BarChart3 } as const;
+const ICONS = {
+  tables: Table2,
+  crew: Users,
+  log: ScrollText,
+  stats: BarChart3,
+  messages: MessageSquare,
+} as const;
 const LABELS: { id: ManagerMenu; label: string }[] = [
   { id: "tables", label: "LIHAT STATUS MEJA LIVE" },
   { id: "crew", label: "LIHAT CREW AKTIF" },
+  { id: "messages", label: "KIRIM INSTRUKSI" },
   { id: "stats", label: "STATISTIK" },
   { id: "log", label: "LOG AKTIVITAS CREW" },
 ];

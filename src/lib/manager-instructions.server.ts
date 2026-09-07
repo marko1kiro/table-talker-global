@@ -137,3 +137,51 @@ export const getInstructionThread = createServerFn({ method: "GET" })
       async (fn, params) => client.rpc(fn, params),
     );
   });
+
+export type ActiveCrewMember = {
+  role: string;
+  displayName: string;
+  roleSessionId: string;
+};
+
+export type ActiveCrewResult =
+  | { ok: true; crew: ActiveCrewMember[] }
+  | { ok: false; code: string; message: string };
+
+export async function getActiveCrewForMessagingCore(
+  data: { managerToken: string },
+  rpc: RpcCaller,
+): Promise<ActiveCrewResult> {
+  try {
+    const { data: rows, error } = await rpc("get_manager_active_crew", {
+      p_manager_token: data.managerToken,
+    });
+    if (error) {
+      const code = error.message === "INVALID_SESSION" ? "INVALID_SESSION" : "UNAVAILABLE";
+      return { ok: false, code, message: "Gagal memuat crew." };
+    }
+    if (!Array.isArray(rows))
+      return { ok: false, code: "UNAVAILABLE", message: "Gagal memuat crew." };
+    const crew = rows.map((row) => {
+      const r = row as Record<string, unknown>;
+      return {
+        role: String(r.role),
+        displayName: String(r.display_name),
+        roleSessionId: String(r.role_session_id),
+      };
+    });
+    return { ok: true, crew };
+  } catch {
+    return { ok: false, code: "UNAVAILABLE", message: "Gagal memuat crew." };
+  }
+}
+
+export const getActiveCrewForMessaging = createServerFn({ method: "GET" })
+  .validator(z.object({ managerToken: z.string().min(1), accessToken: z.string().min(1) }))
+  .handler(async ({ data }): Promise<ActiveCrewResult> => {
+    const client = getAnonAuthedSupabaseClient(data.accessToken);
+    if (!client) return { ok: false, code: "UNAVAILABLE", message: "Gagal memuat crew." };
+    return getActiveCrewForMessagingCore({ managerToken: data.managerToken }, async (fn, params) =>
+      client.rpc(fn, params),
+    );
+  });
