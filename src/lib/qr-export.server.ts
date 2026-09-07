@@ -170,7 +170,7 @@ const generateSchema = z.object({
 });
 
 export const generateQrExport = createServerFn({ method: "POST" })
-  .inputValidator(generateSchema)
+  .validator(generateSchema)
   .handler(async ({ data }) => {
     const { requireRecentSuperAdmin } = await import("./auth.server");
     await requireRecentSuperAdmin(data.superAdminPassword);
@@ -195,7 +195,7 @@ export type QrBatchHistoryRow = {
 };
 
 export const listQrExportHistory = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ restaurantId: z.string().uuid() }))
+  .validator(z.object({ restaurantId: z.string().uuid() }))
   .handler(async ({ data }) => {
     await requireSuperAdmin();
     const client = getServiceClient();
