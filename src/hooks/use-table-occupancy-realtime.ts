@@ -179,7 +179,9 @@ export function createTableOccupancyRealtimeController({
           }
           subscribePrivate();
         },
-        () => handleStatus("CHANNEL_ERROR"),
+        () => {
+          if (!disposed) handleStatus("CHANNEL_ERROR");
+        },
       );
   } else {
     handleStatus("CHANNEL_ERROR");
