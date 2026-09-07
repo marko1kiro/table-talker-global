@@ -227,22 +227,21 @@ function ManagerDashboard() {
   useEffect(() => {
     const client = getSupabaseBrowserClient();
     if (!client || !restaurantId || menu !== "messages") return;
-    const ch = (
-      client as unknown as {
-        channel: (
-          n: string,
-          o: { config: { private: true } },
-        ) => {
-          on: (t: string, f: { event: string }, cb: () => void) => unknown;
-          subscribe: (cb: (s: string) => void) => unknown;
-        };
-      }
-    ).channel(`mgr-instr:${restaurantId}`, { config: { private: true } });
+    type MgrCh = {
+      on: (t: string, f: { event: string }, cb: () => void) => MgrCh;
+      subscribe: (cb: (s: string) => void) => MgrCh;
+    };
+    type MgrClient = {
+      channel: (n: string, o: { config: { private: true } }) => MgrCh;
+      removeChannel: (c: MgrCh) => void;
+    };
+    const typed = client as unknown as MgrClient;
+    const ch = typed.channel(`mgr-instr:${restaurantId}`, { config: { private: true } });
     ch.on("broadcast", { event: "instruction_ack" }, () => {
       void queryClient.invalidateQueries({ queryKey: ["instruction-thread", restaurantId] });
     }).subscribe(() => {});
     return () => {
-      (client as unknown as { removeChannel: (c: unknown) => void }).removeChannel(ch);
+      typed.removeChannel(ch);
     };
   }, [restaurantId, menu, queryClient]);
 

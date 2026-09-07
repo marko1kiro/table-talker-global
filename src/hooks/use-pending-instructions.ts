@@ -3,6 +3,16 @@ import { getPendingInstructions } from "@/lib/crew-instructions.server";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import type { PendingInstruction } from "@/lib/instruction-domain";
 
+type BroadcastCh = {
+  on: (type: string, filter: { event: string }, cb: (msg: unknown) => void) => BroadcastCh;
+  subscribe: (cb: (status: string) => void) => BroadcastCh;
+};
+
+type ClientWithChannel = {
+  channel: (name: string, opts: { config: { private: true } }) => BroadcastCh;
+  removeChannel: (ch: BroadcastCh) => void;
+};
+
 export function usePendingInstructions(
   roleSessionToken: string,
   accessToken: string,
@@ -31,18 +41,10 @@ export function usePendingInstructions(
   useEffect(() => {
     const client = getSupabaseBrowserClient();
     if (!client || !restaurantId) return;
-    const channelName = `instruction-listen:${restaurantId}`;
-    const channel = (
-      client as unknown as {
-        channel: (
-          name: string,
-          opts: { config: { private: true } },
-        ) => {
-          on: (type: string, filter: { event: string }, cb: (msg: unknown) => void) => unknown;
-          subscribe: (cb: (status: string) => void) => unknown;
-        };
-      }
-    ).channel(channelName, { config: { private: true } });
+    const typed = client as unknown as ClientWithChannel;
+    const channel = typed.channel(`instruction-listen:${restaurantId}`, {
+      config: { private: true },
+    });
 
     channel
       .on("broadcast", { event: "instruction" }, (msg: unknown) => {
@@ -55,7 +57,7 @@ export function usePendingInstructions(
       .subscribe(() => {});
 
     return () => {
-      (client as unknown as { removeChannel: (ch: unknown) => void }).removeChannel(channel);
+      typed.removeChannel(channel);
     };
   }, [restaurantId, roleSessionId, fetchPending]);
 
