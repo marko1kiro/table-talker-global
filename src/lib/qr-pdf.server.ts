@@ -87,30 +87,38 @@ export async function generateA2QrPdfBuffer(rows: DynamicQrRow[], domain: string
           doc.image(png, qrX, qrY, { width: qrSizePt, height: qrSizePt });
         }
 
-        // 3. Draw Table Number in center of QR (No box/border, blue-cyan fill with magenta stroke)
+        // 3. Draw Table Number in center of QR (White halo/stroke outline + solid Magenta fill)
         // Center of sticker
         const centerX = stickerX + STICKER_SIZE_PT / 2;
         const centerY = stickerY + STICKER_SIZE_PT / 2;
 
-        // Larger font size for prominence
-        const fontSize = item.tableNumber >= 100 ? 11.5 : 13.5;
-        doc
-          .save()
-          .font("Roboto-Bold")
-          .fontSize(fontSize)
-          .fillColor("#00b4d8") // Blue-cyan fill
-          .strokeColor("#d946ef") // Magenta stroke outline
-          .lineWidth(0.6);
-
+        // Extra large font size for strong visibility over QR patterns
+        const fontSize = item.tableNumber >= 100 ? 14.5 : 17;
         const text = String(item.tableNumber);
+
+        doc.save().font("Roboto-Bold").fontSize(fontSize);
+
         const textWidth = doc.widthOfString(text);
         const textHeight = doc.currentLineHeight();
+        const textX = centerX - textWidth / 2;
+        const textY = centerY - textHeight / 2 + 0.5;
 
-        doc.text(text, centerX - textWidth / 2, centerY - textHeight / 2 + 0.5, {
+        // Pass 1: Thick white outline/halo to clearly separate from black QR modules
+        doc.fillColor("#ffffff").strokeColor("#ffffff").lineWidth(2.2).text(text, textX, textY, {
           lineBreak: false,
           stroke: true,
           fill: true,
         });
+
+        // Pass 2: Crisp solid Magenta fill on top
+        doc
+          .fillColor("#d946ef") // Bright Magenta fill
+          .text(text, textX, textY, {
+            lineBreak: false,
+            stroke: false,
+            fill: true,
+          });
+
         doc.restore();
       }
 
