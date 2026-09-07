@@ -182,32 +182,33 @@ export function createTableOccupancyRealtimeController({
       typeof (client as unknown as { auth?: { getSession?: () => Promise<unknown> } }).auth
         ?.getSession === "function";
 
-    if (hasAuth) {
-      void (client as unknown as { auth: { getSession: () => Promise<unknown> } }).auth
-        .getSession()
-        .then(
-          () =>
-            client
-              .rpc(bindRpc, {
-                p_restaurant_id: restaurantId,
-                p_session_token: sessionToken,
-              })
-              .then(onRpcResult, onRpcReject),
-          () =>
-            client
-              .rpc(bindRpc, {
-                p_restaurant_id: restaurantId,
-                p_session_token: sessionToken,
-              })
-              .then(onRpcResult, onRpcReject),
-        );
-    } else {
-      void client
+    const bindAfterAuth = () =>
+      client
         .rpc(bindRpc, {
           p_restaurant_id: restaurantId,
           p_session_token: sessionToken,
         })
         .then(onRpcResult, onRpcReject);
+
+    if (hasAuth) {
+      void (client as unknown as { auth: { getSession: () => Promise<unknown> } }).auth
+        .getSession()
+        .then(
+          () => {
+            // Force-supply the JWT to the Realtime client so the channel join
+            // payload carries the access_token. Without this, the async
+            // setAuth inside connect() races against the join message.
+            const rt = (client as unknown as { realtime?: { setAuth?: () => Promise<void> } })
+              .realtime;
+            if (rt?.setAuth) {
+              return rt.setAuth().then(bindAfterAuth, bindAfterAuth);
+            }
+            return bindAfterAuth();
+          },
+          () => bindAfterAuth(),
+        );
+    } else {
+      void bindAfterAuth();
     }
   } else {
     handleStatus("CHANNEL_ERROR");
