@@ -1,3 +1,6 @@
+-- Fix commit_qr_export_batch: make r2_key_xlsx nullable, r2_key_pdf required,
+-- and preserve token revocation + strict validation from 20260907140000.
+
 alter table public.qr_export_batches
   alter column r2_key_xlsx drop not null;
 
@@ -16,33 +19,59 @@ create or replace function public.commit_qr_export_batch(
   p_r2_key_pdf text,
   p_r2_key_docx text default null,
   p_r2_key_xlsx text default null
-) returns void
-language plpgsql security definer
+)
+returns void
+language plpgsql
+security definer
 set search_path = public
 as $$
+declare
+  v_count integer;
 begin
-  if p_batch_id is null or p_restaurant_id is null
-     or p_created_by is null or p_domain_used is null
-     or p_scope is null or p_table_numbers is null
-     or p_tokens is null or p_r2_key_pdf is null then
-    raise exception 'All required parameters must be non-null';
+  if p_scope not in ('all', 'selected')
+     or p_created_by is null or char_length(p_created_by) not between 1 and 120
+     or p_domain_used !~ '^https?://'
+     or coalesce(cardinality(p_table_numbers), 0) not between 1 and 100
+     or coalesce(cardinality(p_tokens), 0) <> cardinality(p_table_numbers)
+     or p_r2_key_pdf is null then
+    raise exception 'INVALID_QR_BATCH';
   end if;
-  if array_length(p_table_numbers, 1) is null
-     or array_length(p_tokens, 1) is null
-     or array_length(p_table_numbers, 1) <> array_length(p_tokens, 1) then
-    raise exception 'table_numbers and tokens must be equal-length non-empty arrays';
+
+  select count(*) into v_count
+  from (select distinct n from unnest(p_table_numbers) n where n between 1 and 100) valid;
+  if v_count <> cardinality(p_table_numbers)
+     or exists (select 1 from unnest(p_tokens) t where t !~ '^[A-Za-z0-9_-]{43}$') then
+    raise exception 'INVALID_QR_BATCH';
+  end if;
+
+  if not exists (
+    select 1 from public.restaurants r
+    where r.id = p_restaurant_id and r.is_active
+  ) then
+    raise exception 'RESTAURANT_NOT_ACTIVE';
   end if;
 
   insert into public.qr_export_batches (
-    id, restaurant_id, created_by, domain_used, scope,
-    table_numbers, r2_key_pdf, r2_key_docx, r2_key_xlsx
+    id, restaurant_id, created_by, domain_used, scope, table_numbers,
+    r2_key_pdf, r2_key_docx, r2_key_xlsx
   ) values (
     p_batch_id, p_restaurant_id, p_created_by, p_domain_used, p_scope,
     p_table_numbers, p_r2_key_pdf, p_r2_key_docx, p_r2_key_xlsx
   );
 
-  insert into public.qr_table_tokens (batch_id, restaurant_id, table_number, token)
-  select p_batch_id, p_restaurant_id, p_table_numbers[i], p_tokens[i]
-  from generate_series(1, array_length(p_tokens, 1)) as i;
+  update public.qr_table_tokens
+  set revoked_at = now()
+  where restaurant_id = p_restaurant_id
+    and table_number = any(p_table_numbers)
+    and revoked_at is null;
+
+  insert into public.qr_table_tokens (
+    restaurant_id, table_number, token, batch_id
+  )
+  select p_restaurant_id, selected.table_number, selected.token, p_batch_id
+  from unnest(p_table_numbers, p_tokens) as selected(table_number, token);
 end;
 $$;
+
+revoke all on function public.commit_qr_export_batch(uuid, uuid, text, text, text, integer[], text[], text, text, text) from public, anon, authenticated;
+grant execute on function public.commit_qr_export_batch(uuid, uuid, text, text, text, integer[], text[], text, text, text) to service_role;
