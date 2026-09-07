@@ -47,10 +47,11 @@ export async function generateA2QrPdfBuffer(rows: DynamicQrRow[], domain: string
         size: [A2_WIDTH_PT, A2_HEIGHT_PT],
         margin: 0,
         autoFirstPage: true,
+        font: null as unknown as string,
       });
 
-      // Register embedded font to completely avoid filesystem AFM lookups
       doc.registerFont("Roboto-Bold", getRobotoBoldFontBuffer());
+      doc.font("Roboto-Bold");
 
       const chunks: Buffer[] = [];
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
