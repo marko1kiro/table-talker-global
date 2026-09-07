@@ -1,7 +1,7 @@
 -- Fix super_admin_purge_restaurant_test_data:
 -- 1. Fix role_session_pin_attempts: use bucket_hash (sha256) instead of non-existent restaurant_id
--- 2. Add missing tables: audio_manifests, qr_export_batches, qr_table_tokens,
---    manager_sessions, table_occupancy_revisions, restaurant_credential_audit
+-- 2. Add missing tables: manager_sessions, table_occupancy_revisions, restaurant_credential_audit
+-- 3. SKIP file/asset tables: audio_manifests, qr_table_tokens, qr_export_batches
 
 CREATE OR REPLACE FUNCTION public.super_admin_purge_restaurant_test_data(p_restaurant_id uuid)
 RETURNS jsonb
@@ -19,7 +19,6 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'RESTAURANT_NOT_FOUND');
   END IF;
 
-  -- Compute bucket hash for role_session_pin_attempts (no restaurant_id column)
   v_bucket := encode(extensions.digest('restaurant:' || p_restaurant_id::text, 'sha256'), 'hex');
 
   -- Occupancy
@@ -28,12 +27,11 @@ BEGIN
   DELETE FROM public.table_escort_intents WHERE restaurant_id = p_restaurant_id;
   DELETE FROM public.table_occupancy_revisions WHERE restaurant_id = p_restaurant_id;
 
-  -- QR
+  -- QR scan events (bukan file/asset)
   DELETE FROM public.qr_scan_events WHERE restaurant_id = p_restaurant_id;
   DELETE FROM public.pending_qr_scans WHERE restaurant_id = p_restaurant_id;
   DELETE FROM public.qr_scan_debounce WHERE restaurant_id = p_restaurant_id;
-  DELETE FROM public.qr_table_tokens WHERE restaurant_id = p_restaurant_id;
-  DELETE FROM public.qr_export_batches WHERE restaurant_id = p_restaurant_id;
+  -- DI-SKIP: qr_table_tokens, qr_export_batches (data file/asset)
 
   -- Role sessions
   DELETE FROM public.role_session_tokens
@@ -60,9 +58,9 @@ BEGIN
   -- Manager sessions
   DELETE FROM public.manager_sessions WHERE restaurant_id = p_restaurant_id;
 
-  -- Audio & events
+  -- Playback events (bukan file/asset)
   DELETE FROM public.playback_events WHERE restaurant_id = p_restaurant_id;
-  DELETE FROM public.audio_manifests WHERE restaurant_id = p_restaurant_id;
+  -- DI-SKIP: audio_manifests (data file/asset)
 
   -- Operational
   DELETE FROM public.operational_errors WHERE restaurant_id = p_restaurant_id;

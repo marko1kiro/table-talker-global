@@ -24,24 +24,6 @@ describe("super_admin_purge_restaurant_test_data fix", () => {
     );
   });
 
-  it("deletes audio_manifests", () => {
-    expect(sql).toContain(
-      "DELETE FROM public.audio_manifests WHERE restaurant_id = p_restaurant_id",
-    );
-  });
-
-  it("deletes qr_export_batches", () => {
-    expect(sql).toContain(
-      "DELETE FROM public.qr_export_batches WHERE restaurant_id = p_restaurant_id",
-    );
-  });
-
-  it("deletes qr_table_tokens", () => {
-    expect(sql).toContain(
-      "DELETE FROM public.qr_table_tokens WHERE restaurant_id = p_restaurant_id",
-    );
-  });
-
   it("deletes manager_sessions", () => {
     expect(sql).toContain(
       "DELETE FROM public.manager_sessions WHERE restaurant_id = p_restaurant_id",
@@ -60,13 +42,19 @@ describe("super_admin_purge_restaurant_test_data fix", () => {
     );
   });
 
-  it("deletes qr_table_tokens before qr_export_batches (FK order)", () => {
-    const tokensIdx = sql.indexOf("DELETE FROM public.qr_table_tokens");
-    const batchesIdx = sql.indexOf("DELETE FROM public.qr_export_batches");
-    expect(tokensIdx).toBeLessThan(batchesIdx);
+  it("does NOT delete audio_manifests (file/asset data)", () => {
+    expect(sql).not.toContain("DELETE FROM public.audio_manifests");
   });
 
-  it("still deletes all original tables", () => {
+  it("does NOT delete qr_table_tokens (file/asset data)", () => {
+    expect(sql).not.toContain("DELETE FROM public.qr_table_tokens");
+  });
+
+  it("does NOT delete qr_export_batches (file/asset data)", () => {
+    expect(sql).not.toContain("DELETE FROM public.qr_export_batches");
+  });
+
+  it("still deletes all session/event/occupancy tables", () => {
     const tables = [
       "table_occupancy_state",
       "occupancy_transitions",
