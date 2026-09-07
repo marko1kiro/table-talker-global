@@ -40,6 +40,7 @@ import {
 import { INSTRUCTION_MAX_LENGTH } from "@/lib/instruction-domain";
 import type { InstructionThread } from "@/lib/instruction-domain";
 import { TABLE_COUNT } from "@/lib/audio";
+import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 
 export const Route = createFileRoute("/manager/")({
   head: () => ({
@@ -340,6 +341,8 @@ function ManagerDashboard() {
               <p className="text-sm text-ta-gray-500 dark:text-ta-gray-400">
                 Memuat status meja...
               </p>
+            ) : snapshot.data && !snapshot.data.ok && snapshot.data.code === "INVALID_SESSION" ? (
+              <SessionExpiredNotice onLogout={logout} />
             ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
               <>
                 <TaNotice role="alert" tone="danger">

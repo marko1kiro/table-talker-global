@@ -45,6 +45,7 @@ import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime"
 import { useNotificationCenter } from "@/hooks/use-notification-center";
 import { usePendingInstructions } from "@/hooks/use-pending-instructions";
 import { InstructionBanner } from "@/components/InstructionBanner";
+import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
@@ -410,6 +411,8 @@ function SatgasRoute() {
 
             {snapshot.isLoading ? (
               <p className="text-sm text-slate-500 dark:text-ta-gray-400">Memuat status meja...</p>
+            ) : snapshot.data && !snapshot.data.ok && snapshot.data.code === "INVALID_SESSION" ? (
+              <SessionExpiredNotice onLogout={logout} />
             ) : snapshot.isError || !snapshot.data || !snapshot.data.ok ? (
               <>
                 <OwnerNotice role="alert" tone="danger">
