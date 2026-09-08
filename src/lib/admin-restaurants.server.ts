@@ -178,35 +178,3 @@ export const deactivateRestaurant = createServerFn({ method: "POST" })
       return { error: "Kode Resto tidak dapat disimpan." };
     }
   });
-
-export async function purgeRestaurantTestDataCore(
-  data: { restaurantId: string },
-  rpc: (
-    fn: string,
-    params: Record<string, unknown>,
-  ) => Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }>,
-) {
-  try {
-    const { data: result, error } = await rpc("super_admin_purge_restaurant_test_data", {
-      p_restaurant_id: data.restaurantId,
-    });
-    if (error || !result?.ok) {
-      return { error: "Gagal mereset data testing." };
-    }
-    return { ok: true as const, revision: result.revision as number };
-  } catch {
-    return { error: "Gagal mereset data testing." };
-  }
-}
-
-export const purgeRestaurantTestData = createServerFn({ method: "POST" })
-  .validator(z.object({ restaurantId: z.string().uuid() }))
-  .handler(async ({ data }) => {
-    await requireSuperAdmin();
-    noStore();
-    const client = getServiceClient();
-    if (!client) return { error: "Gagal mereset data testing." };
-    return purgeRestaurantTestDataCore({ restaurantId: data.restaurantId }, async (fn, params) =>
-      client.rpc(fn, params),
-    );
-  });

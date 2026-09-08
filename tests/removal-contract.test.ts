@@ -32,6 +32,9 @@ const removedTestFiles = [
   "tests/crew-messages-restaurant-id.test.ts",
   "tests/crew-message-domain.test.ts",
   "tests/restaurant-code-crew-flow.test.ts",
+  "tests/super-admin-purge-ui.test.ts",
+  "tests/super-admin-purge-server.test.ts",
+  "tests/purge-restaurant-test-data.test.ts",
 ];
 
 // These test files intentionally assert on the literal text content of
