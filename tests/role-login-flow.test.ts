@@ -55,9 +55,7 @@ describe("RoleLoginFlow: step 2 - ID Resto PIN (replaces the old YA/TIDAK confir
 describe("RoleLoginFlow: step 3 - role picker (exactly 4 roles)", () => {
   it("imports the canonical 4-role order and label map from role-session-domain", () => {
     const text = source();
-    expect(text).toMatch(
-      /CREW_ROLE_LABELS,?\s*\n?\s*CREW_ROLE_ORDER,?\s*\n?\s*jakartaCheckedInAtToIso/,
-    );
+    expect(text).toMatch(/CREW_ROLE_LABELS,?\s*\n?\s*CREW_ROLE_ORDER/);
     expect(text).toMatch(/}\s*from\s*"@\/lib\/role-session-domain"/);
     expect(text).toContain("CREW_ROLE_ORDER.map");
   });
@@ -68,7 +66,7 @@ describe("RoleLoginFlow: step 3 - role picker (exactly 4 roles)", () => {
   });
 });
 
-describe("RoleLoginFlow: step 4 - manual Nama + Tanggal & Jam Masuk (all 4 roles, never pre-filled)", () => {
+describe("RoleLoginFlow: step 4 - Nama + Jam Login otomatis (all 4 roles, never pre-filled)", () => {
   it("initializes the name field to an empty string, never auto-generated for any role", () => {
     const text = source();
     expect(text).not.toContain("autoCrewName");
@@ -77,17 +75,10 @@ describe("RoleLoginFlow: step 4 - manual Nama + Tanggal & Jam Masuk (all 4 roles
     );
   });
 
-  it("initializes checked-in date/time to an empty string, never pre-filled with the current time", () => {
+  it("auto-captures current timestamp via new Date().toISOString() on submit, no manual date picker", () => {
     const text = source();
-    expect(text).not.toContain("new Date().toISOString()");
-    expect(text).not.toMatch(/useState\(\s*new Date\(\)/);
-    expect(text).toContain('const [checkedInAt, setCheckedInAt] = useState("")');
-  });
-
-  it("uses a datetime-local input and converts it via jakartaCheckedInAtToIso before submitting", () => {
-    const text = source();
-    expect(text).toContain('type="datetime-local"');
-    expect(text).toContain("jakartaCheckedInAtToIso(effectiveCheckedInAt)");
+    expect(text).toContain("new Date().toISOString()");
+    expect(text).not.toContain('type="datetime-local"');
   });
 
   it("reuses normalizeCrewName for manual name validation, same as the SS-only flow used to", () => {

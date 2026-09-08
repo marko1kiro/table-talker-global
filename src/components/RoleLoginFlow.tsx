@@ -1,14 +1,12 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  Calendar,
   CheckCircle2,
   KeyRound,
   Loader2,
-  Lock,
   ShieldCheck,
   Sparkles,
   Store,
@@ -23,11 +21,7 @@ import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { Footer } from "@/components/Footer";
 import { loginToRestaurant, verifyRestaurantPin } from "@/lib/restaurants.server";
 import { normalizeCrewName } from "@/lib/remote-audio-domain";
-import {
-  CREW_ROLE_LABELS,
-  CREW_ROLE_ORDER,
-  jakartaCheckedInAtToIso,
-} from "@/lib/role-session-domain";
+import { CREW_ROLE_LABELS, CREW_ROLE_ORDER } from "@/lib/role-session-domain";
 import type { CrewRole } from "@/lib/role-session-domain";
 import { claimRoleSession } from "@/lib/role-session.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -104,10 +98,8 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
   const [submittingPin, setSubmittingPin] = useState(false);
   const [role, setRole] = useState<CrewRole | null>(null);
   const [name, setName] = useState("");
-  const [checkedInAt, setCheckedInAt] = useState("");
   const [identityError, setIdentityError] = useState("");
   const [submittingIdentity, setSubmittingIdentity] = useState(false);
-  const checkedInAtRef = useRef<HTMLInputElement>(null);
 
   const backToCode = () => {
     setStep("code");
@@ -117,7 +109,6 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
     setPinError("");
     setRole(null);
     setName("");
-    setCheckedInAt("");
     setIdentityError("");
   };
 
@@ -127,7 +118,6 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
     setPinError("");
     setRole(null);
     setName("");
-    setCheckedInAt("");
     setIdentityError("");
   };
 
@@ -135,7 +125,6 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
     setStep("role");
     setRole(null);
     setName("");
-    setCheckedInAt("");
     setIdentityError("");
   };
 
@@ -195,11 +184,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
       setIdentityError(normalized.error);
       return;
     }
-    const iso = jakartaCheckedInAtToIso(effectiveCheckedInAt);
-    if (!iso) {
-      setIdentityError("Tanggal & Jam Kerja wajib diisi dengan benar.");
-      return;
-    }
+    const iso = new Date().toISOString();
     setSubmittingIdentity(true);
     try {
       const accessToken = await ensureAnonAccessToken(getSupabaseBrowserClient());
@@ -260,11 +245,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
   };
 
   const stepIndex = STEP_ORDER.indexOf(step);
-  // iOS native date picker may not trigger React onChange, so read DOM
-  // value as fallback when state is empty.
-  const effectiveCheckedInAt =
-    checkedInAt || (typeof window !== "undefined" && checkedInAtRef.current?.value) || "";
-  const canSubmitIdentity = name.trim().length > 0 && effectiveCheckedInAt.trim().length > 0;
+  const canSubmitIdentity = name.trim().length > 0;
 
   return (
     <AuthLayout>
@@ -474,7 +455,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
             Lengkapi Data
           </h1>
           <p className="mt-1 text-center text-sm text-ta-gray-500">
-            Isi nama dan jam kerja kamu sebagai {CREW_ROLE_LABELS[role]}.
+            Isi nama kamu sebagai {CREW_ROLE_LABELS[role]}. Jam login akan dicatat otomatis.
           </p>
 
           <form className="mt-6 space-y-4" onSubmit={submitIdentity}>
@@ -487,20 +468,6 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
               placeholder="Nama kamu"
               required
               autoFocus
-            />
-            <IconField
-              icon={Calendar}
-              id="checked-in-at"
-              aria-label="Tanggal & Jam Kerja"
-              type="datetime-local"
-              value={checkedInAt}
-              onChange={(event) => setCheckedInAt(event.target.value)}
-              onInput={(event) => {
-                const v = (event.target as HTMLInputElement).value;
-                if (v && v !== checkedInAt) setCheckedInAt(v);
-              }}
-              ref={checkedInAtRef}
-              required
             />
             {identityError && (
               <div
@@ -523,13 +490,9 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
                 <>
                   <Loader2 className="size-4 animate-spin" /> Memproses...
                 </>
-              ) : canSubmitIdentity ? (
-                <>
-                  <Unlock className="size-4" /> Masuk
-                </>
               ) : (
                 <>
-                  <Lock className="size-4" /> Lengkapi Data
+                  <Unlock className="size-4" /> Masuk
                 </>
               )}
             </button>
