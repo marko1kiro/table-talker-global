@@ -7,7 +7,7 @@ const src = () =>
 describe("dashboard/auth primitives", () => {
   it("IconField renders a leading icon + label-less input with a trailing slot", () => {
     const s = src();
-    expect(s).toContain("export function IconField");
+    expect(s).toMatch(/export (function|const) IconField/);
     expect(s).toContain("aria-label");
     expect(s).toContain("pl-11");
     expect(s).toContain("trailing");

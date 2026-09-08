@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import type { InputHTMLAttributes, ReactNode } from "react";
+import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -8,16 +7,18 @@ import { cn } from "@/lib/utils";
 export const taIconInputClass =
   "min-h-11 w-full rounded-lg border border-ta-gray-300 bg-white py-2.5 pl-11 pr-3.5 text-sm text-ta-gray-900 outline-none transition placeholder:text-ta-gray-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/12 dark:border-ta-gray-700 dark:bg-ta-gray-900 dark:text-ta-gray-100 dark:placeholder:text-ta-gray-500";
 
-export function IconField({
-  icon: Icon,
-  trailing,
-  className,
-  ...inputProps
-}: { icon: LucideIcon; trailing?: ReactNode } & InputHTMLAttributes<HTMLInputElement>) {
+export const IconField = forwardRef<
+  HTMLInputElement,
+  { icon: LucideIcon; trailing?: ReactNode } & InputHTMLAttributes<HTMLInputElement>
+>(function IconField({ icon: Icon, trailing, className, ...inputProps }, ref) {
   return (
     <div className="relative">
       <Icon className="pointer-events-none absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-ta-gray-400" />
-      <input className={cn(taIconInputClass, trailing && "pr-12", className)} {...inputProps} />
+      <input
+        ref={ref}
+        className={cn(taIconInputClass, trailing && "pr-12", className)}
+        {...inputProps}
+      />
       {trailing && (
         <div className="absolute inset-y-0 right-0 flex w-11 items-center justify-center">
           {trailing}
@@ -25,7 +26,7 @@ export function IconField({
       )}
     </div>
   );
-}
+});
 
 export function AuthShell({
   logo,

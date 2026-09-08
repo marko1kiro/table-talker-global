@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -107,6 +107,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
   const [checkedInAt, setCheckedInAt] = useState("");
   const [identityError, setIdentityError] = useState("");
   const [submittingIdentity, setSubmittingIdentity] = useState(false);
+  const checkedInAtRef = useRef<HTMLInputElement>(null);
 
   const backToCode = () => {
     setStep("code");
@@ -194,7 +195,10 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
       setIdentityError(normalized.error);
       return;
     }
-    const iso = jakartaCheckedInAtToIso(checkedInAt);
+    // iOS native date picker may not trigger React onChange, so read DOM
+    // value as fallback when state is empty.
+    const effectiveCheckedInAt = checkedInAt || checkedInAtRef.current?.value || "";
+    const iso = jakartaCheckedInAtToIso(effectiveCheckedInAt);
     if (!iso) {
       setIdentityError("Tanggal & Jam Kerja wajib diisi dengan benar.");
       return;
@@ -490,6 +494,11 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
               type="datetime-local"
               value={checkedInAt}
               onChange={(event) => setCheckedInAt(event.target.value)}
+              onInput={(event) => {
+                const v = (event.target as HTMLInputElement).value;
+                if (v && v !== checkedInAt) setCheckedInAt(v);
+              }}
+              ref={checkedInAtRef}
               required
             />
             {identityError && (

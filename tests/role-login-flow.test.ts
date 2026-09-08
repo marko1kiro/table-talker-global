@@ -87,7 +87,7 @@ describe("RoleLoginFlow: step 4 - manual Nama + Tanggal & Jam Masuk (all 4 roles
   it("uses a datetime-local input and converts it via jakartaCheckedInAtToIso before submitting", () => {
     const text = source();
     expect(text).toContain('type="datetime-local"');
-    expect(text).toContain("jakartaCheckedInAtToIso(checkedInAt)");
+    expect(text).toContain("jakartaCheckedInAtToIso(effectiveCheckedInAt)");
   });
 
   it("reuses normalizeCrewName for manual name validation, same as the SS-only flow used to", () => {
