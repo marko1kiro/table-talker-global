@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RestaurantCredentialDialog } from "@/components/RestaurantCredentialDialog";
 import { getOwnerRestaurantDetail } from "@/lib/owner-restaurants.server";
-import { deactivateRestaurant, purgeRestaurantTestData } from "@/lib/admin-restaurants.server";
+import { deactivateRestaurant } from "@/lib/admin-restaurants.server";
 import {
   TaLoading,
   TaPage,
@@ -55,11 +55,6 @@ function RestaurantDetail() {
   const [displayNameConfirmation, setDisplayNameConfirmation] = useState("");
   const [superAdminPassword, setSuperAdminPassword] = useState("");
   const [deactivateError, setDeactivateError] = useState("");
-  const [purgeConfirmation, setPurgeConfirmation] = useState("");
-  const [purging, setPurging] = useState(false);
-  const [purgeError, setPurgeError] = useState<string | null>(null);
-  const [purgeSuccess, setPurgeSuccess] = useState(false);
-  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
   const detail = useQuery({
     queryKey: ["owner-restaurant", id],
     queryFn: () => getOwnerRestaurantDetail({ data: { restaurantId: id } }),
@@ -108,28 +103,6 @@ function RestaurantDetail() {
     });
     if ("error" in result) setDeactivateError(result.error ?? "Resto tidak dapat dinonaktifkan.");
     else void queryClient.invalidateQueries({ queryKey: ["owner-restaurant", id] });
-  };
-  const executePurge = async () => {
-    if (purgeConfirmation !== "RESET") return;
-    setPurgeError(null);
-    setPurging(true);
-    try {
-      const result = await purgeRestaurantTestData({
-        data: { restaurantId: id },
-      });
-      if ("error" in result) {
-        setPurgeError(result.error ?? "Gagal mereset data testing.");
-        return;
-      }
-      setPurgeSuccess(true);
-      setPurgeConfirmation("");
-      setPurgeDialogOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ["owner-restaurant", id] });
-    } catch {
-      setPurgeError("Gagal mereset data testing.");
-    } finally {
-      setPurging(false);
-    }
   };
   return (
     <TaPage>
@@ -341,103 +314,6 @@ function RestaurantDetail() {
         ) : (
           <p className="text-sm text-slate-500">Belum ada error.</p>
         )}
-      </TaCard>
-
-      <TaCard
-        title="Zona Bahaya: Reset Data Testing & Operasional"
-        description="Hapus bersih residu testing (crew aktif, status meja, riwayat transisi, log scan & audio) khusus untuk restoran ini."
-        className="border-red-200 bg-red-50/40 dark:border-red-900/50 dark:bg-red-950/20"
-      >
-        <div className="space-y-4">
-          <div className="rounded-lg border border-red-200/80 bg-white p-3 text-xs leading-relaxed text-slate-600 dark:border-red-900/50 dark:bg-slate-900 dark:text-slate-300">
-            <p className="font-bold text-red-700 dark:text-red-400">
-              Jaminan Keamanan Data Penting:
-            </p>
-            <ul className="mt-1 list-disc pl-4 space-y-0.5">
-              <li>
-                Master restoran, PIN & kredensial <strong>TIDAK AKAN</strong> terhapus.
-              </li>
-              <li>
-                Akun login Manager & password <strong>TIDAK AKAN</strong> terhapus.
-              </li>
-              <li>
-                Katalog manifest audio & QR token cetak meja <strong>TIDAK AKAN</strong> terhapus.
-              </li>
-              <li>
-                Hanya mereset meja ke KOSONG, mengeluarkan crew aktif, dan membersihkan riwayat log
-                aktivitas.
-              </li>
-            </ul>
-          </div>
-
-          {purgeSuccess && (
-            <p
-              role="status"
-              className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800"
-            >
-              Data testing & status meja berhasil direset ke kondisi bersih!
-            </p>
-          )}
-
-          <AlertDialog open={purgeDialogOpen} onOpenChange={setPurgeDialogOpen}>
-            <AlertDialogTrigger asChild>
-              <button
-                type="button"
-                className={taDangerButtonClass}
-                onClick={() => {
-                  setPurgeSuccess(false);
-                  setPurgeError(null);
-                  setPurgeConfirmation("");
-                  setPurgeDialogOpen(true);
-                }}
-              >
-                Reset Data Testing Resto Ini
-              </button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-red-700">
-                  Konfirmasi Reset Data Testing
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  Tindakan ini akan mengosongkan status 100 meja, me-logout seluruh session crew
-                  aktif, dan membersihkan log testing untuk{" "}
-                  <strong>{restaurant.displayName}</strong>.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <div className="space-y-3">
-                <label className="block text-sm font-bold text-slate-700">
-                  Ketik &apos;RESET&apos; untuk konfirmasi
-                  <input
-                    aria-label="Ketik RESET untuk konfirmasi"
-                    value={purgeConfirmation}
-                    onChange={(e) => setPurgeConfirmation(e.target.value)}
-                    placeholder="RESET"
-                    className="mt-2 min-h-11 w-full rounded-xl border-2 border-slate-200 bg-white px-3 font-mono text-sm font-bold uppercase tracking-wider outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
-                  />
-                </label>
-                {purgeError && (
-                  <p
-                    role="alert"
-                    className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700"
-                  >
-                    {purgeError}
-                  </p>
-                )}
-              </div>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Batal</AlertDialogCancel>
-                <AlertDialogAction
-                  className={taDangerButtonClass}
-                  disabled={purgeConfirmation !== "RESET" || purging}
-                  onClick={() => void executePurge()}
-                >
-                  {purging ? "Mereset..." : "Hapus & Bersihkan"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
       </TaCard>
 
       {credentialMode && (
