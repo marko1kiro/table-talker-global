@@ -429,9 +429,13 @@ function SoundboardPage() {
             audioUrlPoolRef.current = null;
             validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
             setAudioSynced(false);
-            const audioReady = await unlockAudio();
             const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
-            setCrewIdentity({ ...(saved ?? identity), audioReady });
+            setCrewIdentity({ ...(saved ?? identity), audioReady: false });
+            // Fire-and-forget: iOS audio.play() can hang indefinitely,
+            // blocking the entire login flow if awaited.
+            unlockAudio().then((ready) => {
+              setCrewIdentity((prev) => (prev ? { ...prev, audioReady: ready } : prev));
+            });
           }}
           onRoleContinue={(identity) => {
             // Bug found ahead of Task 10: without this, the role session
