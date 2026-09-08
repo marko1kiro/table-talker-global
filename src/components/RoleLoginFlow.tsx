@@ -195,9 +195,6 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
       setIdentityError(normalized.error);
       return;
     }
-    // iOS native date picker may not trigger React onChange, so read DOM
-    // value as fallback when state is empty.
-    const effectiveCheckedInAt = checkedInAt || checkedInAtRef.current?.value || "";
     const iso = jakartaCheckedInAtToIso(effectiveCheckedInAt);
     if (!iso) {
       setIdentityError("Tanggal & Jam Kerja wajib diisi dengan benar.");
@@ -263,7 +260,11 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
   };
 
   const stepIndex = STEP_ORDER.indexOf(step);
-  const canSubmitIdentity = name.trim().length > 0 && checkedInAt.trim().length > 0;
+  // iOS native date picker may not trigger React onChange, so read DOM
+  // value as fallback when state is empty.
+  const effectiveCheckedInAt =
+    checkedInAt || (typeof window !== "undefined" && checkedInAtRef.current?.value) || "";
+  const canSubmitIdentity = name.trim().length > 0 && effectiveCheckedInAt.trim().length > 0;
 
   return (
     <AuthLayout>
