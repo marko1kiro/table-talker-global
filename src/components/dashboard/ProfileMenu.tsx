@@ -5,12 +5,14 @@ export function ProfileMenu({
   name,
   idManager,
   canChangePassword = true,
+  onChangePassword,
   extras,
   onLogout,
 }: {
   name: string;
   idManager?: string;
   canChangePassword?: boolean;
+  onChangePassword?: () => void;
   // Extra dropdown rows (e.g. Help / theme toggle), rendered between the
   // identity block and the change-password/logout actions.
   extras?: ReactNode;
@@ -59,14 +61,16 @@ export function ProfileMenu({
             )}
           </div>
           {extras}
-          {canChangePassword && (
+          {canChangePassword && onChangePassword && (
             <button
               type="button"
-              disabled
-              className="flex w-full cursor-not-allowed items-center gap-2 px-4 py-2 text-left text-sm text-ta-gray-400 dark:text-ta-gray-500"
+              onClick={() => {
+                setOpen(false);
+                onChangePassword();
+              }}
+              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-semibold hover:bg-ta-gray-100 dark:hover:bg-ta-gray-700"
             >
               <KeyRound className="size-4" /> Ganti password
-              <span className="ml-auto text-[10px] font-semibold uppercase">Segera hadir</span>
             </button>
           )}
           <button

@@ -47,18 +47,82 @@ export const listManagers = createServerFn({ method: "GET" }).handler(
 export const disableManager = createServerFn({ method: "POST" })
   .validator(z.object({ managerId: z.string().uuid() }))
   .handler(async ({ data }): Promise<{ ok: boolean; error?: string }> => {
-    await requireSuperAdmin();
+    const session = await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return { ok: false, error: "Tidak dapat mengubah data manager." };
-    const { error: sessionError } = await client
-      .from("manager_sessions")
-      .delete()
-      .eq("manager_id", data.managerId);
-    if (sessionError) return { ok: false, error: "Tidak dapat mengubah data manager." };
-    const { error } = await client
-      .from("manager_accounts")
-      .update({ status: "nonaktif", updated_at: new Date().toISOString() })
-      .eq("id", data.managerId);
+    // Routed through the security-definer RPC: authoritative authority check,
+    // atomic session revocation, and an append-only audit entry.
+    const { error } = await client.rpc("set_manager_status", {
+      p_actor_kind: "super_admin",
+      p_actor_id: session.data.superAdminAccountId,
+      p_manager_id: data.managerId,
+      p_new_status: "nonaktif",
+    });
     if (error) return { ok: false, error: "Tidak dapat mengubah data manager." };
     return { ok: true };
+  });
+
+// --- Super Admin: full manager lifecycle (global) ----------------------------
+
+export const saCreateManagerInput = z.object({
+  staffId: z.string(),
+  fullName: z.string().trim().min(1).max(80),
+  restaurantId: z.string().uuid(),
+  password: z.string(),
+});
+
+export const saCreateManager = createServerFn({ method: "POST" })
+  .validator(saCreateManagerInput)
+  .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
+    const session = await requireSuperAdmin();
+    const client = getServiceClient();
+    if (!client) return { ok: false, code: "UNAVAILABLE" };
+    const { normalizeStaffId, staffIdIsValid, staffPasswordIsValid } =
+      await import("./staff-identity.server");
+    const staffId = normalizeStaffId(data.staffId);
+    if (!staffIdIsValid(staffId)) return { ok: false, code: "STAFF_ID_INVALID" };
+    if (!staffPasswordIsValid(data.password)) return { ok: false, code: "WEAK_PASSWORD" };
+    const { hashManagerPassword } = await import("./manager-password.server");
+    const passwordHash = await hashManagerPassword(data.password);
+    const { error } = await client.rpc("create_manager_account", {
+      p_actor_kind: "super_admin",
+      p_actor_id: session.data.superAdminAccountId,
+      p_staff_id: staffId,
+      p_full_name: data.fullName,
+      p_restaurant_id: data.restaurantId,
+      p_password_hash: passwordHash,
+    });
+    if (error) return { ok: false, code: error.message };
+    return { ok: true };
+  });
+
+export const saRenameManager = createServerFn({ method: "POST" })
+  .validator(z.object({ managerId: z.string().uuid(), fullName: z.string().trim().min(1).max(80) }))
+  .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
+    const session = await requireSuperAdmin();
+    const client = getServiceClient();
+    if (!client) return { ok: false, code: "UNAVAILABLE" };
+    const { error } = await client.rpc("update_staff_profile", {
+      p_actor_kind: "super_admin",
+      p_actor_id: session.data.superAdminAccountId,
+      p_target_kind: "manager",
+      p_target_id: data.managerId,
+      p_full_name: data.fullName,
+    });
+    return error ? { ok: false, code: error.message } : { ok: true };
+  });
+
+export const enableManager = createServerFn({ method: "POST" })
+  .validator(z.object({ managerId: z.string().uuid() }))
+  .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
+    const session = await requireSuperAdmin();
+    const client = getServiceClient();
+    if (!client) return { ok: false, code: "UNAVAILABLE" };
+    const { error } = await client.rpc("set_manager_status", {
+      p_actor_kind: "super_admin",
+      p_actor_id: session.data.superAdminAccountId,
+      p_manager_id: data.managerId,
+      p_new_status: "aktif",
+    });
+    return error ? { ok: false, code: error.message } : { ok: true };
   });

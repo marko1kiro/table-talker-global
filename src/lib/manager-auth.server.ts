@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getServiceClient } from "./remote-audio.server";
-import { hashManagerPassword, verifyManagerPassword } from "./manager-password.server";
+import { verifyManagerPassword } from "./manager-password.server";
 import type { RpcCaller } from "./role-session.server";
 
 const GENERIC = "Terjadi kesalahan. Coba lagi.";
@@ -12,59 +12,6 @@ export type ManagerAuthDeps = {
   verify?: (password: string, stored: string) => Promise<boolean>;
   createSession?: (managerId: string) => Promise<{ token: string; expiresAt: string } | null>;
 };
-
-// --- register -------------------------------------------------------------
-
-export const registerManagerInputSchema = z.object({
-  idManager: z
-    .string()
-    .trim()
-    .min(3)
-    .max(32)
-    .regex(/^[a-z0-9._-]+$/, "ID Manager tidak valid."),
-  fullName: z.string().trim().min(1).max(80),
-  restaurantCode: z.string().trim().min(1).max(40),
-  password: z.string().min(8).max(200),
-});
-
-export type RegisterManagerInput = z.infer<typeof registerManagerInputSchema>;
-export type RegisterManagerResult =
-  | { ok: true }
-  | {
-      ok: false;
-      code: "WEAK_PASSWORD" | "RESTAURANT_NOT_FOUND" | "ID_MANAGER_TAKEN" | "UNAVAILABLE";
-      message?: string;
-    };
-
-export async function registerManagerCore(
-  data: RegisterManagerInput,
-  deps: ManagerAuthDeps,
-): Promise<RegisterManagerResult> {
-  if (data.password.length < 8) return { ok: false, code: "WEAK_PASSWORD" };
-  const hash = deps.hash ?? hashManagerPassword;
-  const passwordHash = await hash(data.password);
-  const { error } = await deps.rpc("register_manager", {
-    p_id_manager: data.idManager,
-    p_full_name: data.fullName,
-    p_restaurant_code: data.restaurantCode,
-    p_password_hash: passwordHash,
-  });
-  if (error) {
-    if (error.message === "RESTAURANT_NOT_FOUND")
-      return { ok: false, code: "RESTAURANT_NOT_FOUND" };
-    if (error.message === "ID_MANAGER_TAKEN") return { ok: false, code: "ID_MANAGER_TAKEN" };
-    return { ok: false, code: "UNAVAILABLE", message: GENERIC };
-  }
-  return { ok: true };
-}
-
-export const registerManager = createServerFn({ method: "POST" })
-  .validator(registerManagerInputSchema)
-  .handler(async ({ data }): Promise<RegisterManagerResult> => {
-    const client = getServiceClient();
-    if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
-    return registerManagerCore(data, { rpc: async (fn, params) => client.rpc(fn, params) });
-  });
 
 // --- login ----------------------------------------------------------------
 
@@ -156,4 +103,35 @@ export const loginManager = createServerFn({ method: "POST" })
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
     return loginManagerCore(data, { rpc: async (fn, params) => client.rpc(fn, params) });
+  });
+
+// --- change own password (while logged in) ----------------------------------
+
+export const changeManagerPasswordInputSchema = z.object({
+  managerToken: z.string().min(1),
+  oldPassword: z.string().min(1),
+  newPassword: z.string(),
+});
+
+/**
+ * Verifies the OLD password authoritatively (the manager id comes from the
+ * live bearer token, not the client), swaps the hash and revokes ALL manager
+ * sessions — including the current one — so the user must log in again.
+ */
+export const changeManagerPassword = createServerFn({ method: "POST" })
+  .validator(changeManagerPasswordInputSchema)
+  .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
+    const client = getServiceClient();
+    if (!client) return { ok: false, code: "UNAVAILABLE" };
+    const { data: managerId, error: tokenError } = await client.rpc("get_manager_id_by_token", {
+      p_token: data.managerToken,
+    });
+    if (tokenError || typeof managerId !== "string" || !managerId) {
+      return { ok: false, code: "INVALID_SESSION" };
+    }
+    const { changeStaffPasswordCore } = await import("./super-admin-auth.server");
+    return changeStaffPasswordCore("manager", managerId, data.oldPassword, data.newPassword, {
+      rpc: async (fn, params) => client.rpc(fn, params),
+      verify: verifyManagerPassword,
+    });
   });

@@ -13,7 +13,7 @@ export const Route = createFileRoute("/about")({
       {
         name: "description",
         content:
-          "LIME adalah sistem manajemen meja restoran: panggilan meja otomatis, status meja real-time, pemesanan mandiri via QR, serta monitoring Manager dan Owner. Kenali cara kerja dan tujuan aplikasi ini.",
+          "LIME adalah sistem manajemen meja restoran: panggilan meja otomatis, status meja real-time, pemesanan mandiri via QR, serta monitoring Manager, Area Manager, dan Super Admin. Kenali cara kerja dan tujuan aplikasi ini.",
       },
       { property: "og:title", content: "Tentang — LIME" },
       { property: "og:url", content: "/about" },
@@ -51,7 +51,7 @@ const points = [
   },
   {
     icon: ShieldCheck,
-    title: "Konsol Owner yang Lengkap",
+    title: "Konsol Super Admin yang Lengkap",
     body: "Pemilik restoran mengelola data restoran, akun manager, katalog audio, ekspor QR, riwayat aktivitas, dan log kesalahan operasional dari satu konsol Super Admin yang aman dan terlindungi kredensial.",
   },
 ];
@@ -68,8 +68,8 @@ function AboutPage() {
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ta-gray-500 sm:text-base dark:text-ta-gray-400">
               LIME adalah sistem manajemen meja restoran yang mencakup panggilan pelanggan otomatis
               lewat soundboard, status meja real-time lintas peran, pemesanan mandiri via QR, serta
-              dashboard monitoring untuk Manager dan Owner. Tujuannya: operasional dapur, kasir, dan
-              lantai layanan menjadi lebih cepat, rapi, dan konsisten.
+              dashboard monitoring untuk Manager, Area Manager, dan Super Admin. Tujuannya:
+              operasional dapur, kasir, dan lantai layanan menjadi lebih cepat, rapi, dan konsisten.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">

@@ -9,10 +9,18 @@ describe("admin-managers server fn", () => {
     expect(text()).toContain("listManagers");
     expect(text()).toContain("disableManager");
   });
-  it("disable sets status nonaktif and deletes live sessions", () => {
-    expect(text()).toContain('status: "nonaktif"');
-    expect(text()).toContain('from("manager_sessions")');
-    expect(text()).toContain(".delete()");
+  it("disable routes through the audit+revoke RPC (no direct table writes)", () => {
+    expect(text()).toContain('p_new_status: "nonaktif"');
+    expect(text()).toContain('rpc("set_manager_status"');
+    expect(text()).not.toContain('from("manager_sessions")');
+    expect(text()).not.toContain(".delete()");
+  });
+  it("Super Admin can create/rename/enable managers (no self-registration)", () => {
+    expect(text()).toContain("saCreateManager");
+    expect(text()).toContain("saRenameManager");
+    expect(text()).toContain("enableManager");
+    expect(text()).toContain("create_manager_account");
+    expect(text()).not.toContain("register");
   });
 });
 

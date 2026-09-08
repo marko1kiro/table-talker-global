@@ -29,7 +29,7 @@ it("no remaining TABLE TALKER brand text in src", () => {
   expect(offenders).toEqual([]);
 });
 
-it("owner login and console shell carry the LIME brand", () => {
+it("super admin login and console shell carry the LIME brand", () => {
   const authGate = readFileSync(new URL("../src/components/AuthGate.tsx", import.meta.url), "utf8");
   expect(authGate).toContain(">LIME</p>");
   expect(authGate).toContain("/lime-logo.webp");
@@ -40,7 +40,7 @@ it("owner login and console shell carry the LIME brand", () => {
     new URL("../src/routes/super-admin/route.tsx", import.meta.url),
     "utf8",
   );
-  expect(shell).toContain('title: "Owner Console - LIME"');
+  expect(shell).toContain('title: "Super Admin Console - LIME"');
   expect(shell).toContain("/lime-logo.webp");
 });
 

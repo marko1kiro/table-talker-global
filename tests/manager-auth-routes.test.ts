@@ -1,19 +1,22 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
 
-describe("manager login route", () => {
+describe("staff login route", () => {
   const text = () => read("../src/routes/manager/login.tsx");
-  it("collects ID Manager + Password and links to register", () => {
-    expect(text()).toContain("ID Manager");
-    expect(text()).toContain("Password");
-    expect(text()).toContain("membuat ID MANAGER BARU");
-    expect(text()).toContain("loginManager");
-  });
-  it("redirects to the dashboard only after a successful login", () => {
+  it("collects a single staff ID + password and routes by authoritative role", () => {
+    expect(text()).toContain("loginStaff");
+    expect(text()).toContain('role === "manager"');
+    expect(text()).toContain('navigate({ to: "/am" })');
     expect(text()).toContain('navigate({ to: "/manager" })');
-    expect(text()).toContain("writeManagerIdentity");
+  });
+  it("no longer offers Manager self-registration", () => {
+    expect(text()).not.toContain("register");
+    expect(text()).not.toContain("ID MANAGER BARU");
+  });
+  it("links to the public forgot-password flow", () => {
+    expect(text()).toContain("/manager/forgot");
   });
   it("uses TailAdmin auth primitives with a show/hide password toggle", () => {
     expect(text()).toContain("AuthLayout");
@@ -27,39 +30,22 @@ describe("manager login route", () => {
   });
 });
 
-describe("manager register route", () => {
-  const text = () => read("../src/routes/manager/register.tsx");
-  it("collects the required fields and auto-shows the resto name", () => {
-    expect(text()).toContain("Nama Lengkap");
-    expect(text()).toContain("ID Manager");
-    expect(text()).toContain("Kode Resto");
-    expect(text()).toContain("Ketik Ulang");
-    expect(text()).toContain("loginToRestaurant");
+describe("manager self-registration removal", () => {
+  it("the register route file no longer exists", () => {
+    expect(existsSync(new URL("../src/routes/manager/register.tsx", import.meta.url))).toBe(false);
   });
-  it("redirects to login after submit, never to the dashboard", () => {
-    expect(text()).toContain('navigate({ to: "/manager/login" })');
-    expect(text()).not.toContain('navigate({ to: "/manager" })');
+  it("no server module exports a public Manager registration action", () => {
+    const auth = read("../src/lib/manager-auth.server.ts");
+    expect(auth).not.toContain("registerManager");
   });
-  it("shows a loading state while resolving the resto code", () => {
-    expect(text()).toContain("looking");
-    expect(text()).toContain("animate-spin");
-  });
-  it("shows a checkmark once the resto name resolves", () => {
-    expect(text()).toContain("restoValid");
-    expect(text()).toContain("CheckCircle2");
-  });
-  it("offers a show/hide password toggle", () => {
-    expect(text()).toContain("showPassword");
-    expect(text()).toContain("EyeOff");
-  });
-  it("hardens submit: disabled until valid + confirm mismatch reminder", () => {
-    expect(text()).toContain("canSubmit");
-    expect(text()).toContain("disabled={!canSubmit || busy}");
-    expect(text()).toContain("tidak cocok");
-  });
-  it("uses TailAdmin auth primitives", () => {
-    expect(text()).toContain("AuthLayout");
-    expect(text()).toContain("IconField");
-    expect(text()).toContain("taPrimaryButtonClass");
+  it("no active source references the register route or RPC", () => {
+    const files = [
+      "../src/lib/manager-auth.server.ts",
+      "../src/routes/manager/login.tsx",
+      "../src/routes/index.tsx",
+    ];
+    for (const file of files) {
+      expect(read(file)).not.toContain("register_manager");
+    }
   });
 });

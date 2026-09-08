@@ -23,15 +23,22 @@ import { Route as SatgasIndexRouteImport } from './routes/satgas/index'
 import { Route as ManagerIndexRouteImport } from './routes/manager/index'
 import { Route as KasirIndexRouteImport } from './routes/kasir/index'
 import { Route as ClearUpIndexRouteImport } from './routes/clear-up/index'
+import { Route as AmIndexRouteImport } from './routes/am/index'
+import { Route as SuperAdminStaffAccountsRouteImport } from './routes/super-admin/staff-accounts'
+import { Route as SuperAdminRecoveryRouteImport } from './routes/super-admin/recovery'
 import { Route as SuperAdminManagersRouteImport } from './routes/super-admin/managers'
 import { Route as SuperAdminHistoryRouteImport } from './routes/super-admin/history'
 import { Route as SuperAdminEsbExportRouteImport } from './routes/super-admin/esb-export'
 import { Route as SuperAdminErrorLogRouteImport } from './routes/super-admin/error-log'
+import { Route as SuperAdminAuditRouteImport } from './routes/super-admin/audit'
 import { Route as SuperAdminAudioRouteImport } from './routes/super-admin/audio'
+import { Route as SuperAdminAreaManagersRouteImport } from './routes/super-admin/area-managers'
+import { Route as SuperAdminAcceptRouteImport } from './routes/super-admin/accept'
 import { Route as QDeclineRouteImport } from './routes/q/decline'
 import { Route as QTokenRouteImport } from './routes/q/$token'
-import { Route as ManagerRegisterRouteImport } from './routes/manager/register'
 import { Route as ManagerLoginRouteImport } from './routes/manager/login'
+import { Route as ManagerForgotRouteImport } from './routes/manager/forgot'
+import { Route as AmForgotRouteImport } from './routes/am/forgot'
 import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
 import { Route as ApiAudioAudioIdRouteImport } from './routes/api/audio/$audioId'
@@ -107,6 +114,21 @@ const ClearUpIndexRoute = ClearUpIndexRouteImport.update({
   path: '/clear-up/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AmIndexRoute = AmIndexRouteImport.update({
+  id: '/am/',
+  path: '/am/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SuperAdminStaffAccountsRoute = SuperAdminStaffAccountsRouteImport.update({
+  id: '/staff-accounts',
+  path: '/staff-accounts',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
+const SuperAdminRecoveryRoute = SuperAdminRecoveryRouteImport.update({
+  id: '/recovery',
+  path: '/recovery',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
 const SuperAdminManagersRoute = SuperAdminManagersRouteImport.update({
   id: '/managers',
   path: '/managers',
@@ -127,9 +149,24 @@ const SuperAdminErrorLogRoute = SuperAdminErrorLogRouteImport.update({
   path: '/error-log',
   getParentRoute: () => SuperAdminRouteRoute,
 } as any)
+const SuperAdminAuditRoute = SuperAdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
 const SuperAdminAudioRoute = SuperAdminAudioRouteImport.update({
   id: '/audio',
   path: '/audio',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
+const SuperAdminAreaManagersRoute = SuperAdminAreaManagersRouteImport.update({
+  id: '/area-managers',
+  path: '/area-managers',
+  getParentRoute: () => SuperAdminRouteRoute,
+} as any)
+const SuperAdminAcceptRoute = SuperAdminAcceptRouteImport.update({
+  id: '/accept',
+  path: '/accept',
   getParentRoute: () => SuperAdminRouteRoute,
 } as any)
 const QDeclineRoute = QDeclineRouteImport.update({
@@ -142,14 +179,19 @@ const QTokenRoute = QTokenRouteImport.update({
   path: '/q/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ManagerRegisterRoute = ManagerRegisterRouteImport.update({
-  id: '/manager/register',
-  path: '/manager/register',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ManagerLoginRoute = ManagerLoginRouteImport.update({
   id: '/manager/login',
   path: '/manager/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManagerForgotRoute = ManagerForgotRouteImport.update({
+  id: '/manager/forgot',
+  path: '/manager/forgot',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AmForgotRoute = AmForgotRouteImport.update({
+  id: '/am/forgot',
+  path: '/am/forgot',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SuperAdminRestaurantsIndexRoute =
@@ -185,15 +227,22 @@ export interface FileRoutesByFullPath {
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
+  '/am/forgot': typeof AmForgotRoute
+  '/manager/forgot': typeof ManagerForgotRoute
   '/manager/login': typeof ManagerLoginRoute
-  '/manager/register': typeof ManagerRegisterRoute
   '/q/$token': typeof QTokenRoute
   '/q/decline': typeof QDeclineRoute
+  '/super-admin/accept': typeof SuperAdminAcceptRoute
+  '/super-admin/area-managers': typeof SuperAdminAreaManagersRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
+  '/super-admin/audit': typeof SuperAdminAuditRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/managers': typeof SuperAdminManagersRoute
+  '/super-admin/recovery': typeof SuperAdminRecoveryRoute
+  '/super-admin/staff-accounts': typeof SuperAdminStaffAccountsRoute
+  '/am/': typeof AmIndexRoute
   '/clear-up/': typeof ClearUpIndexRoute
   '/kasir/': typeof KasirIndexRoute
   '/manager/': typeof ManagerIndexRoute
@@ -213,15 +262,22 @@ export interface FileRoutesByTo {
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
+  '/am/forgot': typeof AmForgotRoute
+  '/manager/forgot': typeof ManagerForgotRoute
   '/manager/login': typeof ManagerLoginRoute
-  '/manager/register': typeof ManagerRegisterRoute
   '/q/$token': typeof QTokenRoute
   '/q/decline': typeof QDeclineRoute
+  '/super-admin/accept': typeof SuperAdminAcceptRoute
+  '/super-admin/area-managers': typeof SuperAdminAreaManagersRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
+  '/super-admin/audit': typeof SuperAdminAuditRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/managers': typeof SuperAdminManagersRoute
+  '/super-admin/recovery': typeof SuperAdminRecoveryRoute
+  '/super-admin/staff-accounts': typeof SuperAdminStaffAccountsRoute
+  '/am': typeof AmIndexRoute
   '/clear-up': typeof ClearUpIndexRoute
   '/kasir': typeof KasirIndexRoute
   '/manager': typeof ManagerIndexRoute
@@ -243,15 +299,22 @@ export interface FileRoutesById {
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
+  '/am/forgot': typeof AmForgotRoute
+  '/manager/forgot': typeof ManagerForgotRoute
   '/manager/login': typeof ManagerLoginRoute
-  '/manager/register': typeof ManagerRegisterRoute
   '/q/$token': typeof QTokenRoute
   '/q/decline': typeof QDeclineRoute
+  '/super-admin/accept': typeof SuperAdminAcceptRoute
+  '/super-admin/area-managers': typeof SuperAdminAreaManagersRoute
   '/super-admin/audio': typeof SuperAdminAudioRoute
+  '/super-admin/audit': typeof SuperAdminAuditRoute
   '/super-admin/error-log': typeof SuperAdminErrorLogRoute
   '/super-admin/esb-export': typeof SuperAdminEsbExportRoute
   '/super-admin/history': typeof SuperAdminHistoryRoute
   '/super-admin/managers': typeof SuperAdminManagersRoute
+  '/super-admin/recovery': typeof SuperAdminRecoveryRoute
+  '/super-admin/staff-accounts': typeof SuperAdminStaffAccountsRoute
+  '/am/': typeof AmIndexRoute
   '/clear-up/': typeof ClearUpIndexRoute
   '/kasir/': typeof KasirIndexRoute
   '/manager/': typeof ManagerIndexRoute
@@ -274,15 +337,22 @@ export interface FileRouteTypes {
     | '/privacy-policy'
     | '/sitemap.xml'
     | '/terms-of-use'
+    | '/am/forgot'
+    | '/manager/forgot'
     | '/manager/login'
-    | '/manager/register'
     | '/q/$token'
     | '/q/decline'
+    | '/super-admin/accept'
+    | '/super-admin/area-managers'
     | '/super-admin/audio'
+    | '/super-admin/audit'
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
     | '/super-admin/history'
     | '/super-admin/managers'
+    | '/super-admin/recovery'
+    | '/super-admin/staff-accounts'
+    | '/am/'
     | '/clear-up/'
     | '/kasir/'
     | '/manager/'
@@ -302,15 +372,22 @@ export interface FileRouteTypes {
     | '/privacy-policy'
     | '/sitemap.xml'
     | '/terms-of-use'
+    | '/am/forgot'
+    | '/manager/forgot'
     | '/manager/login'
-    | '/manager/register'
     | '/q/$token'
     | '/q/decline'
+    | '/super-admin/accept'
+    | '/super-admin/area-managers'
     | '/super-admin/audio'
+    | '/super-admin/audit'
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
     | '/super-admin/history'
     | '/super-admin/managers'
+    | '/super-admin/recovery'
+    | '/super-admin/staff-accounts'
+    | '/am'
     | '/clear-up'
     | '/kasir'
     | '/manager'
@@ -331,15 +408,22 @@ export interface FileRouteTypes {
     | '/privacy-policy'
     | '/sitemap.xml'
     | '/terms-of-use'
+    | '/am/forgot'
+    | '/manager/forgot'
     | '/manager/login'
-    | '/manager/register'
     | '/q/$token'
     | '/q/decline'
+    | '/super-admin/accept'
+    | '/super-admin/area-managers'
     | '/super-admin/audio'
+    | '/super-admin/audit'
     | '/super-admin/error-log'
     | '/super-admin/esb-export'
     | '/super-admin/history'
     | '/super-admin/managers'
+    | '/super-admin/recovery'
+    | '/super-admin/staff-accounts'
+    | '/am/'
     | '/clear-up/'
     | '/kasir/'
     | '/manager/'
@@ -361,10 +445,12 @@ export interface RootRouteChildren {
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsOfUseRoute: typeof TermsOfUseRoute
+  AmForgotRoute: typeof AmForgotRoute
+  ManagerForgotRoute: typeof ManagerForgotRoute
   ManagerLoginRoute: typeof ManagerLoginRoute
-  ManagerRegisterRoute: typeof ManagerRegisterRoute
   QTokenRoute: typeof QTokenRoute
   QDeclineRoute: typeof QDeclineRoute
+  AmIndexRoute: typeof AmIndexRoute
   ClearUpIndexRoute: typeof ClearUpIndexRoute
   KasirIndexRoute: typeof KasirIndexRoute
   ManagerIndexRoute: typeof ManagerIndexRoute
@@ -473,6 +559,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClearUpIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/am/': {
+      id: '/am/'
+      path: '/am'
+      fullPath: '/am/'
+      preLoaderRoute: typeof AmIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/super-admin/staff-accounts': {
+      id: '/super-admin/staff-accounts'
+      path: '/staff-accounts'
+      fullPath: '/super-admin/staff-accounts'
+      preLoaderRoute: typeof SuperAdminStaffAccountsRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/super-admin/recovery': {
+      id: '/super-admin/recovery'
+      path: '/recovery'
+      fullPath: '/super-admin/recovery'
+      preLoaderRoute: typeof SuperAdminRecoveryRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
     '/super-admin/managers': {
       id: '/super-admin/managers'
       path: '/managers'
@@ -501,11 +608,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminErrorLogRouteImport
       parentRoute: typeof SuperAdminRouteRoute
     }
+    '/super-admin/audit': {
+      id: '/super-admin/audit'
+      path: '/audit'
+      fullPath: '/super-admin/audit'
+      preLoaderRoute: typeof SuperAdminAuditRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
     '/super-admin/audio': {
       id: '/super-admin/audio'
       path: '/audio'
       fullPath: '/super-admin/audio'
       preLoaderRoute: typeof SuperAdminAudioRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/super-admin/area-managers': {
+      id: '/super-admin/area-managers'
+      path: '/area-managers'
+      fullPath: '/super-admin/area-managers'
+      preLoaderRoute: typeof SuperAdminAreaManagersRouteImport
+      parentRoute: typeof SuperAdminRouteRoute
+    }
+    '/super-admin/accept': {
+      id: '/super-admin/accept'
+      path: '/accept'
+      fullPath: '/super-admin/accept'
+      preLoaderRoute: typeof SuperAdminAcceptRouteImport
       parentRoute: typeof SuperAdminRouteRoute
     }
     '/q/decline': {
@@ -522,18 +650,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof QTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/manager/register': {
-      id: '/manager/register'
-      path: '/manager/register'
-      fullPath: '/manager/register'
-      preLoaderRoute: typeof ManagerRegisterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/manager/login': {
       id: '/manager/login'
       path: '/manager/login'
       fullPath: '/manager/login'
       preLoaderRoute: typeof ManagerLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manager/forgot': {
+      id: '/manager/forgot'
+      path: '/manager/forgot'
+      fullPath: '/manager/forgot'
+      preLoaderRoute: typeof ManagerForgotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/am/forgot': {
+      id: '/am/forgot'
+      path: '/am/forgot'
+      fullPath: '/am/forgot'
+      preLoaderRoute: typeof AmForgotRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/super-admin/restaurants/': {
@@ -568,22 +703,32 @@ declare module '@tanstack/react-router' {
 }
 
 interface SuperAdminRouteRouteChildren {
+  SuperAdminAcceptRoute: typeof SuperAdminAcceptRoute
+  SuperAdminAreaManagersRoute: typeof SuperAdminAreaManagersRoute
   SuperAdminAudioRoute: typeof SuperAdminAudioRoute
+  SuperAdminAuditRoute: typeof SuperAdminAuditRoute
   SuperAdminErrorLogRoute: typeof SuperAdminErrorLogRoute
   SuperAdminEsbExportRoute: typeof SuperAdminEsbExportRoute
   SuperAdminHistoryRoute: typeof SuperAdminHistoryRoute
   SuperAdminManagersRoute: typeof SuperAdminManagersRoute
+  SuperAdminRecoveryRoute: typeof SuperAdminRecoveryRoute
+  SuperAdminStaffAccountsRoute: typeof SuperAdminStaffAccountsRoute
   SuperAdminIndexRoute: typeof SuperAdminIndexRoute
   SuperAdminRestaurantsIdRoute: typeof SuperAdminRestaurantsIdRoute
   SuperAdminRestaurantsIndexRoute: typeof SuperAdminRestaurantsIndexRoute
 }
 
 const SuperAdminRouteRouteChildren: SuperAdminRouteRouteChildren = {
+  SuperAdminAcceptRoute: SuperAdminAcceptRoute,
+  SuperAdminAreaManagersRoute: SuperAdminAreaManagersRoute,
   SuperAdminAudioRoute: SuperAdminAudioRoute,
+  SuperAdminAuditRoute: SuperAdminAuditRoute,
   SuperAdminErrorLogRoute: SuperAdminErrorLogRoute,
   SuperAdminEsbExportRoute: SuperAdminEsbExportRoute,
   SuperAdminHistoryRoute: SuperAdminHistoryRoute,
   SuperAdminManagersRoute: SuperAdminManagersRoute,
+  SuperAdminRecoveryRoute: SuperAdminRecoveryRoute,
+  SuperAdminStaffAccountsRoute: SuperAdminStaffAccountsRoute,
   SuperAdminIndexRoute: SuperAdminIndexRoute,
   SuperAdminRestaurantsIdRoute: SuperAdminRestaurantsIdRoute,
   SuperAdminRestaurantsIndexRoute: SuperAdminRestaurantsIndexRoute,
@@ -603,10 +748,12 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyPolicyRoute: PrivacyPolicyRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsOfUseRoute: TermsOfUseRoute,
+  AmForgotRoute: AmForgotRoute,
+  ManagerForgotRoute: ManagerForgotRoute,
   ManagerLoginRoute: ManagerLoginRoute,
-  ManagerRegisterRoute: ManagerRegisterRoute,
   QTokenRoute: QTokenRoute,
   QDeclineRoute: QDeclineRoute,
+  AmIndexRoute: AmIndexRoute,
   ClearUpIndexRoute: ClearUpIndexRoute,
   KasirIndexRoute: KasirIndexRoute,
   ManagerIndexRoute: ManagerIndexRoute,

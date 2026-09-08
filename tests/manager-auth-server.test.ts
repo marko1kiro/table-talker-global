@@ -1,68 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-  registerManagerCore,
-  loginManagerCore,
-  type ManagerAuthDeps,
-} from "../src/lib/manager-auth.server";
+import { loginManagerCore, type ManagerAuthDeps } from "../src/lib/manager-auth.server";
 
-function fakeHash(pw: string) {
-  return `hash(${pw})`;
-}
 function fakeVerify(pw: string, stored: string) {
   return Promise.resolve(stored === `hash(${pw})`);
 }
-
-describe("registerManagerCore", () => {
-  it("rejects a short password", async () => {
-    const deps: ManagerAuthDeps = {
-      rpc: async () => ({ data: true, error: null }),
-      hash: async (p) => fakeHash(p),
-    };
-    const r = await registerManagerCore(
-      { idManager: "budi", fullName: "Budi", restaurantCode: "CKRBUL", password: "123" },
-      deps,
-    );
-    expect(r).toEqual({ ok: false, code: "WEAK_PASSWORD" });
-  });
-  it("maps RESTAURANT_NOT_FOUND from the rpc", async () => {
-    const deps: ManagerAuthDeps = {
-      rpc: async () => ({ data: null, error: { message: "RESTAURANT_NOT_FOUND" } }),
-      hash: async (p) => fakeHash(p),
-    };
-    const r = await registerManagerCore(
-      { idManager: "budi", fullName: "Budi", restaurantCode: "X", password: "rahasia123" },
-      deps,
-    );
-    expect(r).toEqual({ ok: false, code: "RESTAURANT_NOT_FOUND" });
-  });
-  it("maps ID_MANAGER_TAKEN from the rpc", async () => {
-    const deps: ManagerAuthDeps = {
-      rpc: async () => ({ data: null, error: { message: "ID_MANAGER_TAKEN" } }),
-      hash: async (p) => fakeHash(p),
-    };
-    const r = await registerManagerCore(
-      { idManager: "budi", fullName: "Budi", restaurantCode: "CKRBUL", password: "rahasia123" },
-      deps,
-    );
-    expect(r).toEqual({ ok: false, code: "ID_MANAGER_TAKEN" });
-  });
-  it("succeeds and passes the computed hash to the rpc", async () => {
-    let seen: unknown;
-    const deps: ManagerAuthDeps = {
-      rpc: async (_fn, params) => {
-        seen = params;
-        return { data: true, error: null };
-      },
-      hash: async (p) => fakeHash(p),
-    };
-    const r = await registerManagerCore(
-      { idManager: "budi", fullName: "Budi", restaurantCode: "CKRBUL", password: "rahasia123" },
-      deps,
-    );
-    expect(r).toEqual({ ok: true });
-    expect(seen).toMatchObject({ p_id_manager: "budi", p_password_hash: "hash(rahasia123)" });
-  });
-});
 
 describe("loginManagerCore", () => {
   const cred = {

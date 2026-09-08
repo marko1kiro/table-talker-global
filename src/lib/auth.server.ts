@@ -9,6 +9,15 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 export interface TableTalkerSession {
   dashboard?: boolean;
   superAdmin?: boolean;
+  /**
+   * Set once an INDIVIDUAL Super Admin account logs in. A session carrying
+   * only superAdmin=true (legacy shared-password era) is rejected by
+   * requireSuperAdmin as soon as the bootstrap cutover happened.
+   */
+  superAdminAccountId?: string;
+  superAdminSessionToken?: string;
+  areaManagerAccountId?: string;
+  areaManagerSessionToken?: string;
   superAdminReauthenticatedAt?: number;
 }
 
@@ -80,11 +89,80 @@ export async function requireDashboard() {
   return session;
 }
 
+type BootstrapState = { open: boolean; activeCount: number };
+
+async function readBootstrapState(): Promise<BootstrapState | null> {
+  const { getServiceClient } = await import("./remote-audio.server");
+  const client = getServiceClient();
+  if (!client) return null;
+  const { data, error } = await client.rpc("bootstrap_super_admin_state");
+  if (error || typeof data !== "object" || data === null) return null;
+  const raw = data as { open?: unknown; active_count?: unknown };
+  return {
+    open: raw.open === true,
+    activeCount: typeof raw.active_count === "number" ? raw.active_count : 0,
+  };
+}
+
+async function staffSessionAccount(
+  kind: "super_admin" | "area_manager",
+  token: string,
+): Promise<string | null> {
+  const { getServiceClient } = await import("./remote-audio.server");
+  const client = getServiceClient();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.rpc("get_staff_session", {
+      p_kind: kind,
+      p_token: token,
+    });
+    if (error || typeof data !== "string" || !data) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Authoritative Super Admin gate. Two valid states:
+ *  1. Individual account session — the bearer token must still exist in
+ *     staff_sessions (deactivation/password change revokes it) and map to
+ *     the same account.
+ *  2. Legacy shared-password session — only honored while the one-time
+ *     bootstrap gate is still open and no individual account is active.
+ * After the cutover, legacy cookies can never reach privileged actions.
+ */
 export async function requireSuperAdmin() {
   const session = await getAuthSession();
   if (session.data.superAdmin !== true) {
     throw new Error("UNAUTHORIZED");
   }
+  const accountId = session.data.superAdminAccountId;
+  const token = session.data.superAdminSessionToken;
+  if (accountId && token) {
+    const live = await staffSessionAccount("super_admin", token);
+    if (live !== accountId) throw new Error("UNAUTHORIZED");
+    return session;
+  }
+  const state = await readBootstrapState();
+  if (!state || !state.open || state.activeCount > 0) {
+    throw new Error("UNAUTHORIZED");
+  }
+  return session;
+}
+
+/**
+ * Authoritative Area Manager gate: bearer token must still live in
+ * staff_sessions and the AM account must be active. Scope checks for a
+ * specific restaurant always go through actor_can_manage_restaurant RPC.
+ */
+export async function requireAreaManager() {
+  const session = await getAuthSession();
+  const accountId = session.data.areaManagerAccountId;
+  const token = session.data.areaManagerSessionToken;
+  if (!accountId || !token) throw new Error("UNAUTHORIZED");
+  const live = await staffSessionAccount("area_manager", token);
+  if (live !== accountId) throw new Error("UNAUTHORIZED");
   return session;
 }
 
