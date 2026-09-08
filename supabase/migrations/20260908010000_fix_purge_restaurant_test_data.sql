@@ -6,7 +6,7 @@
 -- original file has been removed; the filename/version is kept only to
 -- preserve migration history order. The final cleanup (defensive privilege
 -- revocation + DROP FUNCTION) is performed by the next migration:
--- 20260909000000_drop_super_admin_purge_restaurant_test_data.sql.
+-- 20260908195839_drop_super_admin_purge_restaurant_test_data.sql.
 
 do $$
 begin

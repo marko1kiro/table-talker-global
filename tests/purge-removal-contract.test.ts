@@ -12,7 +12,7 @@ const tombstone = readFileSync(
 );
 const finalMigration = readFileSync(
   new URL(
-    "../supabase/migrations/20260909000000_drop_super_admin_purge_restaurant_test_data.sql",
+    "../supabase/migrations/20260908195839_drop_super_admin_purge_restaurant_test_data.sql",
     import.meta.url,
   ),
   "utf8",
