@@ -29,7 +29,13 @@ create table if not exists auth.users (
   updated_at timestamptz not null default now()
 );
 create or replace function auth.uid() returns uuid language sql stable as $$
-  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+  -- PostgREST sets the full claims JSON (request.jwt.claims); Supabase Auth
+  -- also sets the per-claim GUC (request.jwt.claim.sub). Read both, like the
+  -- real Supabase auth.uid().
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'
+  )::uuid
 $$;
 
 create schema if not exists realtime;

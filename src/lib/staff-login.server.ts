@@ -13,8 +13,9 @@ import {
   updateAuthSession,
   clearAuthSession,
   readCookieStaffTokens,
-  revokeStaffSessionByToken,
+  revokeStaffSessionByTokenIfLive,
   revokeManagerSessionByToken,
+  revokeManagerSessionByTokenIfLive,
   type TableTalkerSession,
 } from "./auth.server";
 import { loginManagerCore } from "./manager-auth.server";
@@ -103,6 +104,22 @@ async function safeReport(
 }
 
 /**
+ * R4-C: a success is only banked when the durable rate-limit completion
+ * returns an authoritative TRUE. false / throw / malformed / timeout all mean
+ * "completion not confirmed" — the caller must compensate (revoke the minted
+ * session, clear the cookie) and return a generic failure. Exactly ONE report
+ * happens per attempt: a failed completion is never retried (that would
+ * double-report and could flip a failed attempt into a success).
+ */
+async function confirmDurableSuccess(deps: StaffLoginDeps): Promise<boolean> {
+  try {
+    return (await deps.report(true)) === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * R3-A: revokes every OLD credential carried by this browser context
  * (cookie staff bearers + the surrendered manager token). Throws on failure
  * so the caller can fail closed instead of leaving two usable credentials.
@@ -159,7 +176,11 @@ export async function loginStaffCore(
     }
     // Review A4: wipe the shared cookie AFTER the server-side revocations.
     await deps.clearSession?.().catch(() => undefined);
-    await safeReport(deps.report, true);
+    // R4-C: the login is only usable once the durable completion confirms.
+    if (!(await confirmDurableSuccess(deps))) {
+      await deps.revokeManagerSessionByToken?.(managerResult.managerToken).catch(() => undefined);
+      return { ok: false, message: GENERIC };
+    }
     const extras = deps.managerExtras
       ? await deps.managerExtras(staffId)
       : { password_changed_at: "set" };
@@ -237,8 +258,13 @@ export async function loginStaffCore(
     await safeReport(deps.report, false);
     return { ok: false, message: GENERIC };
   }
-  // R3-C: report(true) only AFTER the cookie write made the login usable.
-  await safeReport(deps.report, true);
+  // R4-C: report(true) only AFTER the cookie write made the login usable,
+  // and the login only stands when the completion is authoritatively true.
+  if (!(await confirmDurableSuccess(deps))) {
+    await deps.revokeStaffSessionByToken?.("area_manager", token).catch(() => undefined);
+    await deps.clearSession?.().catch(() => undefined);
+    return { ok: false, message: GENERIC };
+  }
   return {
     ok: true,
     role: "area_manager",
@@ -268,9 +294,12 @@ export const loginStaff = createServerFn({ method: "POST" })
         updateSession: updateAuthSession,
         clearSession: clearAuthSession,
         // R3-A: server-authoritative revocation of the previous credentials.
+        // R4-B: cookie/sessionStorage tokens may already be dead — dead ones
+        // are skipped (provably unusable), live ones are revoked with
+        // mandatory semantics (a no-op fails closed).
         cookieStaffTokens: readCookieStaffTokens,
-        revokeStaffSessionByToken,
-        revokeManagerSessionByToken,
+        revokeStaffSessionByToken: revokeStaffSessionByTokenIfLive,
+        revokeManagerSessionByToken: revokeManagerSessionByTokenIfLive,
         managerExtras: async (staffId) => {
           const { data: extra, error } = await client
             .from("manager_accounts")
@@ -283,4 +312,29 @@ export const loginStaff = createServerFn({ method: "POST" })
       },
       { managerTokenToRevoke: data.managerToken ?? null },
     );
+  });
+
+// R4-A: browser handoff compensation. The server has already minted the
+// manager session when the browser starts its handoff (anon token, identity
+// write, navigation); any failure there must end the session server-side.
+// Idempotent logout semantics: a false verdict proves the token is already
+// unusable, so only errors fail the compensation. The raw token is its own
+// revocation proof (same trust model as the logout endpoint) and travels only
+// in this POST body.
+export const revokeManagerLoginCompensationInput = z.object({
+  managerToken: z.string().min(1).max(200),
+});
+
+export const revokeManagerLoginCompensation = createServerFn({ method: "POST" })
+  .validator(revokeManagerLoginCompensationInput)
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    try {
+      // Idempotent cleanup semantics (R4-B): false proves the token is
+      // already unusable; only transport/malformed errors fail the call.
+      // No liveness probe here — a probe failure must not read as "done".
+      await revokeManagerSessionByToken(data.managerToken);
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
   });

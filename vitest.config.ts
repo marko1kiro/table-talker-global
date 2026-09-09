@@ -5,6 +5,6 @@ export default defineConfig({
     alias: { "@": `${process.cwd()}/src` },
   },
   test: {
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
   },
 });

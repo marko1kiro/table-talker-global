@@ -737,9 +737,28 @@ declare
   v_actor_label text;
   v_ok boolean := false;
   v_restaurant_id uuid;
+  v_target_status text;
 begin
+  -- R4-E: EVERY denial is durably audited. Actor attribution keeps the real
+  -- actor id; a kind that violates the audit check constraint is recorded as
+  -- 'system' with the attempted kind in metadata (never a forged trusted
+  -- kind), and metadata never carries the submitted payload.
   if p_full_name is null or length(trim(p_full_name)) not between 1 and 80 then
+    perform public.write_admin_audit(
+      case when p_actor_kind in ('super_admin','area_manager') then p_actor_kind else 'system' end,
+      p_actor_id, null,
+      'profile.update', p_target_kind, p_target_id, null, 'denied', 'invalid name',
+      jsonb_build_object('attempted_actor_kind', p_actor_kind));
     return jsonb_build_object('ok', false, 'error', 'INVALID_NAME');
+  end if;
+
+  if p_target_kind not in ('super_admin','area_manager','manager') then
+    perform public.write_admin_audit(
+      case when p_actor_kind in ('super_admin','area_manager') then p_actor_kind else 'system' end,
+      p_actor_id, null,
+      'profile.update', p_target_kind, p_target_id, null, 'denied', 'invalid target kind',
+      jsonb_build_object('attempted_actor_kind', p_actor_kind));
+    return jsonb_build_object('ok', false, 'error', 'INVALID_TARGET');
   end if;
 
   -- Serialize with assignment revocation / AM deactivation (A3) BEFORE any
@@ -781,6 +800,28 @@ begin
     return jsonb_build_object('ok', false, 'error', 'NOT_AUTHORIZED');
   end if;
 
+  -- R4-E: distinguish the three NOT_FOUND shapes for the durable audit while
+  -- keeping the SAME generic verdict for every caller.
+  if p_target_kind = 'super_admin' then
+    select status into v_target_status from public.super_admin_accounts where id = p_target_id;
+  elsif p_target_kind = 'area_manager' then
+    select status into v_target_status from public.area_manager_accounts where id = p_target_id;
+  else
+    select status into v_target_status from public.manager_accounts where id = p_target_id;
+  end if;
+  if v_target_status is null then
+    perform public.write_admin_audit(p_actor_kind, p_actor_id, v_actor_label,
+      'profile.update', p_target_kind, p_target_id, v_restaurant_id, 'denied', 'target not found', '{}');
+    return jsonb_build_object('ok', false, 'error', 'NOT_FOUND');
+  end if;
+  if v_target_status <> 'aktif' then
+    perform public.write_admin_audit(p_actor_kind, p_actor_id, v_actor_label,
+      'profile.update', p_target_kind, p_target_id, v_restaurant_id, 'denied',
+      case when v_target_status = 'pending_activation' then 'target pending activation'
+           else 'target inactive' end, '{}');
+    return jsonb_build_object('ok', false, 'error', 'NOT_FOUND');
+  end if;
+
   case p_target_kind
     when 'super_admin' then
       update public.super_admin_accounts set full_name = trim(p_full_name), updated_at = now() where id = p_target_id and status = 'aktif';
@@ -791,6 +832,9 @@ begin
     else return jsonb_build_object('ok', false, 'error', 'INVALID_TARGET');
   end case;
   if not found then
+    -- TOCTOU fallback (status re-check raced) — same generic verdict, audited.
+    perform public.write_admin_audit(p_actor_kind, p_actor_id, v_actor_label,
+      'profile.update', p_target_kind, p_target_id, v_restaurant_id, 'denied', 'target not found', '{}');
     return jsonb_build_object('ok', false, 'error', 'NOT_FOUND');
   end if;
 

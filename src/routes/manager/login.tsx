@@ -4,8 +4,9 @@ import { ArrowLeft, Eye, EyeOff, Hash, Loader2, Lock } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { Footer } from "@/components/Footer";
-import { loginStaff } from "@/lib/staff-login.server";
+import { loginStaff, revokeManagerLoginCompensation } from "@/lib/staff-login.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { managerLoginHandoffCore } from "@/lib/manager-login-handoff";
 import {
   browserManagerStorage,
   readManagerIdentity,
@@ -51,24 +52,42 @@ function StaffLoginPage() {
         return;
       }
       if (result.role === "manager") {
-        const accessToken = await ensureAnonAccessToken(getSupabaseBrowserClient());
-        if (!accessToken) {
+        // R4-A: the server already minted the session — every handoff failure
+        // (anon token, identity write, navigation) must revoke it server-side
+        // before the final failure is shown. sessionStorage deletion is NOT
+        // revocation; the compensation endpoint is. No navigation happens on
+        // any failure path.
+        const handoff = await managerLoginHandoffCore(
+          {
+            idManager: result.idManager,
+            fullName: result.fullName,
+            restaurantId: result.restaurantId,
+            restaurantDisplayName: result.restaurantDisplayName,
+            restaurantCode: result.restaurantCode,
+            managerToken: result.managerToken,
+          },
+          {
+            ensureAccessToken: () => ensureAnonAccessToken(getSupabaseBrowserClient()),
+            getStorage: browserManagerStorage,
+            writeIdentity: writeManagerIdentity,
+            setReminderFlag: () => {
+              if (result.mustRemindPassword) {
+                sessionStorage.setItem("tt-password-reminder", "1");
+              }
+            },
+            navigate: () => navigate({ to: "/manager" }),
+            revokeCompensation: async (managerToken) => {
+              const r = await revokeManagerLoginCompensation({ data: { managerToken } });
+              return r?.ok === true;
+            },
+          },
+        );
+        if (!handoff.ok) {
+          // Generic failure for both handoff and compensation failure — the
+          // raw token never appears in any message, URL, or log.
           setError("Gagal memulai sesi. Coba lagi.");
           return;
         }
-        if (result.mustRemindPassword) {
-          sessionStorage.setItem("tt-password-reminder", "1");
-        }
-        writeManagerIdentity(browserManagerStorage(), {
-          idManager: result.idManager,
-          fullName: result.fullName,
-          restaurantId: result.restaurantId,
-          restaurantDisplayName: result.restaurantDisplayName,
-          restaurantCode: result.restaurantCode,
-          managerToken: result.managerToken,
-          accessToken,
-        });
-        void navigate({ to: "/manager" });
         return;
       }
       // Area Manager: cookie session sudah dibuat server-side; redirect by role.

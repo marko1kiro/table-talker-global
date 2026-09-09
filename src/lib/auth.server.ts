@@ -98,34 +98,95 @@ export async function readCookieStaffTokens(): Promise<{
 }
 
 /**
+ * R4-B: the RPC verdict is part of the contract. true = the row was deleted
+ * (provably revoked). false = nothing matched — for IDEMPOTENT logout/cleanup
+ * that proves the token is already unusable, but for a MANDATORY switch
+ * revocation of a known-live session it is an unexplained no-op and MUST fail
+ * closed. Malformed payloads and transport errors are never silent successes.
+ */
+export type RevokeSessionByTokenOpts = { requireRevoked?: boolean };
+
+/**
  * Revokes exactly ONE staff session by its raw bearer token (the token acts
  * as its own revocation proof, like a logout endpoint). Scoped to a single
- * row — never all devices. Throws on transport failure so callers can fail
- * closed instead of leaving two usable credentials.
+ * row — never all devices. Throws on transport failure, malformed response,
+ * or an unexplained false in mandatory mode so callers can fail closed
+ * instead of leaving two usable credentials.
  */
 export async function revokeStaffSessionByToken(
   kind: "super_admin" | "area_manager",
   token: string,
+  opts: RevokeSessionByTokenOpts = {},
 ): Promise<void> {
   const { getServiceClient } = await import("./remote-audio.server");
   const client = getServiceClient();
   if (!client) throw new Error("UNAVAILABLE");
-  const { error } = await client.rpc("revoke_staff_session_by_token", {
+  const { data, error } = await client.rpc("revoke_staff_session_by_token", {
     p_kind: kind,
     p_token: token,
   });
   if (error) throw new Error("REVOKE_FAILED");
+  if (data !== true && data !== false) throw new Error("REVOKE_MALFORMED");
+  if (data === false && opts.requireRevoked) throw new Error("REVOKE_NOT_REVOKED");
 }
 
 /** Same as revokeStaffSessionByToken for the manager bearer namespace. */
-export async function revokeManagerSessionByToken(token: string): Promise<void> {
+export async function revokeManagerSessionByToken(
+  token: string,
+  opts: RevokeSessionByTokenOpts = {},
+): Promise<void> {
   const { getServiceClient } = await import("./remote-audio.server");
   const client = getServiceClient();
   if (!client) throw new Error("UNAVAILABLE");
-  const { error } = await client.rpc("revoke_manager_session_by_token", {
+  const { data, error } = await client.rpc("revoke_manager_session_by_token", {
     p_token: token,
   });
   if (error) throw new Error("REVOKE_FAILED");
+  if (data !== true && data !== false) throw new Error("REVOKE_MALFORMED");
+  if (data === false && opts.requireRevoked) throw new Error("REVOKE_NOT_REVOKED");
+}
+
+/**
+ * R4-B: an OLD credential read from a cookie/sessionStorage may already be
+ * dead (expired, previously revoked). A dead token provably cannot
+ * authenticate, so it is skipped; a LIVE one is revoked with mandatory
+ * semantics — a no-op there fails closed. This keeps a stale cookie/session
+ * identity from wedging every future login while never tolerating a live
+ * credential that failed to be revoked.
+ */
+export async function revokeStaffSessionByTokenIfLive(
+  kind: "super_admin" | "area_manager",
+  token: string,
+): Promise<void> {
+  if (await staffSessionTokenLive(kind, token)) {
+    await revokeStaffSessionByToken(kind, token, { requireRevoked: true });
+  }
+}
+
+export async function revokeManagerSessionByTokenIfLive(token: string): Promise<void> {
+  if (await managerSessionTokenLive(token)) {
+    await revokeManagerSessionByToken(token, { requireRevoked: true });
+  }
+}
+
+async function staffSessionTokenLive(
+  kind: "super_admin" | "area_manager",
+  token: string,
+): Promise<boolean> {
+  const live = await staffSessionAccount(kind, token);
+  return typeof live === "string" && live.length > 0;
+}
+
+async function managerSessionTokenLive(token: string): Promise<boolean> {
+  const { getServiceClient } = await import("./remote-audio.server");
+  const client = getServiceClient();
+  if (!client) return false;
+  try {
+    const { data, error } = await client.rpc("get_manager_id_by_token", { p_token: token });
+    return !error && typeof data === "string" && data.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 export async function requireDashboard() {

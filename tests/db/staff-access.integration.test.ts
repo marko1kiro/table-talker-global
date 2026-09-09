@@ -2227,3 +2227,285 @@ describe("R3-G: realtime bind isolation under revocation", () => {
     await b.end();
   });
 });
+
+describe("R4-B: stale-token replay after revocation is rejected server-side", () => {
+  test("revoked manager token maps to NO account and cannot mint anything", async () => {
+    const c = await db.client();
+    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    expect(await rpcOk<string | null>(c, "get_manager_id_by_token", { p_token: token })).toBe(
+      managerId,
+    );
+    await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: token });
+    expect(await rpcOk<string | null>(c, "get_manager_id_by_token", { p_token: token })).toBeNull();
+  });
+
+  test("revoked staff token maps to NO account", async () => {
+    const c = await db.client();
+    const token = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "area_manager",
+      p_account_id: am1Id,
+    });
+    await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+      p_kind: "area_manager",
+      p_token: token,
+    });
+    expect(
+      await rpcOk<string | null>(c, "get_staff_session", {
+        p_kind: "area_manager",
+        p_token: token,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("R4-C: rate-limit completion is durable and one-outcome per attempt", () => {
+  const clientHash = "a".repeat(64);
+  const ipHash = "b".repeat(64);
+
+  test("successful completion consumes the reservation exactly once and clears failures", async () => {
+    const c = await db.client();
+    const rid = await rpcOk<string>(c, "reserve_owner_login_attempt", {
+      p_client_bucket_hash: clientHash,
+      p_ip_bucket_hash: ipHash,
+    });
+    expect(rid).toBeTruthy();
+    expect(
+      await rpcOk<boolean>(c, "complete_owner_login_attempt", {
+        p_reservation_id: rid,
+        p_success: true,
+      }),
+    ).toBe(true);
+    // One durable outcome: a second completion of the SAME reservation is false.
+    expect(
+      await rpcOk<boolean>(c, "complete_owner_login_attempt", {
+        p_reservation_id: rid,
+        p_success: false,
+      }),
+    ).toBe(false);
+    const consumed = await oneText(
+      c,
+      `select (consumed_at is not null)::text as n from public.owner_login_rate_limit_reservations where id = $1`,
+      [rid],
+    );
+    expect(consumed).toBe("true");
+    const failures = await scalar(
+      c,
+      `select failures from public.owner_login_rate_limit_buckets where bucket_hash = $1`,
+      [clientHash],
+    );
+    expect(failures).toBe(0);
+  });
+
+  test("failed completion records a durable failure on the bucket", async () => {
+    const c = await db.client();
+    const rid = await rpcOk<string>(c, "reserve_owner_login_attempt", {
+      p_client_bucket_hash: clientHash,
+      p_ip_bucket_hash: ipHash,
+    });
+    expect(
+      await rpcOk<boolean>(c, "complete_owner_login_attempt", {
+        p_reservation_id: rid,
+        p_success: false,
+      }),
+    ).toBe(true);
+    const failures = await scalar(
+      c,
+      `select failures from public.owner_login_rate_limit_buckets where bucket_hash = $1`,
+      [clientHash],
+    );
+    expect(failures).toBe(1);
+  });
+});
+
+describe("R4-E: profile denials are durably audited with safe attribution", () => {
+  async function latestProfileAudit(c: Client): Promise<{
+    actor_kind: string;
+    actor_id: string | null;
+    actor_label: string | null;
+    result: string;
+    reason: string | null;
+    attempted: string | null;
+  }> {
+    const row = await c.query(
+      `select actor_kind, actor_id::text as actor_id, actor_label, result, reason,
+              metadata->>'attempted_actor_kind' as attempted
+       from public.admin_audit_log
+       where action = 'profile.update'
+       order by created_at desc, id desc
+       limit 1`,
+    );
+    return row.rows[0];
+  }
+
+  test("INVALID_NAME is audited with the real actor", async () => {
+    const c = await db.client();
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "super_admin",
+        p_actor_id: sa1Id,
+        p_target_kind: "manager",
+        p_target_id: managerId,
+        p_full_name: "   ",
+      },
+      "INVALID_NAME",
+    );
+    const audit = await latestProfileAudit(c);
+    expect(audit.result).toBe("denied");
+    expect(audit.reason).toBe("invalid name");
+    expect(audit.actor_kind).toBe("super_admin");
+    expect(audit.actor_id).toBe(sa1Id);
+    expect(audit.attempted).toBe("super_admin");
+  });
+
+  test("an UNKNOWN actor kind is recorded as 'system' WITHOUT losing the actor id", async () => {
+    const c = await db.client();
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "manager",
+        p_actor_id: managerId,
+        p_target_kind: "manager",
+        p_target_id: managerId,
+        p_full_name: "   ",
+      },
+      "INVALID_NAME",
+    );
+    const audit = await latestProfileAudit(c);
+    expect(audit.actor_kind).toBe("system");
+    expect(audit.attempted).toBe("manager");
+    expect(audit.actor_id).toBe(managerId);
+  });
+
+  test("INVALID_TARGET is audited", async () => {
+    const c = await db.client();
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "super_admin",
+        p_actor_id: sa1Id,
+        p_target_kind: "crew",
+        p_target_id: managerId,
+        p_full_name: "Valid Name",
+      },
+      "INVALID_TARGET",
+    );
+    const audit = await latestProfileAudit(c);
+    expect(audit.result).toBe("denied");
+    expect(audit.reason).toBe("invalid target kind");
+    expect(audit.actor_id).toBe(sa1Id);
+  });
+
+  test("unknown target is audited as 'target not found'", async () => {
+    const c = await db.client();
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "super_admin",
+        p_actor_id: sa1Id,
+        p_target_kind: "manager",
+        p_target_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        p_full_name: "Valid Name",
+      },
+      "NOT_FOUND",
+    );
+    const audit = await latestProfileAudit(c);
+    expect(audit.reason).toBe("target not found");
+    expect(audit.result).toBe("denied");
+  });
+
+  test("INACTIVE target is audited as 'target inactive'", async () => {
+    const c = await db.client();
+    const created = await okVerdict(c, "create_manager_account", {
+      p_actor_kind: "super_admin",
+      p_actor_id: sa1Id,
+      p_staff_id: "r4.audit.target",
+      p_full_name: "R4 Audit Target",
+      p_restaurant_id: R2,
+      p_password_hash: "salt:hash",
+    });
+    const targetId = created.id as string;
+    await okVerdict(c, "set_manager_status", {
+      p_actor_kind: "super_admin",
+      p_actor_id: sa1Id,
+      p_manager_id: targetId,
+      p_new_status: "nonaktif",
+    });
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "super_admin",
+        p_actor_id: sa1Id,
+        p_target_kind: "manager",
+        p_target_id: targetId,
+        p_full_name: "Ghost Rename",
+      },
+      "NOT_FOUND",
+    );
+    const audit = await latestProfileAudit(c);
+    expect(audit.reason).toBe("target inactive");
+    expect(audit.result).toBe("denied");
+    // Cleanup: remove the disposable manager from the registry namespace.
+    await c.query(`delete from public.manager_accounts where id = $1`, [targetId]);
+    await c.query(`delete from public.staff_id_registry where account_id = $1`, [targetId]);
+  });
+
+  test("PENDING-INVITE super admin target is audited as 'target pending activation'", async () => {
+    const c = await db.client();
+    const invite = await okVerdict(c, "create_super_admin_invite", {
+      p_staff_id: "r4.pending",
+      p_full_name: "R4 Pending",
+      p_email: "r4.pending@example.test",
+      p_invitation_token_hash: "x".repeat(64),
+      p_creator_id: sa1Id,
+    });
+    const pendingId = invite.id as string;
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "super_admin",
+        p_actor_id: sa1Id,
+        p_target_kind: "super_admin",
+        p_target_id: pendingId,
+        p_full_name: "Pending Rename",
+      },
+      "NOT_FOUND",
+    );
+    const audit = await latestProfileAudit(c);
+    expect(audit.reason).toBe("target pending activation");
+    expect(audit.result).toBe("denied");
+    await okVerdict(c, "cancel_super_admin_invite", {
+      p_super_admin_id: pendingId,
+      p_actor_id: sa1Id,
+    });
+  });
+
+  test("INVALID_NAME denial metadata carries ONLY the attempted actor kind (no payload)", async () => {
+    const c = await db.client();
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "super_admin",
+        p_actor_id: sa1Id,
+        p_target_kind: "manager",
+        p_target_id: managerId,
+        p_full_name: "   ",
+      },
+      "INVALID_NAME",
+    );
+    const exact = await oneText(
+      c,
+      `select (metadata = jsonb_build_object('attempted_actor_kind', 'super_admin'))::text
+       from public.admin_audit_log
+       where action = 'profile.update' order by created_at desc, id desc limit 1`,
+    );
+    expect(exact).toBe("true");
+  });
+});

@@ -56,6 +56,7 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
           overrides.report ??
           (async (v: boolean) => {
             reports.push(v);
+            // R4-C: an authoritative completion returns true.
             return true;
           }),
         updateSession: overrides.updateSession ?? (async () => undefined),
@@ -71,6 +72,7 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
       },
       report: async (v) => {
         order.push(`report:${v}`);
+        return v;
       },
     });
     const r = await loginStaffCore("am.satu", "pw", deps);
@@ -120,14 +122,23 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
     }
   });
 
-  it("a throwing reporter never leaves an ambiguous outcome", async () => {
+  it("a throwing reporter FAILS THE LOGIN CLOSED (R4-C): no usable session survives", async () => {
+    const revoked: string[] = [];
     const { deps } = amDeps({
       report: async () => {
         throw new Error("rate limiter down");
       },
     });
-    const okResult = await loginStaffCore("am.satu", "pw", deps);
-    expect(okResult.ok).toBe(true);
+    // Success path with an unconfirmable completion: the just-minted session
+    // is revoked and the attempt returns the generic failure.
+    const okResult = await loginStaffCore("am.satu", "pw", {
+      ...deps,
+      revokeStaffSessionByToken: async (kind, token) => {
+        revoked.push(`${kind}:${token}`);
+      },
+    });
+    expect(okResult.ok).toBe(false);
+    expect(revoked).toEqual(["area_manager:amtok"]);
     const failResult = await loginStaffCore("ghost", "pw", {
       ...deps,
       rpc: async () => err("invalid credentials"),

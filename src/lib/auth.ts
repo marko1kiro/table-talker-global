@@ -102,6 +102,8 @@ export type SuperAdminLoginDeps = {
   revokeManagerSessionByToken?: (token: string) => Promise<void>;
   /** R3-A: the OLD manager bearer token surrendered by this browser. */
   managerTokenToRevoke?: string | null;
+  /** R4-C: wipes the shared cookie when a banked success must be undone. */
+  clearSession?: () => Promise<unknown>;
 };
 
 type SuperAdminLoginData = {
@@ -128,6 +130,19 @@ export async function superAdminLoginCore(
       await deps.report(valid);
     } catch {
       // the limiter must never break the login outcome
+    }
+  };
+  /**
+   * R4-C: a success stands only when the durable completion returns an
+   * authoritative TRUE. false / throw / malformed = not confirmed: undo the
+   * login (revoke the minted session, clear the cookie) and fail generically.
+   * The report is never retried — one durable outcome per attempt.
+   */
+  const confirmDurableSuccess = async (): Promise<boolean> => {
+    try {
+      return (await deps.report(true)) === true;
+    } catch {
+      return false;
     }
   };
   /**
@@ -180,7 +195,12 @@ export async function superAdminLoginCore(
         areaManagerAccountId: undefined,
         areaManagerSessionToken: undefined,
       });
-      await report(true);
+      // R4-C: no bearer session exists on the legacy path, but a completion
+      // that did not confirm still must not leave the cookie logged in.
+      if (!(await confirmDurableSuccess())) {
+        await deps.clearSession?.().catch(() => undefined);
+        return fail();
+      }
       return { ok: true as const };
     }
 
@@ -235,7 +255,12 @@ export async function superAdminLoginCore(
       await report(false);
       return fail();
     }
-    await report(true);
+    // R4-C: the usable cookie only stands on an authoritative completion.
+    if (!(await confirmDurableSuccess())) {
+      await deps.revokeStaffSessionByToken?.("super_admin", token).catch(() => undefined);
+      await deps.clearSession?.().catch(() => undefined);
+      return fail();
+    }
     return { ok: true as const };
   } catch {
     // updateSession (cookie write) or an unexpected transport error — the
@@ -260,8 +285,9 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
       isPasswordValid,
       updateAuthSession,
       readCookieStaffTokens,
-      revokeStaffSessionByToken,
-      revokeManagerSessionByToken,
+      clearAuthSession,
+      revokeStaffSessionByTokenIfLive,
+      revokeManagerSessionByTokenIfLive,
     } = await import("./auth.server");
     const { getServiceClient } = await import("./remote-audio.server");
     const { verifyManagerPassword } = await import("./manager-password.server");
@@ -269,9 +295,12 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
     if (!client) return ownerLoginFailure();
     const revocationDeps = {
       cookieStaffTokens: readCookieStaffTokens,
-      revokeStaffSessionByToken,
-      revokeManagerSessionByToken,
+      // R4-B: dead old tokens are skipped, live ones revoked with mandatory
+      // semantics (see revokeStaffSessionByTokenIfLive).
+      revokeStaffSessionByToken: revokeStaffSessionByTokenIfLive,
+      revokeManagerSessionByToken: revokeManagerSessionByTokenIfLive,
       managerTokenToRevoke: data.managerToken ?? null,
+      clearSession: clearAuthSession,
     };
 
     if (data.mode === "legacy") {
