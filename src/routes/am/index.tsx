@@ -10,6 +10,7 @@ import { TaCard } from "@/components/dashboard/ui";
 import {
   amAudit,
   amChangeOwnPassword,
+  amCreateManager,
   amDecideManagerReset,
   amLogout,
   amManagers,
@@ -18,7 +19,9 @@ import {
   amScope,
   amSetManagerStatus,
   getAmStatus,
+  updateOwnAmProfile,
 } from "@/lib/area-manager.server";
+import { EditProfileDialog } from "@/components/dashboard/EditProfileDialog";
 import { isOwnerQueryKey } from "@/lib/owner-query-cache";
 
 export const Route = createFileRoute("/am/")({
@@ -34,6 +37,7 @@ function AreaManagerDashboard() {
   const queryClient = useQueryClient();
   const auth = Route.useLoaderData();
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
 
   const scope = useQuery({ queryKey: ["am", "scope"], queryFn: () => amScope() });
   const managers = useQuery({ queryKey: ["am", "managers"], queryFn: () => amManagers() });
@@ -57,6 +61,15 @@ function AreaManagerDashboard() {
   const decide = useMutation({
     mutationFn: (input: { requestId: string; decision: "approved" | "rejected" }) =>
       amDecideManagerReset({ data: input }),
+    onSuccess: invalidate,
+  });
+  const createManager = useMutation({
+    mutationFn: (input: {
+      staffId: string;
+      fullName: string;
+      restaurantId: string;
+      password: string;
+    }) => amCreateManager({ data: input }),
     onSuccess: invalidate,
   });
   const changePassword = useMutation({
@@ -104,9 +117,14 @@ function AreaManagerDashboard() {
       headerRight={
         <DashboardHeaderRight
           roleLabel="AREA MANAGER"
-          profile={{ name: "Area Manager", canChangePassword: true }}
+          profile={{
+            name: auth.authenticated ? auth.fullName : "Area Manager",
+            idManager: auth.authenticated ? auth.staffId : undefined,
+            canChangePassword: true,
+          }}
           onLogout={() => void handleLogout()}
           onChangePassword={() => setChangePasswordOpen(true)}
+          onEditProfile={() => setEditProfileOpen(true)}
         />
       }
       footer={<Footer className="mt-0 border-0 dark:bg-transparent" />}
@@ -217,6 +235,18 @@ function AreaManagerDashboard() {
         )}
       </TaCard>
 
+      {auth.authenticated && scope.data?.ok ? (
+        <CreateManagerCard
+          restaurants={scope.data.restaurants.map((r) => ({
+            id: String(r.restaurant_id),
+            name: String(r.display_name),
+          }))}
+          busy={createManager.isPending}
+          onCreate={(input) => createManager.mutateAsync(input)}
+          lastResult={createManager.data}
+        />
+      ) : null}
+
       <TaCard title="Audit Pengelolaan Manager" description="Hanya restoran dalam scope Anda.">
         {audit.isLoading && <Loader2 className="size-4 animate-spin" />}
         {audit.data?.ok && (
@@ -246,7 +276,159 @@ function AreaManagerDashboard() {
           return result;
         }}
       />
+      {auth.authenticated ? (
+        <EditProfileDialog
+          key={auth.fullName}
+          open={editProfileOpen}
+          currentName={auth.fullName}
+          onOpenChange={setEditProfileOpen}
+          onSubmit={async (fullName) => {
+            const result = await updateOwnAmProfile({ data: { fullName } });
+            if (result.ok) await queryClient.invalidateQueries();
+            return result;
+          }}
+        />
+      ) : null}
     </AppShell>
+  );
+}
+
+function CreateManagerCard({
+  restaurants,
+  busy,
+  onCreate,
+  lastResult,
+}: {
+  restaurants: { id: string; name: string }[];
+  busy: boolean;
+  onCreate: (input: {
+    staffId: string;
+    fullName: string;
+    restaurantId: string;
+    password: string;
+  }) => Promise<{ ok: boolean; code?: string }>;
+  lastResult: { ok: boolean; code?: string } | undefined;
+}) {
+  const [fullName, setFullName] = useState("");
+  const [staffId, setStaffId] = useState("");
+  const [restaurantId, setRestaurantId] = useState(restaurants[0]?.id ?? "");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const canSubmit =
+    fullName.trim().length >= 1 &&
+    /^[a-z0-9._-]{3,32}$/.test(staffId.trim().toLowerCase()) &&
+    !!restaurantId &&
+    password.length >= 8;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!canSubmit || busy) return;
+    setError("");
+    try {
+      const result = await onCreate({
+        staffId: staffId.trim().toLowerCase(),
+        fullName: fullName.trim(),
+        restaurantId,
+        password,
+      });
+      if (!result.ok) {
+        setError(
+          result.code === "STAFF_ID_TAKEN"
+            ? "ID sudah dipakai (global, permanen)."
+            : result.code === "STAFF_ID_INVALID"
+              ? "ID tidak valid."
+              : result.code === "NOT_AUTHORIZED"
+                ? "Restoran di luar scope Anda."
+                : "Gagal membuat Manager.",
+        );
+        return;
+      }
+      setPassword("");
+    } catch {
+      setError("Gagal membuat Manager.");
+    }
+  }
+
+  if (restaurants.length === 0) return null;
+  return (
+    <TaCard
+      title="Tambah Manager"
+      description="ID bersifat permanen dan tidak dapat diubah/dipakai ulang."
+    >
+      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-bold text-slate-600">
+          Nama Lengkap
+          <input
+            aria-label="Nama Manager Baru"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            maxLength={80}
+            required
+            className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal"
+          />
+        </label>
+        <label className="text-xs font-bold text-slate-600">
+          ID Staf (3-32, [a-z0-9._-])
+          <input
+            aria-label="ID Staf Manager Baru"
+            value={staffId}
+            onChange={(e) => setStaffId(e.target.value)}
+            pattern="[a-zA-Z0-9._-]{3,32}"
+            required
+            className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal"
+          />
+        </label>
+        <label className="text-xs font-bold text-slate-600">
+          Restoran
+          <select
+            aria-label="Restoran Manager Baru"
+            value={restaurantId}
+            onChange={(e) => setRestaurantId(e.target.value)}
+            className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal"
+          >
+            {restaurants.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-bold text-slate-600">
+          Password Awal (min. 8)
+          <input
+            type="password"
+            aria-label="Password Awal Manager Baru"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            required
+            className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 px-2 text-sm font-normal"
+          />
+        </label>
+        <div className="sm:col-span-2">
+          {error && (
+            <p
+              role="alert"
+              className="mb-2 rounded-lg bg-ta-error/10 px-3 py-2 text-sm font-semibold text-ta-error"
+            >
+              {error}
+            </p>
+          )}
+          {!error && lastResult?.ok ? (
+            <p className="mb-2 text-sm font-semibold text-emerald-600">Manager berhasil dibuat.</p>
+          ) : null}
+          <button
+            type="submit"
+            disabled={!canSubmit || busy}
+            className="min-h-10 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {busy && <Loader2 className="mr-1 inline size-4 animate-spin" />}
+            Buat Manager
+          </button>
+        </div>
+      </form>
+    </TaCard>
   );
 }
 

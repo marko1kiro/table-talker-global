@@ -166,15 +166,71 @@ export async function requireAreaManager() {
   return session;
 }
 
+/**
+ * Reauthentication decision core (review B13). For an INDIVIDUAL Super Admin
+ * session the submitted password must verify against THAT account's scrypt
+ * hash — never the shared legacy env password. The shared SUPER_ADMIN_PASSWORD
+ * path exists only for legacy sessions during the bootstrap era (which
+ * requireSuperAdmin already restricts to "gate open, no active individual").
+ */
+export async function superAdminReauthCore(
+  password: string,
+  mode: "individual" | "legacy",
+  stored: { individualHash: string | null; legacyPassword: string | null },
+  verify: (password: string, stored: string) => Promise<boolean> = verifyManagerPasswordStatic,
+): Promise<boolean> {
+  if (mode === "individual") {
+    if (!stored.individualHash) return false;
+    return verify(password, stored.individualHash).catch(() => false);
+  }
+  try {
+    return isPasswordValid(password, stored.legacyPassword);
+  } catch {
+    return false;
+  }
+}
+
+async function verifyManagerPasswordStatic(password: string, stored: string): Promise<boolean> {
+  const { verifyManagerPassword } = await import("./manager-password.server");
+  return verifyManagerPassword(password, stored);
+}
+
+/**
+ * Danger-operation reauthentication, bound to the CURRENT session identity:
+ *  - individual session -> the linked Super Admin account's password;
+ *  - legacy session -> SUPER_ADMIN_PASSWORD, only while requireSuperAdmin still
+ *    honors the bootstrap era.
+ * A 5-minute window is granted per session after a successful check.
+ */
 export async function requireRecentSuperAdmin(password: string) {
   const session = await requireSuperAdmin();
-  const expectedPassword = process.env.SUPER_ADMIN_PASSWORD ?? null;
-  if (!isPasswordValid(password, expectedPassword)) throw new Error("UNAUTHORIZED");
   const now = Date.now();
   if (
     session.data.superAdminReauthenticatedAt &&
     now - session.data.superAdminReauthenticatedAt <= 5 * 60 * 1000
-  )
+  ) {
     return;
+  }
+  const accountId = session.data.superAdminAccountId;
+  const token = session.data.superAdminSessionToken;
+  let ok = false;
+  if (accountId && token) {
+    const { getServiceClient } = await import("./remote-audio.server");
+    const client = getServiceClient();
+    const cred = client
+      ? ((await client.rpc("get_super_admin_credential_by_id", { p_account_id: accountId }))
+          .data as { password_hash: string | null } | null)
+      : null;
+    ok = await superAdminReauthCore(password, "individual", {
+      individualHash: cred?.password_hash ?? null,
+      legacyPassword: null,
+    });
+  } else {
+    ok = await superAdminReauthCore(password, "legacy", {
+      individualHash: null,
+      legacyPassword: process.env.SUPER_ADMIN_PASSWORD ?? null,
+    });
+  }
+  if (!ok) throw new Error("UNAUTHORIZED");
   await updateAuthSession({ superAdminReauthenticatedAt: now });
 }

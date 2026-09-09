@@ -49,7 +49,9 @@ grant execute on function public.write_admin_audit(text, uuid, text, text, text,
 
 -- Claims a staff ID in the permanent global registry. Raises STAFF_ID_TAKEN
 -- on any collision, including collisions with legacy manager_accounts rows
--- (the manager namespace predates the registry). IDs are never released.
+-- (the manager namespace predates the registry; the account being created in
+-- the same transaction is excluded so claim-after-insert stays atomic).
+-- IDs are never released once their account becomes usable.
 create or replace function public.claim_staff_id(
   p_staff_id text,
   p_kind text,
@@ -67,7 +69,7 @@ begin
     raise exception 'STAFF_ID_INVALID';
   end if;
   if p_kind = 'manager' and exists (
-    select 1 from public.manager_accounts where id_manager = v_id
+    select 1 from public.manager_accounts where id_manager = v_id and id <> p_account_id
   ) then
     raise exception 'STAFF_ID_TAKEN';
   end if;
@@ -82,6 +84,20 @@ end;
 $$;
 revoke all on function public.claim_staff_id(text, text, uuid) from public, anon, authenticated;
 grant execute on function public.claim_staff_id(text, text, uuid) to service_role;
+
+-- Serializes claim+insert for one staff ID so two concurrent creations of the
+-- same ID deterministically produce exactly one winner (advisory transaction
+-- lock, released at transaction end).
+create or replace function public.lock_staff_id_claim(p_staff_id text)
+returns void
+language sql
+security definer
+set search_path = public, pg_catalog
+as $$
+  select pg_advisory_xact_lock(hashtextextended('staff_claim:' || lower(trim(p_staff_id)), 0));
+$$;
+revoke all on function public.lock_staff_id_claim(text) from public, anon, authenticated;
+grant execute on function public.lock_staff_id_claim(text) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- Sessions
@@ -285,6 +301,9 @@ declare
   v_count integer;
   v_id uuid;
 begin
+  -- One-time bootstrap must be race-proof: serialize contenders, then re-read
+  -- the gate inside the lock so parallel creations yield exactly one account.
+  perform pg_advisory_xact_lock(hashtext('super_admin_bootstrap'));
   select value->>'open' = 'true', (select count(*) from public.super_admin_accounts where status <> 'cancelled')
   into v_open, v_count
   from public.system_settings where key = 'super_admin_bootstrap';
@@ -294,6 +313,7 @@ begin
   if not public.staff_id_is_valid(lower(trim(p_staff_id))) then
     raise exception 'STAFF_ID_INVALID';
   end if;
+  perform public.lock_staff_id_claim(p_staff_id);
 
   insert into public.super_admin_accounts
     (staff_id, full_name, email, password_hash, status, invitation_token_hash, invitation_expires_at)
@@ -336,6 +356,7 @@ begin
   if not public.staff_id_is_valid(lower(trim(p_staff_id))) then
     raise exception 'STAFF_ID_INVALID';
   end if;
+  perform public.lock_staff_id_claim(p_staff_id);
 
   insert into public.super_admin_accounts
     (staff_id, full_name, email, password_hash, status, invitation_token_hash, invitation_expires_at, created_by)
@@ -427,6 +448,9 @@ declare
   v_account public.super_admin_accounts%rowtype;
   v_was_first boolean;
 begin
+  -- Serializes first-activation/cutover with lifecycle mutations so the
+  -- was_first determination and the one-way gate flip stay race-free.
+  perform pg_advisory_xact_lock(hashtext('super_admin_lifecycle'));
   select * into v_account from public.super_admin_accounts
   where staff_id = lower(trim(p_staff_id))
     and invitation_token_hash = encode(extensions.digest(p_token, 'sha256'), 'hex')
@@ -533,6 +557,9 @@ declare
 begin
   select * into v_actor from public.super_admin_accounts where id = p_actor_id and status = 'aktif';
   if v_actor.id is null then raise exception 'NOT_AUTHORIZED'; end if;
+  -- Serialize lifecycle mutations: two parallel deactivations can never both
+  -- pass the "more than one active" check (min-1-active invariant).
+  perform pg_advisory_xact_lock(hashtext('super_admin_lifecycle'));
   select * into v_target from public.super_admin_accounts where id = p_target_id for update;
   if v_target.id is null or v_target.status = 'cancelled' then raise exception 'NOT_FOUND'; end if;
   if p_new_status not in ('aktif','nonaktif') then raise exception 'INVALID_STATUS'; end if;
@@ -589,6 +616,11 @@ begin
       select 1 from public.area_manager_assignments a
       where a.area_manager_id = p_actor_id and a.restaurant_id = v_restaurant_id and a.removed_at is null
     );
+  elsif p_actor_kind = 'area_manager' and p_target_kind = 'area_manager' then
+    -- An Area Manager may rename ONLY their own profile (ID is immutable).
+    select am.staff_id into v_actor_label from public.area_manager_accounts am
+    where am.id = p_actor_id and am.status = 'aktif';
+    v_ok := v_actor_label is not null and p_target_id = p_actor_id;
   else
     v_ok := false;
   end if;
@@ -710,6 +742,9 @@ declare
 begin
   select * into v_actor from public.super_admin_accounts where id = p_actor_id and status = 'aktif';
   if v_actor.id is null then raise exception 'NOT_AUTHORIZED'; end if;
+  -- Shared serialization key with set_area_manager_status (min-1-active-AM
+  -- invariant must hold across revoke + deactivate run in parallel).
+  perform pg_advisory_xact_lock(hashtext('area_manager_lifecycle'));
 
   select count(distinct a.area_manager_id) into v_active_am_count
   from public.area_manager_assignments a
@@ -798,6 +833,7 @@ begin
   select * into v_actor from public.super_admin_accounts where id = p_actor_id and status = 'aktif';
   if v_actor.id is null then raise exception 'NOT_AUTHORIZED'; end if;
   if not public.staff_id_is_valid(lower(trim(p_staff_id))) then raise exception 'STAFF_ID_INVALID'; end if;
+  perform public.lock_staff_id_claim(p_staff_id);
 
   insert into public.area_manager_accounts (staff_id, full_name, password_hash, created_by)
   values (lower(trim(p_staff_id)), trim(p_full_name), p_password_hash, p_actor_id)
@@ -825,10 +861,18 @@ set search_path = public
 as $$
 declare
   v_actor public.super_admin_accounts%rowtype;
+  v_target public.area_manager_accounts%rowtype;
   v_guarded_restaurant uuid;
 begin
   select * into v_actor from public.super_admin_accounts where id = p_actor_id and status = 'aktif';
   if v_actor.id is null then raise exception 'NOT_AUTHORIZED'; end if;
+  -- Serialize AM lifecycle + assignment mutations (shared key with
+  -- revoke_area_manager_assignment) so the min-1-active-AM-per-restaurant
+  -- invariant is race-proof across both paths.
+  perform pg_advisory_xact_lock(hashtext('area_manager_lifecycle'));
+  -- Reject a missing target before any audit write or session revocation.
+  select * into v_target from public.area_manager_accounts where id = p_target_id for update;
+  if v_target.id is null then raise exception 'NOT_FOUND'; end if;
   if p_new_status not in ('aktif','nonaktif') then raise exception 'INVALID_STATUS'; end if;
 
   if p_new_status = 'nonaktif' then
@@ -902,6 +946,7 @@ declare
   v_actor_label text;
   v_restaurant public.restaurants%rowtype;
   v_id uuid;
+  v_staff_id text := lower(trim(p_staff_id));
 begin
   select * into v_restaurant from public.restaurants where id = p_restaurant_id and is_active;
   if v_restaurant.id is null then raise exception 'RESTAURANT_NOT_FOUND'; end if;
@@ -910,7 +955,7 @@ begin
       'manager', null, p_restaurant_id, 'denied', 'not authorized', '{}');
     raise exception 'NOT_AUTHORIZED';
   end if;
-  if not public.staff_id_is_valid(lower(trim(p_staff_id))) then raise exception 'STAFF_ID_INVALID'; end if;
+  if not public.staff_id_is_valid(v_staff_id) then raise exception 'STAFF_ID_INVALID'; end if;
 
   if p_actor_kind = 'super_admin' then
     select staff_id into v_actor_label from public.super_admin_accounts where id = p_actor_id;
@@ -918,14 +963,30 @@ begin
     select staff_id into v_actor_label from public.area_manager_accounts where id = p_actor_id;
   end if;
 
+  -- Atomic claim: serialize per-ID, verify availability (registry + legacy
+  -- namespace) BEFORE the insert, then insert account and registry row in the
+  -- same transaction. A failure rolls both back; the ID was never attached to
+  -- a usable account, so nothing reusable leaks. Concurrent creators of the
+  -- same ID are serialized by the advisory lock — exactly one winner.
+  perform public.lock_staff_id_claim(v_staff_id);
+  if exists (select 1 from public.staff_id_registry where staff_id = v_staff_id)
+     or exists (select 1 from public.manager_accounts where id_manager = v_staff_id) then
+    perform public.write_admin_audit(p_actor_kind, p_actor_id, v_actor_label, 'manager.create',
+      'manager', null, p_restaurant_id, 'denied', 'staff id taken',
+      jsonb_build_object('staff_id', v_staff_id));
+    raise exception 'STAFF_ID_TAKEN';
+  end if;
+
   insert into public.manager_accounts (id_manager, full_name, restaurant_id, password_hash, status)
-  values (lower(trim(p_staff_id)), trim(p_full_name), p_restaurant_id, p_password_hash, 'aktif')
+  values (v_staff_id, trim(p_full_name), p_restaurant_id, p_password_hash, 'aktif')
   returning id into v_id;
 
-  perform public.claim_staff_id(p_staff_id, 'manager', v_id);
+  insert into public.staff_id_registry (staff_id, account_kind, account_id)
+  values (v_staff_id, 'manager', v_id);
+
   perform public.write_admin_audit(p_actor_kind, p_actor_id, v_actor_label, 'manager.create',
     'manager', v_id, p_restaurant_id, 'ok', null,
-    jsonb_build_object('staff_id', lower(trim(p_staff_id))));
+    jsonb_build_object('staff_id', v_staff_id));
   return v_id;
 exception
   when unique_violation then raise exception 'STAFF_ID_TAKEN';
@@ -1097,7 +1158,7 @@ begin
 
   if p_decision = 'approved' then
     update public.manager_accounts
-    set password_hash = v_request.candidate_hash, updated_at = now()
+    set password_hash = v_request.candidate_hash, password_changed_at = now(), updated_at = now()
     where id = v_manager.id;
     perform public.revoke_manager_sessions(v_manager.id);
   end if;
@@ -1141,7 +1202,7 @@ begin
 
   if p_decision = 'approved' then
     update public.area_manager_accounts
-    set password_hash = v_request.candidate_hash, updated_at = now()
+    set password_hash = v_request.candidate_hash, password_changed_at = now(), updated_at = now()
     where id = v_request.area_manager_id;
     perform public.revoke_staff_sessions('area_manager', v_request.area_manager_id);
   end if;
@@ -1286,12 +1347,21 @@ as $$
             select 1 from public.super_admin_accounts sa
             where sa.id = p_actor_id and sa.status = 'aktif'))
      or (p_kind = 'area_manager'
-         and l.actor_kind = 'area_manager'
          and l.restaurant_id in (
            select a.restaurant_id
            from public.area_manager_assignments a
            join public.area_manager_accounts am on am.id = a.area_manager_id and am.status = 'aktif'
-           where a.area_manager_id = p_actor_id and a.removed_at is null))
+           where a.area_manager_id = p_actor_id and a.removed_at is null)
+         and (
+           l.actor_kind = 'area_manager'
+           -- Manager-admin lifecycle events recorded by the system/Super Admin
+           -- (e.g. reset submissions) are visible in scope. The projection
+           -- below excludes metadata, so candidate hashes never leak.
+           or l.action in (
+             'manager.create', 'manager.activate', 'manager.deactivate', 'manager.status',
+             'manager_reset.submit', 'manager_reset.decide', 'profile.update'
+           )
+         ))
   order by l.created_at desc
   limit 500;
 $$;

@@ -411,15 +411,50 @@ export { writeAdminAudit };
 export const getAmStatus = createServerFn({ method: "GET" }).handler(async () => {
   const { getAuthSession } = await import("./auth.server");
   const session = await getAuthSession();
-  if (
-    !session.data.areaManagerAccountId ||
-    !session.data.areaManagerSessionToken ||
-    (await currentAmAccount()) === null
-  ) {
+  const accountId = session.data.areaManagerAccountId;
+  if (!accountId || !session.data.areaManagerSessionToken) {
     return { authenticated: false as const };
   }
-  return { authenticated: true as const };
+  const client = getServiceClient();
+  if (!client) return { authenticated: false as const };
+  const { data } = await client
+    .from("area_manager_accounts")
+    .select("id, staff_id, full_name, password_changed_at")
+    .eq("id", accountId)
+    .eq("status", "aktif")
+    .single();
+  const row = data as {
+    id: string;
+    staff_id: string;
+    full_name: string;
+    password_changed_at: string | null;
+  } | null;
+  if (!row) return { authenticated: false as const };
+  return {
+    authenticated: true as const,
+    fullName: row.full_name,
+    staffId: row.staff_id,
+    mustRemindPassword: row.password_changed_at === null,
+  };
 });
+
+/** Self-service rename for the logged-in Area Manager (ID immutable). */
+export const updateOwnAmProfile = createServerFn({ method: "POST" })
+  .validator(z.object({ fullName: z.string().trim().min(1).max(80) }))
+  .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
+    const am = await currentAmAccount();
+    if (!am) return { ok: false, code: "UNAUTHORIZED" };
+    const rpc = serviceRpc();
+    if (!rpc) return { ok: false, code: "UNAVAILABLE" };
+    const { error } = await rpc("update_staff_profile", {
+      p_actor_kind: "area_manager",
+      p_actor_id: am.id,
+      p_target_kind: "area_manager",
+      p_target_id: am.id,
+      p_full_name: data.fullName,
+    });
+    return error ? { ok: false, code: error.message } : { ok: true };
+  });
 
 export const amLogout = createServerFn({ method: "POST" }).handler(async () => {
   await clearAuthSession();

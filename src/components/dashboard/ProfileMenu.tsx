@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, KeyRound, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, KeyRound, LogOut, PenLine, UserRound } from "lucide-react";
 
 export function ProfileMenu({
   name,
   idManager,
   canChangePassword = true,
   onChangePassword,
+  onEditProfile,
   extras,
   onLogout,
 }: {
@@ -13,6 +14,7 @@ export function ProfileMenu({
   idManager?: string;
   canChangePassword?: boolean;
   onChangePassword?: () => void;
+  onEditProfile?: () => void;
   // Extra dropdown rows (e.g. Help / theme toggle), rendered between the
   // identity block and the change-password/logout actions.
   extras?: ReactNode;
@@ -61,6 +63,18 @@ export function ProfileMenu({
             )}
           </div>
           {extras}
+          {onEditProfile && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onEditProfile();
+              }}
+              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-semibold hover:bg-ta-gray-100 dark:hover:bg-ta-gray-700"
+            >
+              <PenLine className="size-4" /> Edit nama
+            </button>
+          )}
           {canChangePassword && onChangePassword && (
             <button
               type="button"

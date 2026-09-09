@@ -1,5 +1,34 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
+import {
+  isPublicSuperAdminPath,
+  PUBLIC_SUPER_ADMIN_PATHS,
+} from "../src/lib/super-admin-public-paths";
+
+it("accept + recovery open without a session; admin paths stay gated (A4)", () => {
+  expect(PUBLIC_SUPER_ADMIN_PATHS).toContain("/super-admin/accept");
+  expect(PUBLIC_SUPER_ADMIN_PATHS).toContain("/super-admin/recovery");
+  expect(isPublicSuperAdminPath("/super-admin/accept")).toBe(true);
+  expect(isPublicSuperAdminPath("/super-admin/recovery")).toBe(true);
+  expect(isPublicSuperAdminPath("/super-admin/accept/")).toBe(true);
+  expect(isPublicSuperAdminPath("/super-admin/staff-accounts")).toBe(false);
+  expect(isPublicSuperAdminPath("/super-admin/audit")).toBe(false);
+  expect(isPublicSuperAdminPath("/super-admin/managers")).toBe(false);
+});
+
+it("the console shell bypasses the gate for public children only", () => {
+  const source = readFileSync(
+    new URL("../src/routes/super-admin/route.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(source).toContain(
+    'import { isPublicSuperAdminPath } from "@/lib/super-admin-public-paths"',
+  );
+  // The public bypass (bare <Outlet />) must be evaluated BEFORE the AuthGate.
+  expect(source.indexOf("isPublicSuperAdminPath(pathname)")).toBeLessThan(
+    source.indexOf("<AuthGate"),
+  );
+});
 
 it("never shows remote unavailable copy in the crew UI", () => {
   const dialog = readFileSync(

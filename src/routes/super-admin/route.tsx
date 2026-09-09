@@ -21,13 +21,16 @@ import {
   Users2,
 } from "lucide-react";
 import { AuthGate } from "@/components/AuthGate";
+import { isPublicSuperAdminPath } from "@/lib/super-admin-public-paths";
 import { getAuthStatus, loginSuperAdmin, logout } from "@/lib/auth";
 import {
   changeSuperAdminPassword,
   getBootstrapState,
   getSuperAdminProfile,
+  updateOwnSuperAdminProfile,
 } from "@/lib/super-admin-auth.server";
 import { ChangePasswordDialog } from "@/components/dashboard/ChangePasswordDialog";
+import { EditProfileDialog } from "@/components/dashboard/EditProfileDialog";
 import { isOwnerQueryKey } from "@/lib/owner-query-cache";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
 import { DashboardHeaderRight } from "@/components/dashboard/DashboardHeaderRight";
@@ -63,6 +66,7 @@ function SuperAdminShell() {
   const mounted = useRef(true);
   const [logoutError, setLogoutError] = useState("");
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
   const profile = useQuery({
     queryKey: ["sa-profile"],
     queryFn: () => getSuperAdminProfile(),
@@ -74,6 +78,11 @@ function SuperAdminShell() {
       mounted.current = false;
     };
   }, []);
+
+  if (isPublicSuperAdminPath(pathname)) {
+    // Token-verified public pages: never show the login gate here.
+    return <Outlet />;
+  }
 
   if (!auth?.superAdmin) {
     return (
@@ -131,10 +140,12 @@ function SuperAdminShell() {
         <DashboardHeaderRight
           roleLabel="SUPER ADMIN"
           profile={{
-            name: profile.data?.individual ? profile.data.staffId : "Super Admin",
+            name: profile.data?.individual ? profile.data.fullName : "Super Admin",
+            idManager: profile.data?.individual ? profile.data.staffId : undefined,
             canChangePassword: profile.data?.individual === true,
           }}
           onChangePassword={() => setChangePasswordOpen(true)}
+          onEditProfile={profile.data?.individual ? () => setEditProfileOpen(true) : undefined}
           onLogout={handleLogout}
         />
       }
@@ -154,6 +165,19 @@ function SuperAdminShell() {
           return result;
         }}
       />
+      {profile.data?.individual ? (
+        <EditProfileDialog
+          key={profile.data.fullName}
+          open={editProfileOpen}
+          currentName={profile.data.fullName}
+          onOpenChange={setEditProfileOpen}
+          onSubmit={async (fullName) => {
+            const result = await updateOwnSuperAdminProfile({ data: { fullName } });
+            if (result.ok) await queryClient.invalidateQueries({ queryKey: ["sa-profile"] });
+            return result;
+          }}
+        />
+      ) : null}
       <Outlet />
     </AppShell>
   );

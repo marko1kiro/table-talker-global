@@ -4,6 +4,22 @@ import { GENERIC_AUTH_FAILURE } from "./staff-identity.server";
 
 export type AuthStatus = { superAdmin: boolean };
 
+/**
+ * Authoritative status (review C21): the UI is only told "Super Admin" when
+ * requireSuperAdmin — the same DB-backed gate that protects every privileged
+ * action — accepts the current session. A legacy cookie after the bootstrap
+ * cutover, or an individual session whose bearer token was revoked (password
+ * change / deactivation), reports logged-out exactly like the server behaves.
+ */
+export async function computeAuthStatus(authorize: () => Promise<unknown>): Promise<AuthStatus> {
+  try {
+    await authorize();
+    return { superAdmin: true };
+  } catch {
+    return { superAdmin: false };
+  }
+}
+
 export const loginInputSchema = z.object({
   mode: z.enum(["legacy", "individual"]),
   staffId: z.string().optional(),
@@ -30,11 +46,8 @@ function readEnv(name: string): string | null {
 
 export const getAuthStatus = createServerFn({ method: "GET" }).handler(
   async (): Promise<AuthStatus> => {
-    const { getAuthSession } = await import("./auth.server");
-    const session = await getAuthSession();
-    return {
-      superAdmin: session.data.superAdmin === true,
-    };
+    const { requireSuperAdmin } = await import("./auth.server");
+    return computeAuthStatus(() => requireSuperAdmin());
   },
 );
 

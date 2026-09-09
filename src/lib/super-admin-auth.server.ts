@@ -3,6 +3,13 @@
 // paths re-derive authority from the DB session/account; public paths are
 // rate-limited and generic. Email is fail-closed when no transport is
 // configured. Passwords/tokens are never logged or audited.
+//
+// Token lifecycle rule (review B6/B14/B15): every invite/bootstrap/resend/
+// recovery token is a CSPRNG 256-bit value; the RAW token is emailed exactly
+// once inside an HTTPS one-time link, and only its SHA-256 is persisted.
+// Sending happens BEFORE persistence, so a provider failure can never leave a
+// live-but-uncontrolled token (or a pending account blocking the bootstrap
+// gate) behind.
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { createHash } from "node:crypto";
@@ -15,9 +22,17 @@ import {
 import { writeAdminAudit } from "./admin-audit.server";
 import { verifyManagerPassword, hashManagerPassword } from "./manager-password.server";
 import { getServiceClient } from "./remote-audio.server";
-import { emailTransportConfigured, sendStaffEmail } from "./staff-email.server";
+import {
+  emailTransportConfigured,
+  sendStaffEmail,
+  staffAcceptLink,
+  staffRecoveryLink,
+  staffLinkEmailBody,
+  type EmailSendResult,
+} from "./staff-email.server";
 import {
   emailIsValid,
+  generateStaffToken,
   normalizeEmail,
   normalizeStaffId,
   staffIdIsValid,
@@ -73,9 +88,67 @@ export const bootstrapCreateInputSchema = z.object({
 
 /**
  * Legacy (shared-password) session creates the FIRST individual Super Admin.
- * Fail-closed: nothing is persisted unless the email transport is available,
- * because the account only becomes usable after the emailed verification.
+ * Email-first (review A3/B14): the raw token is emailed BEFORE anything is
+ * persisted, so a provider failure leaves NO pending account and NO live
+ * token behind — the bootstrap gate stays open and retryable.
  */
+export type StaffFlowDeps = {
+  rpc: RpcCaller;
+  sendEmail: (to: string, subject: string, text: string) => Promise<EmailSendResult>;
+  linkFor: (staffId: string, rawToken: string) => string;
+  audit?: (input: Parameters<typeof writeAdminAudit>[0]) => Promise<unknown>;
+};
+
+function mapRpcCode(message: string | undefined): string {
+  if (
+    message === "BOOTSTRAP_CLOSED" ||
+    message === "STAFF_ID_TAKEN" ||
+    message === "STAFF_ID_INVALID" ||
+    message === "NOT_PENDING" ||
+    message === "NOT_FOUND"
+  ) {
+    return message;
+  }
+  return "UNAVAILABLE";
+}
+
+export async function bootstrapCreateSuperAdminCore(
+  input: { staffId: string; fullName: string; email: string },
+  deps: StaffFlowDeps,
+): Promise<{ ok: boolean; code?: string }> {
+  const rawToken = generateStaffToken();
+  const sent = await deps.sendEmail(
+    input.email,
+    "Aktivasi akun Super Admin Lihat Meja",
+    staffLinkEmailBody(deps.linkFor(input.staffId, rawToken), "berlaku 24 jam dan hanya sekali"),
+  );
+  if (!sent.ok) {
+    await deps.audit?.({
+      actorKind: "legacy_bootstrap",
+      action: "super_admin.bootstrap_email_failed",
+      result: "failed",
+      reason: "email send failed",
+    });
+    return { ok: false, code: sent.code };
+  }
+  const { data: accountId, error } = await deps.rpc("bootstrap_create_super_admin", {
+    p_staff_id: input.staffId,
+    p_full_name: input.fullName,
+    p_email: input.email,
+    p_verify_token_hash: sha256Hex(rawToken),
+  });
+  if (error || typeof accountId !== "string") {
+    return { ok: false, code: mapRpcCode(error?.message) };
+  }
+  await deps.audit?.({
+    actorKind: "legacy_bootstrap",
+    action: "super_admin.bootstrap_email_sent",
+    targetKind: "super_admin",
+    targetId: accountId,
+  });
+  return { ok: true };
+}
+
 export const bootstrapCreateSuperAdmin = createServerFn({ method: "POST" })
   .validator(bootstrapCreateInputSchema)
   .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
@@ -85,54 +158,17 @@ export const bootstrapCreateSuperAdmin = createServerFn({ method: "POST" })
     if (!staffIdIsValid(staffId)) return { ok: false, code: "STAFF_ID_INVALID" };
     if (!emailIsValid(email)) return { ok: false, code: "EMAIL_INVALID" };
     if (!emailTransportConfigured()) return { ok: false, code: "EMAIL_UNAVAILABLE" };
-
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE" };
-    const token = createHash("sha256")
-      .update(`${staffId}:${email}:${Date.now()}:${Math.random()}`)
-      .digest("hex");
-    const verifyToken = createHash("sha256").update(`${token}:verify`).digest("hex");
-    const { data: accountId, error } = await client.rpc("bootstrap_create_super_admin", {
-      p_staff_id: staffId,
-      p_full_name: data.fullName,
-      p_email: email,
-      p_verify_token_hash: verifyToken,
-    });
-    if (error || typeof accountId !== "string") {
-      return { ok: false, code: error?.message ?? "UNAVAILABLE" };
-    }
-    const sent = await sendStaffEmail(
-      email,
-      "Aktivasi akun Super Admin Lihat Meja",
-      `Token aktivasi (berlaku 24 jam): ${token}`,
+    return bootstrapCreateSuperAdminCore(
+      { staffId, fullName: data.fullName, email },
+      {
+        rpc: async (fn, params) => client.rpc(fn, params),
+        sendEmail: sendStaffEmail,
+        linkFor: staffAcceptLink,
+        audit: writeAdminAudit,
+      },
     );
-    if (!sent.ok) {
-      // Fail closed: cancel the invite so no half-created account lingers.
-      try {
-        await client.rpc("cancel_super_admin_invite", {
-          p_super_admin_id: accountId,
-          p_actor_id: accountId,
-        });
-      } catch {
-        // best-effort cleanup; audit below still records the failure
-      }
-      await writeAdminAudit({
-        actorKind: "legacy_bootstrap",
-        action: "super_admin.bootstrap_email_failed",
-        targetKind: "super_admin",
-        targetId: accountId,
-        result: "failed",
-        reason: "email transport unavailable",
-      });
-      return { ok: false, code: sent.code };
-    }
-    await writeAdminAudit({
-      actorKind: "legacy_bootstrap",
-      action: "super_admin.bootstrap_email_sent",
-      targetKind: "super_admin",
-      targetId: accountId,
-    });
-    return { ok: true };
   });
 
 export const acceptInviteInputSchema = z.object({
@@ -180,6 +216,32 @@ export const inviteCreateInputSchema = z.object({
   email: z.string(),
 });
 
+export async function inviteSuperAdminCore(
+  input: { staffId: string; fullName: string; email: string; creatorId: string },
+  deps: StaffFlowDeps,
+): Promise<{ ok: boolean; code?: string }> {
+  const rawToken = generateStaffToken();
+  const sent = await deps.sendEmail(
+    input.email,
+    "Undangan akun Super Admin Lihat Meja",
+    staffLinkEmailBody(deps.linkFor(input.staffId, rawToken), "berlaku 24 jam dan hanya sekali"),
+  );
+  if (!sent.ok) {
+    return { ok: false, code: sent.code };
+  }
+  const { data: invitedId, error } = await deps.rpc("create_super_admin_invite", {
+    p_staff_id: input.staffId,
+    p_full_name: input.fullName,
+    p_email: input.email,
+    p_invitation_token_hash: sha256Hex(rawToken),
+    p_creator_id: input.creatorId,
+  });
+  if (error || typeof invitedId !== "string") {
+    return { ok: false, code: mapRpcCode(error?.message) };
+  }
+  return { ok: true };
+}
+
 export const inviteSuperAdmin = createServerFn({ method: "POST" })
   .validator(inviteCreateInputSchema)
   .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
@@ -191,42 +253,45 @@ export const inviteSuperAdmin = createServerFn({ method: "POST" })
     if (!staffIdIsValid(staffId)) return { ok: false, code: "STAFF_ID_INVALID" };
     if (!emailIsValid(email)) return { ok: false, code: "EMAIL_INVALID" };
     if (!emailTransportConfigured()) return { ok: false, code: "EMAIL_UNAVAILABLE" };
-
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE" };
-    const token = createHash("sha256")
-      .update(`${staffId}:${email}:${Date.now()}:${Math.random()}`)
-      .digest("hex");
-    const { data: invitedId, error } = await client.rpc("create_super_admin_invite", {
-      p_staff_id: staffId,
-      p_full_name: data.fullName,
-      p_email: email,
-      p_invitation_token_hash: sha256Hex(token),
-      p_creator_id: actorId,
-    });
-    if (error || typeof invitedId !== "string") {
-      return { ok: false, code: error?.message ?? "UNAVAILABLE" };
-    }
-    const sent = await sendStaffEmail(
-      email,
-      "Undangan akun Super Admin Lihat Meja",
-      `Token undangan (berlaku 24 jam): ${token}`,
+    return inviteSuperAdminCore(
+      { staffId, fullName: data.fullName, email, creatorId: actorId },
+      {
+        rpc: async (fn, params) => client.rpc(fn, params),
+        sendEmail: sendStaffEmail,
+        linkFor: staffAcceptLink,
+        audit: writeAdminAudit,
+      },
     );
-    if (!sent.ok) {
-      try {
-        await client.rpc("cancel_super_admin_invite", {
-          p_super_admin_id: invitedId,
-          p_actor_id: actorId,
-        });
-      } catch {
-        // best-effort cleanup
-      }
-      return { ok: false, code: sent.code };
-    }
-    return { ok: true };
   });
 
 export const inviteResendInputSchema = z.object({ superAdminId: z.string().uuid() });
+
+export async function resendSuperAdminInviteCore(
+  input: { superAdminId: string; staffId: string; email: string; actorId: string },
+  deps: StaffFlowDeps,
+): Promise<{ ok: boolean; code?: string }> {
+  const rawToken = generateStaffToken();
+  // Email-first: on provider failure the PREVIOUS invitation stays the only
+  // live token (still deliverable via another resend); no new hash is ever
+  // persisted without the email carrying it.
+  const sent = await deps.sendEmail(
+    input.email,
+    "Undangan akun Super Admin Lihat Meja",
+    staffLinkEmailBody(deps.linkFor(input.staffId, rawToken), "berlaku 24 jam dan hanya sekali"),
+  );
+  if (!sent.ok) {
+    return { ok: false, code: sent.code };
+  }
+  const { error } = await deps.rpc("resend_super_admin_invite", {
+    p_super_admin_id: input.superAdminId,
+    p_new_token_hash: sha256Hex(rawToken),
+    p_actor_id: input.actorId,
+  });
+  if (error) return { ok: false, code: mapRpcCode(error.message) };
+  return { ok: true };
+}
 
 export const resendSuperAdminInvite = createServerFn({ method: "POST" })
   .validator(inviteResendInputSchema)
@@ -237,7 +302,6 @@ export const resendSuperAdminInvite = createServerFn({ method: "POST" })
     if (!emailTransportConfigured()) return { ok: false, code: "EMAIL_UNAVAILABLE" };
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE" };
-
     const { data: target, error: targetError } = await client
       .from("super_admin_accounts")
       .select("staff_id, email, status")
@@ -247,21 +311,15 @@ export const resendSuperAdminInvite = createServerFn({ method: "POST" })
     if (targetError || !t || t.status !== "pending_activation") {
       return { ok: false, code: "NOT_PENDING" };
     }
-    const token = createHash("sha256")
-      .update(`${t.staff_id}:${t.email}:${Date.now()}:${Math.random()}`)
-      .digest("hex");
-    const { error } = await client.rpc("resend_super_admin_invite", {
-      p_super_admin_id: data.superAdminId,
-      p_new_token_hash: sha256Hex(token),
-      p_actor_id: actorId,
-    });
-    if (error) return { ok: false, code: error.message };
-    const sent = await sendStaffEmail(
-      t.email,
-      "Undangan akun Super Admin Lihat Meja",
-      `Token undangan baru (berlaku 24 jam): ${token}`,
+    return resendSuperAdminInviteCore(
+      { superAdminId: data.superAdminId, staffId: t.staff_id, email: t.email, actorId },
+      {
+        rpc: async (fn, params) => client.rpc(fn, params),
+        sendEmail: sendStaffEmail,
+        linkFor: staffAcceptLink,
+        audit: writeAdminAudit,
+      },
     );
-    return sent.ok ? { ok: true } : { ok: false, code: sent.code };
   });
 
 export const inviteCancelInputSchema = z.object({ superAdminId: z.string().uuid() });
@@ -369,9 +427,68 @@ export const changeSuperAdminPassword = createServerFn({ method: "POST" })
 
 export const recoveryRequestInputSchema = z.object({ email: z.string() });
 
+export async function requestSuperAdminRecoveryCore(
+  email: string,
+  deps: {
+    rpc: RpcCaller;
+    sendEmail: (to: string, subject: string, text: string) => Promise<EmailSendResult>;
+    linkFor: (staffId: string, rawToken: string) => string;
+    lookupAccount: (email: string) => Promise<{ id: string; staffId: string } | null>;
+    transportConfigured: () => boolean;
+    audit?: (input: Parameters<typeof writeAdminAudit>[0]) => Promise<unknown>;
+  },
+): Promise<boolean> {
+  const auditFailure = async (reason: string) => {
+    await deps.audit?.({
+      actorKind: "system",
+      action: "super_admin.recovery_request",
+      result: "failed",
+      reason,
+    });
+  };
+  if (!emailIsValid(email)) {
+    await auditFailure("invalid email");
+    return false;
+  }
+  if (!deps.transportConfigured()) {
+    await auditFailure("email transport unavailable");
+    return false;
+  }
+  const account = await deps.lookupAccount(email);
+  if (!account) {
+    await auditFailure("no matching account");
+    return false;
+  }
+  const rawToken = generateStaffToken();
+  // Email-first: no token row exists unless the email carrying it was sent.
+  const sent = await deps.sendEmail(
+    email,
+    "Reset password Super Admin Lihat Meja",
+    staffLinkEmailBody(
+      deps.linkFor(account.staffId, rawToken),
+      "berlaku 30 menit dan hanya sekali",
+    ),
+  );
+  await deps.audit?.({
+    actorKind: "system",
+    action: "super_admin.recovery_request",
+    targetKind: "super_admin",
+    targetId: account.id,
+    result: sent.ok ? "ok" : "failed",
+    reason: sent.ok ? null : "email send failed",
+  });
+  if (!sent.ok) return false;
+  const { error } = await deps.rpc("create_super_admin_recovery_token", {
+    p_super_admin_id: account.id,
+    p_token_hash: sha256Hex(rawToken),
+  });
+  return !error;
+}
+
 /**
- * Public: always responds generically. Fail-closed — when the email transport
- * is unavailable no token is created at all and the attempt is audited.
+ * Public: always responds generically. The rate-limit bucket is only cleared
+ * by a DELIVERED recovery email — invalid email, unknown account, transport
+ * failure, provider failure, and RPC errors all count as failures (B12).
  */
 export const requestSuperAdminRecovery = createServerFn({ method: "POST" })
   .validator(recoveryRequestInputSchema)
@@ -381,54 +498,30 @@ export const requestSuperAdminRecovery = createServerFn({ method: "POST" })
     const email = normalizeEmail(data.email);
     const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
       await import("./owner-login-rate-limit.server");
-    const reservationId = await reserveOwnerLoginAttempt(`recovery:${email}:${Date.now() % 1000}`);
-    if (reservationId) await completeOwnerLoginAttempt(reservationId, true);
-    if (!emailIsValid(email) || !emailTransportConfigured()) {
-      await writeAdminAudit({
-        actorKind: "system",
-        action: "super_admin.recovery_request",
-        result: "failed",
-        reason: emailTransportConfigured() ? "invalid email" : "email transport unavailable",
+    const reservationId = await reserveOwnerLoginAttempt(`recovery:${email}`);
+    if (!reservationId) return { ok: true };
+    let delivered = false;
+    try {
+      delivered = await requestSuperAdminRecoveryCore(email, {
+        rpc: async (fn, params) => client.rpc(fn, params),
+        sendEmail: sendStaffEmail,
+        linkFor: staffRecoveryLink,
+        transportConfigured: emailTransportConfigured,
+        audit: writeAdminAudit,
+        lookupAccount: async (normalized) => {
+          const { data: row } = await client
+            .from("super_admin_accounts")
+            .select("id, staff_id")
+            .eq("email", normalized)
+            .eq("status", "aktif")
+            .single();
+          const sa = row as { id: string; staff_id: string } | null;
+          return sa ? { id: sa.id, staffId: sa.staff_id } : null;
+        },
       });
-      return { ok: true };
+    } finally {
+      await completeOwnerLoginAttempt(reservationId, delivered);
     }
-    const { data: row } = await client
-      .from("super_admin_accounts")
-      .select("id")
-      .eq("email", email)
-      .eq("status", "aktif")
-      .single();
-    const sa = row as { id: string } | null;
-    if (!sa) {
-      await writeAdminAudit({
-        actorKind: "system",
-        action: "super_admin.recovery_request",
-        result: "failed",
-        reason: "no matching account",
-      });
-      return { ok: true };
-    }
-    const token = createHash("sha256")
-      .update(`${sa.id}:${Date.now()}:${Math.random()}`)
-      .digest("hex");
-    const { error } = await client.rpc("create_super_admin_recovery_token", {
-      p_super_admin_id: sa.id,
-      p_token_hash: sha256Hex(token),
-    });
-    if (error) return { ok: true };
-    const sent = await sendStaffEmail(
-      email,
-      "Reset password Super Admin Lihat Meja",
-      `Token reset (berlaku 30 menit): ${token}`,
-    );
-    await writeAdminAudit({
-      actorKind: "system",
-      action: "super_admin.recovery_request",
-      targetKind: "super_admin",
-      targetId: sa.id,
-      result: sent.ok ? "ok" : "failed",
-      reason: sent.ok ? null : "email send failed",
-    });
     return { ok: true };
   });
 
@@ -478,6 +571,7 @@ export const consumeSuperAdminRecovery = createServerFn({ method: "POST" })
 export async function getCurrentSuperAdminAccount(): Promise<{
   id: string;
   staffId: string;
+  fullName: string;
 } | null> {
   const session = await getAuthSession();
   if (session.data.superAdmin !== true || !session.data.superAdminAccountId) return null;
@@ -485,12 +579,12 @@ export async function getCurrentSuperAdminAccount(): Promise<{
   if (!client) return null;
   const { data } = await client
     .from("super_admin_accounts")
-    .select("id, staff_id")
+    .select("id, staff_id, full_name")
     .eq("id", session.data.superAdminAccountId)
     .eq("status", "aktif")
     .single();
-  const row = data as { id: string; staff_id: string } | null;
-  return row ? { id: row.id, staffId: row.staff_id } : null;
+  const row = data as { id: string; staff_id: string; full_name: string } | null;
+  return row ? { id: row.id, staffId: row.staff_id, fullName: row.full_name } : null;
 }
 
 export const logoutSuperAdmin = createServerFn({ method: "POST" }).handler(async () => {
@@ -501,8 +595,27 @@ export const logoutSuperAdmin = createServerFn({ method: "POST" }).handler(async
 export const getSuperAdminProfile = createServerFn({ method: "GET" }).handler(async () => {
   const account = await getCurrentSuperAdminAccount();
   if (!account) return { individual: false as const };
-  return { individual: true as const, staffId: account.staffId };
+  return { individual: true as const, staffId: account.staffId, fullName: account.fullName };
 });
+
+/** Self-service rename for the logged-in individual Super Admin (ID immutable). */
+export const updateOwnSuperAdminProfile = createServerFn({ method: "POST" })
+  .validator(z.object({ fullName: z.string().trim().min(1).max(80) }))
+  .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
+    const session = await requireSuperAdmin();
+    const accountId = session.data.superAdminAccountId;
+    if (!accountId) return { ok: false, code: "INDIVIDUAL_REQUIRED" };
+    const client = getServiceClient();
+    if (!client) return { ok: false, code: "UNAVAILABLE" };
+    const { error } = await client.rpc("update_staff_profile", {
+      p_actor_kind: "super_admin",
+      p_actor_id: accountId,
+      p_target_kind: "super_admin",
+      p_target_id: accountId,
+      p_full_name: data.fullName,
+    });
+    return error ? { ok: false, code: error.message } : { ok: true };
+  });
 
 export type SuperAdminRow = {
   id: string;

@@ -23,44 +23,62 @@ const submitSchema = z.object({
 
 export type SubmitResetResult = { ok: true } | { ok: false; message: string };
 
+/**
+ * Testable core: the rate-limit report is injected so "failure must NOT be
+ * marked success" (invalid ID, inactive account, duplicate pending, RPC
+ * error) is provable. The user-facing response stays generic either way —
+ * the accounting difference is invisible to callers.
+ */
+export async function submitResetRequestCore(
+  fn: "submit_manager_reset_request" | "submit_am_reset_request",
+  data: { staffId: string; newPassword: string },
+  deps: {
+    rpc: (
+      fn: string,
+      params: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+    report: (valid: boolean) => Promise<unknown>;
+  },
+): Promise<SubmitResetResult> {
+  if (!staffPasswordIsValid(data.newPassword)) {
+    await deps.report(false);
+    return { ok: false, message: GENERIC };
+  }
+  const candidateHash = await hashManagerPassword(data.newPassword);
+  const { data: result, error } = await deps.rpc(fn, {
+    p_staff_id: normalizeStaffId(data.staffId),
+    p_candidate_hash: candidateHash,
+  });
+  await deps.report(!error && result === true);
+  return { ok: true };
+}
+
 export const submitManagerResetRequest = createServerFn({ method: "POST" })
   .validator(submitSchema)
   .handler(async ({ data }): Promise<SubmitResetResult> => {
-    if (!staffPasswordIsValid(data.newPassword)) return { ok: false, message: GENERIC };
     const client = getServiceClient();
     if (!client) return { ok: false, message: GENERIC };
     const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
       await import("./owner-login-rate-limit.server");
     const reservationId = await reserveOwnerLoginAttempt(data.clientKey);
     if (!reservationId) return { ok: false, message: GENERIC };
-    const candidateHash = await hashManagerPassword(data.newPassword);
-    const { data: result } = await client.rpc("submit_manager_reset_request", {
-      p_staff_id: normalizeStaffId(data.staffId),
-      p_candidate_hash: candidateHash,
+    return submitResetRequestCore("submit_manager_reset_request", data, {
+      rpc: async (fn, params) => client.rpc(fn, params),
+      report: (valid) => completeOwnerLoginAttempt(reservationId, valid),
     });
-    await completeOwnerLoginAttempt(reservationId, true);
-    // Generic success regardless of whether the account exists or a request
-    // is already pending — no enumeration, no duplicate-pending oracle.
-    void result;
-    return { ok: true };
   });
 
 export const submitAmResetRequest = createServerFn({ method: "POST" })
   .validator(submitSchema)
   .handler(async ({ data }): Promise<SubmitResetResult> => {
-    if (!staffPasswordIsValid(data.newPassword)) return { ok: false, message: GENERIC };
     const client = getServiceClient();
     if (!client) return { ok: false, message: GENERIC };
     const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
       await import("./owner-login-rate-limit.server");
     const reservationId = await reserveOwnerLoginAttempt(data.clientKey);
     if (!reservationId) return { ok: false, message: GENERIC };
-    const candidateHash = await hashManagerPassword(data.newPassword);
-    const { data: result } = await client.rpc("submit_am_reset_request", {
-      p_staff_id: normalizeStaffId(data.staffId),
-      p_candidate_hash: candidateHash,
+    return submitResetRequestCore("submit_am_reset_request", data, {
+      rpc: async (fn, params) => client.rpc(fn, params),
+      report: (valid) => completeOwnerLoginAttempt(reservationId, valid),
     });
-    await completeOwnerLoginAttempt(reservationId, true);
-    void result;
-    return { ok: true };
   });

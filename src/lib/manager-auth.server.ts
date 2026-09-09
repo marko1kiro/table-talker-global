@@ -25,11 +25,6 @@ type ManagerCredential = {
   restaurant_code: string;
 };
 
-export const loginManagerInputSchema = z.object({
-  idManager: z.string().min(1),
-  password: z.string().min(1),
-});
-
 export type LoginManagerResult =
   | {
       ok: true;
@@ -97,13 +92,13 @@ export async function loginManagerCore(
   };
 }
 
-export const loginManager = createServerFn({ method: "POST" })
-  .validator(loginManagerInputSchema)
-  .handler(async ({ data }): Promise<LoginManagerResult> => {
-    const client = getServiceClient();
-    if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
-    return loginManagerCore(data, { rpc: async (fn, params) => client.rpc(fn, params) });
-  });
+// loginManagerCore is INTERNAL to the staff login (staff-login.server.ts) and
+// is intentionally NOT exposed as a server function: a direct endpoint would
+// bypass the shared rate-limit reservation and leak a distinct
+// "account disabled" message (enumeration oracle). The legacy `loginManager`
+// server fn and its input schema were removed in the Poin 2 review fixes;
+// /manager/login uses loginStaff, which maps every failure to the generic
+// message.
 
 // --- change own password (while logged in) ----------------------------------
 
