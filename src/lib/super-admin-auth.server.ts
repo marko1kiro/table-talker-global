@@ -22,6 +22,7 @@ import {
 import { writeAdminAudit } from "./admin-audit.server";
 import { verifyManagerPassword, hashManagerPassword } from "./manager-password.server";
 import { getServiceClient } from "./remote-audio.server";
+import { readRpcVerdict } from "./rpc-contract.server";
 import {
   emailTransportConfigured,
   sendStaffEmail,
@@ -99,17 +100,18 @@ export type StaffFlowDeps = {
   audit?: (input: Parameters<typeof writeAdminAudit>[0]) => Promise<unknown>;
 };
 
-function mapRpcCode(message: string | undefined): string {
-  if (
-    message === "BOOTSTRAP_CLOSED" ||
-    message === "STAFF_ID_TAKEN" ||
-    message === "STAFF_ID_INVALID" ||
-    message === "NOT_PENDING" ||
-    message === "NOT_FOUND"
-  ) {
-    return message;
+/**
+ * Review B7: an emailed magic link must be absolute and safe. A broken
+ * origin configuration (staffAppOrigin throws) aborts the flow with
+ * EMAIL_CONFIG_INVALID BEFORE any email is sent and BEFORE any token or
+ * account is persisted — no live-but-undeliverable token can exist.
+ */
+function buildLinkOrThrow(build: () => string): { link: string } | { configError: true } {
+  try {
+    return { link: build() };
+  } catch {
+    return { configError: true };
   }
-  return "UNAVAILABLE";
 }
 
 export async function bootstrapCreateSuperAdminCore(
@@ -117,10 +119,12 @@ export async function bootstrapCreateSuperAdminCore(
   deps: StaffFlowDeps,
 ): Promise<{ ok: boolean; code?: string }> {
   const rawToken = generateStaffToken();
+  const built = buildLinkOrThrow(() => deps.linkFor(input.staffId, rawToken));
+  if ("configError" in built) return { ok: false, code: "EMAIL_CONFIG_INVALID" };
   const sent = await deps.sendEmail(
     input.email,
     "Aktivasi akun Super Admin Lihat Meja",
-    staffLinkEmailBody(deps.linkFor(input.staffId, rawToken), "berlaku 24 jam dan hanya sekali"),
+    staffLinkEmailBody(built.link, "berlaku 24 jam dan hanya sekali"),
   );
   if (!sent.ok) {
     await deps.audit?.({
@@ -131,20 +135,21 @@ export async function bootstrapCreateSuperAdminCore(
     });
     return { ok: false, code: sent.code };
   }
-  const { data: accountId, error } = await deps.rpc("bootstrap_create_super_admin", {
+  const res = await deps.rpc("bootstrap_create_super_admin", {
     p_staff_id: input.staffId,
     p_full_name: input.fullName,
     p_email: input.email,
     p_verify_token_hash: sha256Hex(rawToken),
   });
-  if (error || typeof accountId !== "string") {
-    return { ok: false, code: mapRpcCode(error?.message) };
+  const verdict = readRpcVerdict(res.data, res.error);
+  if (!verdict.ok) {
+    return { ok: false, code: verdict.code };
   }
   await deps.audit?.({
     actorKind: "legacy_bootstrap",
     action: "super_admin.bootstrap_email_sent",
     targetKind: "super_admin",
-    targetId: accountId,
+    targetId: verdict.id ?? "",
   });
   return { ok: true };
 }
@@ -193,16 +198,17 @@ export const acceptSuperAdminInvite = createServerFn({ method: "POST" })
     const reservationId = await reserveOwnerLoginAttempt(data.clientKey);
     if (!reservationId) return { ok: false, code: "RATE_LIMITED" };
     const passwordHash = await hashManagerPassword(data.password);
-    const { error } = await client.rpc("accept_super_admin_invite", {
+    const res = await client.rpc("accept_super_admin_invite", {
       p_staff_id: staffId,
       p_token: data.token,
       p_password_hash: passwordHash,
     });
-    await completeOwnerLoginAttempt(reservationId, !error);
-    if (error) {
+    const verdict = readRpcVerdict(res.data, res.error);
+    await completeOwnerLoginAttempt(reservationId, verdict.ok);
+    if (!verdict.ok) {
       return {
         ok: false,
-        code: error.message === "INVITATION_EXPIRED" ? "INVITATION_EXPIRED" : "INVALID_INVITATION",
+        code: verdict.code === "INVITATION_EXPIRED" ? "INVITATION_EXPIRED" : "INVALID_INVITATION",
       };
     }
     return { ok: true };
@@ -221,25 +227,25 @@ export async function inviteSuperAdminCore(
   deps: StaffFlowDeps,
 ): Promise<{ ok: boolean; code?: string }> {
   const rawToken = generateStaffToken();
+  const built = buildLinkOrThrow(() => deps.linkFor(input.staffId, rawToken));
+  if ("configError" in built) return { ok: false, code: "EMAIL_CONFIG_INVALID" };
   const sent = await deps.sendEmail(
     input.email,
     "Undangan akun Super Admin Lihat Meja",
-    staffLinkEmailBody(deps.linkFor(input.staffId, rawToken), "berlaku 24 jam dan hanya sekali"),
+    staffLinkEmailBody(built.link, "berlaku 24 jam dan hanya sekali"),
   );
   if (!sent.ok) {
     return { ok: false, code: sent.code };
   }
-  const { data: invitedId, error } = await deps.rpc("create_super_admin_invite", {
+  const res = await deps.rpc("create_super_admin_invite", {
     p_staff_id: input.staffId,
     p_full_name: input.fullName,
     p_email: input.email,
     p_invitation_token_hash: sha256Hex(rawToken),
     p_creator_id: input.creatorId,
   });
-  if (error || typeof invitedId !== "string") {
-    return { ok: false, code: mapRpcCode(error?.message) };
-  }
-  return { ok: true };
+  const verdict = readRpcVerdict(res.data, res.error);
+  return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
 }
 
 export const inviteSuperAdmin = createServerFn({ method: "POST" })
@@ -276,21 +282,23 @@ export async function resendSuperAdminInviteCore(
   // Email-first: on provider failure the PREVIOUS invitation stays the only
   // live token (still deliverable via another resend); no new hash is ever
   // persisted without the email carrying it.
+  const built = buildLinkOrThrow(() => deps.linkFor(input.staffId, rawToken));
+  if ("configError" in built) return { ok: false, code: "EMAIL_CONFIG_INVALID" };
   const sent = await deps.sendEmail(
     input.email,
     "Undangan akun Super Admin Lihat Meja",
-    staffLinkEmailBody(deps.linkFor(input.staffId, rawToken), "berlaku 24 jam dan hanya sekali"),
+    staffLinkEmailBody(built.link, "berlaku 24 jam dan hanya sekali"),
   );
   if (!sent.ok) {
     return { ok: false, code: sent.code };
   }
-  const { error } = await deps.rpc("resend_super_admin_invite", {
+  const res = await deps.rpc("resend_super_admin_invite", {
     p_super_admin_id: input.superAdminId,
     p_new_token_hash: sha256Hex(rawToken),
     p_actor_id: input.actorId,
   });
-  if (error) return { ok: false, code: mapRpcCode(error.message) };
-  return { ok: true };
+  const verdict = readRpcVerdict(res.data, res.error);
+  return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
 }
 
 export const resendSuperAdminInvite = createServerFn({ method: "POST" })
@@ -332,11 +340,12 @@ export const cancelSuperAdminInvite = createServerFn({ method: "POST" })
     if (!actorId) return { ok: false, code: "INDIVIDUAL_REQUIRED" };
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await client.rpc("cancel_super_admin_invite", {
+    const res = await client.rpc("cancel_super_admin_invite", {
       p_super_admin_id: data.superAdminId,
       p_actor_id: actorId,
     });
-    return error ? { ok: false, code: error.message } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 // --- lifecycle -------------------------------------------------------------
@@ -354,15 +363,13 @@ export const setSuperAdminStatus = createServerFn({ method: "POST" })
     if (!actorId) return { ok: false, code: "INDIVIDUAL_REQUIRED" };
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await client.rpc("set_super_admin_status", {
+    const res = await client.rpc("set_super_admin_status", {
       p_actor_id: actorId,
       p_target_id: data.superAdminId,
       p_new_status: data.status,
     });
-    if (error?.message === "LAST_ACTIVE_SUPER_ADMIN") {
-      return { ok: false, code: "LAST_ACTIVE_SUPER_ADMIN" };
-    }
-    return error ? { ok: false, code: "UNAVAILABLE" } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const changePasswordInputSchema = z.object({
@@ -395,13 +402,13 @@ export async function changeStaffPasswordCore(
     return { ok: false, code: "INVALID_CREDENTIALS" };
   }
   const passwordHash = await hashManagerPassword(newPassword);
-  const { error: setErr } = await deps.rpc("set_staff_password", {
+  const res = await deps.rpc("set_staff_password", {
     p_kind: kind,
     p_account_id: accountId,
     p_password_hash: passwordHash,
   });
-  if (setErr) return { ok: false, code: "UNAVAILABLE" };
-  return { ok: true };
+  const verdict = readRpcVerdict(res.data, res.error);
+  return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
 }
 
 export const changeSuperAdminPassword = createServerFn({ method: "POST" })
@@ -461,13 +468,16 @@ export async function requestSuperAdminRecoveryCore(
   }
   const rawToken = generateStaffToken();
   // Email-first: no token row exists unless the email carrying it was sent.
+  // A broken origin config (review B7) aborts BEFORE anything is created.
+  const built = buildLinkOrThrow(() => deps.linkFor(account.staffId, rawToken));
+  if ("configError" in built) {
+    await auditFailure("email link origin config invalid");
+    return false;
+  }
   const sent = await deps.sendEmail(
     email,
     "Reset password Super Admin Lihat Meja",
-    staffLinkEmailBody(
-      deps.linkFor(account.staffId, rawToken),
-      "berlaku 30 menit dan hanya sekali",
-    ),
+    staffLinkEmailBody(built.link, "berlaku 30 menit dan hanya sekali"),
   );
   await deps.audit?.({
     actorKind: "system",
@@ -478,11 +488,11 @@ export async function requestSuperAdminRecoveryCore(
     reason: sent.ok ? null : "email send failed",
   });
   if (!sent.ok) return false;
-  const { error } = await deps.rpc("create_super_admin_recovery_token", {
+  const res = await deps.rpc("create_super_admin_recovery_token", {
     p_super_admin_id: account.id,
     p_token_hash: sha256Hex(rawToken),
   });
-  return !error;
+  return readRpcVerdict(res.data, res.error).ok;
 }
 
 /**
@@ -557,13 +567,14 @@ export const consumeSuperAdminRecovery = createServerFn({ method: "POST" })
       return { ok: false, code: "INVALID_TOKEN" };
     }
     const passwordHash = await hashManagerPassword(data.password);
-    const { error } = await client.rpc("consume_super_admin_recovery_token", {
+    const res = await client.rpc("consume_super_admin_recovery_token", {
       p_super_admin_id: account.id,
       p_token: data.token,
       p_password_hash: passwordHash,
     });
-    await completeOwnerLoginAttempt(reservationId, !error);
-    return error ? { ok: false, code: "INVALID_TOKEN" } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    await completeOwnerLoginAttempt(reservationId, verdict.ok);
+    return verdict.ok ? { ok: true } : { ok: false, code: "INVALID_TOKEN" };
   });
 
 // --- session helpers -------------------------------------------------------
@@ -607,14 +618,69 @@ export const updateOwnSuperAdminProfile = createServerFn({ method: "POST" })
     if (!accountId) return { ok: false, code: "INDIVIDUAL_REQUIRED" };
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await client.rpc("update_staff_profile", {
+    const res = await client.rpc("update_staff_profile", {
       p_actor_kind: "super_admin",
       p_actor_id: accountId,
       p_target_kind: "super_admin",
       p_target_id: accountId,
       p_full_name: data.fullName,
     });
-    return error ? { ok: false, code: error.message } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
+  });
+
+// --- Super Admin renames other staff profiles (review C13) -------------------
+
+export type RenameStaffProfileInput = {
+  actorId: string;
+  targetKind: "super_admin" | "area_manager" | "manager";
+  targetId: string;
+  fullName: string;
+};
+
+/**
+ * Super Admin renames another staff profile through the authoritative
+ * update_staff_profile RPC. The durable jsonb verdict maps 1:1 to the UI
+ * code — no error-message parsing, no thrown denial path.
+ */
+export async function renameStaffProfileCore(
+  input: RenameStaffProfileInput,
+  deps: { rpc: RpcCaller },
+): Promise<{ ok: boolean; code?: string }> {
+  const res = await deps.rpc("update_staff_profile", {
+    p_actor_kind: "super_admin",
+    p_actor_id: input.actorId,
+    p_target_kind: input.targetKind,
+    p_target_id: input.targetId,
+    p_full_name: input.fullName,
+  });
+  const verdict = readRpcVerdict(res.data, res.error);
+  return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
+}
+
+export const saRenameStaffInput = z.object({
+  targetKind: z.enum(["super_admin", "area_manager", "manager"]),
+  targetId: z.string().uuid(),
+  fullName: z.string().trim().min(1).max(80),
+});
+
+export const saRenameStaff = createServerFn({ method: "POST" })
+  .validator(saRenameStaffInput)
+  .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
+    const session = await requireSuperAdmin();
+    const actorId = session.data.superAdminAccountId;
+    if (!actorId) return { ok: false, code: "INDIVIDUAL_REQUIRED" };
+    const client = getServiceClient();
+    if (!client) return { ok: false, code: "UNAVAILABLE" };
+    return renameStaffProfileCore(
+      {
+        actorId,
+        targetKind: data.targetKind,
+        targetId: data.targetId,
+        fullName: data.fullName,
+      },
+      { rpc: async (fn, params) => client.rpc(fn, params) },
+    );
   });
 
 export type SuperAdminRow = {

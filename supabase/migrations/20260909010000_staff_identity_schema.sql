@@ -37,6 +37,9 @@ create table public.super_admin_accounts (
   email text not null check (email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
   email_verified_at timestamptz,
   password_hash text,
+  -- When the CURRENT password was established (activation/recovery/change).
+  -- Drives the password lifecycle reminder symmetrically with AM/Manager.
+  password_changed_at timestamptz,
   status text not null default 'pending_activation'
     check (status in ('pending_activation','aktif','nonaktif','cancelled')),
   invitation_token_hash text,

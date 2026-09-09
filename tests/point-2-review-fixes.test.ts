@@ -30,7 +30,7 @@ describe("bootstrap / invite / resend: email-first, sha256(raw) persisted", () =
         sendEmail: async () => ({ ok: true }),
         rpc: async (_fn, params) => {
           persistedHash = String(params.p_verify_token_hash);
-          return { data: "acc-1", error: null };
+          return { data: { ok: true, id: "acc-1" }, error: null };
         },
       },
     );
@@ -70,7 +70,7 @@ describe("bootstrap / invite / resend: email-first, sha256(raw) persisted", () =
         sendEmail: async () => ({ ok: true }),
         rpc: async (_fn, params) => {
           resendRpcHash = String(params.p_new_token_hash);
-          return { data: null, error: null };
+          return { data: { ok: true }, error: null };
         },
       },
     );
@@ -90,7 +90,7 @@ describe("bootstrap / invite / resend: email-first, sha256(raw) persisted", () =
         },
         rpc: async () => {
           order.push("rpc");
-          return { data: "acc", error: null };
+          return { data: { ok: true, id: "acc" }, error: null };
         },
       },
     );
@@ -137,7 +137,7 @@ describe("recovery: no live token unless email delivered", () => {
     const delivered = await requestSuperAdminRecoveryCore("sa@x.test", {
       rpc: async (_fn, params) => {
         hash = String(params.p_token_hash);
-        return { data: null, error: null };
+        return { data: { ok: true }, error: null };
       },
       sendEmail: async () => ({ ok: true }),
       linkFor: (_s, raw) => {

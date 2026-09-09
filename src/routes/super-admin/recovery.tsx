@@ -14,15 +14,24 @@ export const Route = createFileRoute("/super-admin/recovery")({
   head: () => ({
     meta: [{ title: "Recovery Super Admin - LIME" }, { name: "robots", content: "noindex" }],
   }),
+  // Review C11: the emailed recovery link carries staff_id + token as query
+  // params; the route validates them and opens the reset stage prefilled.
+  validateSearch: (search: Record<string, unknown>): { staff_id?: string; token?: string } => ({
+    staff_id: typeof search.staff_id === "string" ? search.staff_id : undefined,
+    token: typeof search.token === "string" ? search.token : undefined,
+  }),
   component: RecoveryPage,
 });
 
 function RecoveryPage() {
-  const [stage, setStage] = useState<"request" | "reset">("request");
+  const search = Route.useSearch();
+  const [stage, setStage] = useState<"request" | "reset">(
+    search.staff_id && search.token ? "reset" : "request",
+  );
   const [email, setEmail] = useState("");
   const [requested, setRequested] = useState(false);
-  const [staffId, setStaffId] = useState("");
-  const [token, setToken] = useState("");
+  const [staffId, setStaffId] = useState(search.staff_id ?? "");
+  const [token, setToken] = useState(search.token ?? "");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);

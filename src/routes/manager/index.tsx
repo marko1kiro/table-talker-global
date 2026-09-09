@@ -43,6 +43,7 @@ import { TABLE_COUNT } from "@/lib/audio";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { ChangePasswordDialog } from "@/components/dashboard/ChangePasswordDialog";
 import { changeManagerPassword } from "@/lib/manager-auth.server";
+import { logout as logoutServer } from "@/lib/auth";
 
 export const Route = createFileRoute("/manager/")({
   head: () => ({
@@ -288,6 +289,9 @@ function ManagerDashboard() {
   }, [menu]);
 
   const logout = () => {
+    // Review A4: also clear the shared cookie session (may hold another role
+    // from a previous login in this browser).
+    void logoutServer().catch(() => undefined);
     removeManagerIdentity(browserManagerStorage());
     void navigate({ to: "/manager/login" });
   };

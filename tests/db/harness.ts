@@ -168,6 +168,26 @@ export async function rpc<T = unknown>(
   }
 }
 
+/** Calls a public RPC with TRUE named notation — parameter NAMES are part of
+ * the contract under test (review C14): a wrong/renamed parameter must fail. */
+export async function rpcNamed<T = unknown>(
+  client: Client,
+  fn: string,
+  params: Record<string, unknown>,
+): Promise<{ data: T | null; error: string | null }> {
+  const entries = Object.entries(params);
+  const notation = entries.map(([name], i) => `${name} := $${i + 1}`).join(", ");
+  try {
+    const result = await client.query(
+      `select public.${fn}(${notation}) as data`,
+      entries.map(([, value]) => value),
+    );
+    return { data: (result.rows[0]?.data as T) ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: (error as Error).message };
+  }
+}
+
 /** Calls a public set-returning RPC and returns all rows. */
 export async function rpcRows<T = Record<string, unknown>>(
   client: Client,

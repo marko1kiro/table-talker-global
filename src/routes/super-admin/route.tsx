@@ -32,6 +32,7 @@ import {
 import { ChangePasswordDialog } from "@/components/dashboard/ChangePasswordDialog";
 import { EditProfileDialog } from "@/components/dashboard/EditProfileDialog";
 import { isOwnerQueryKey } from "@/lib/owner-query-cache";
+import { browserManagerStorage, removeManagerIdentity } from "@/lib/manager-session-identity";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
 import { DashboardHeaderRight } from "@/components/dashboard/DashboardHeaderRight";
 import { Footer } from "@/components/Footer";
@@ -87,7 +88,12 @@ function SuperAdminShell() {
   if (!auth?.superAdmin) {
     return (
       <AuthGate
-        onSuccess={() => router.invalidate()}
+        onSuccess={() => {
+          // Review A4: one role per browser — a Super Admin login wipes any
+          // manager identity left in this tab's sessionStorage.
+          removeManagerIdentity(browserManagerStorage());
+          void router.invalidate();
+        }}
         title="Login Super Admin"
         instruction="Password Super Admin."
         submitLabel="Masuk"
@@ -108,6 +114,7 @@ function SuperAdminShell() {
         }
         return;
       }
+      removeManagerIdentity(browserManagerStorage());
       queryClient.removeQueries({ predicate: (query) => isOwnerQueryKey(query.queryKey) });
       await router.invalidate();
     } catch {

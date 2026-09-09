@@ -21,25 +21,57 @@ export function emailTransportConfigured(): boolean {
 }
 
 /**
- * Absolute HTTPS origin used in emailed links. STAFF_EMAIL_APP_URL wins;
- * otherwise the current request's own origin is used (server fns always run
- * inside a request). Empty string means "cannot build a safe link" and
- * callers must fail closed.
+ * Thrown when a safe absolute link origin cannot be derived (review B7).
+ * Callers must map this to EMAIL_CONFIG_INVALID BEFORE sending any email or
+ * persisting any token, so a broken app-origin config can never mint a
+ * live-but-undeliverable magic link.
  */
-export function staffAppOrigin(): string {
+export class StaffEmailConfigError extends Error {
+  constructor(message = "Konfigurasi origin tautan email tidak valid.") {
+    super(message);
+    this.name = "StaffEmailConfigError";
+  }
+}
+
+function validateAppOrigin(raw: string, allowHttp: boolean): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new StaffEmailConfigError();
+  }
+  if (url.protocol !== "https:" && !(allowHttp && url.protocol === "http:")) {
+    throw new StaffEmailConfigError();
+  }
+  return url.origin;
+}
+
+/**
+ * Absolute HTTPS origin used in emailed links (review B7, fail-closed):
+ * STAFF_EMAIL_APP_URL wins and must parse as an absolute http(s) URL (https
+ * enforced in production); otherwise the explicit request origin is used
+ * under the same rules; with neither, the current request's own origin is
+ * used. Anything invalid throws StaffEmailConfigError — never a relative or
+ * attacker-controlled link value.
+ */
+export function staffAppOrigin(requestOrigin?: string): string {
+  const allowHttp = process.env.NODE_ENV !== "production";
   const configured = process.env.STAFF_EMAIL_APP_URL;
   if (typeof configured === "string" && configured.trim() !== "") {
-    return configured.trim().replace(/\/+$/, "");
+    return validateAppOrigin(configured.trim(), allowHttp);
   }
-  try {
-    const url = new URL(getRequest().url);
-    if (url.protocol === "https:" || process.env.NODE_ENV !== "production") {
-      return url.origin;
+  let candidate = requestOrigin;
+  if (candidate === undefined) {
+    try {
+      candidate = new URL(getRequest().url).origin;
+    } catch {
+      candidate = "";
     }
-  } catch {
-    // outside a request context
   }
-  return "";
+  if (typeof candidate !== "string" || candidate.trim() === "") {
+    throw new StaffEmailConfigError("Tidak ada origin untuk membangun tautan email.");
+  }
+  return validateAppOrigin(candidate.trim(), allowHttp);
 }
 
 /** One-time accept link for a Super Admin invite / bootstrap activation. */

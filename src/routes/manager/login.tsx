@@ -6,7 +6,11 @@ import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { Footer } from "@/components/Footer";
 import { loginStaff } from "@/lib/staff-login.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { browserManagerStorage, writeManagerIdentity } from "@/lib/manager-session-identity";
+import {
+  browserManagerStorage,
+  removeManagerIdentity,
+  writeManagerIdentity,
+} from "@/lib/manager-session-identity";
 import { getOwnerLoginClientKey } from "@/lib/owner-login-client-key";
 
 export const Route = createFileRoute("/manager/login")({
@@ -65,6 +69,8 @@ function StaffLoginPage() {
         return;
       }
       // Area Manager: cookie session sudah dibuat server-side; redirect by role.
+      // Review A4: satu role per browser — identitas manager lama dihapus.
+      removeManagerIdentity(browserManagerStorage());
       void navigate({ to: "/am" });
     } catch {
       setError("Login gagal.");

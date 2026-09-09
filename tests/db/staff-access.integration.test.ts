@@ -1,8 +1,9 @@
-// Executable DB-level proof for Poin 2 (TASKLET review fixes). Runs the FULL
+// Executable DB-level proof for Poin 2 (TASKLET review round 2). Runs the FULL
 // migration chain against a disposable vanilla Postgres (embedded locally,
 // service container in CI via TEST_DATABASE_URL) with a legacy-schema seed
 // inserted between the pre-Poin-2 and Poin-2 migrations, then exercises the
-// real RPCs — including true parallel connections for race conditions.
+// real RPCs — including true parallel connections for race conditions and
+// serialized AM lifecycle semantics.
 // Production/staging Supabase is never contacted.
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -14,6 +15,7 @@ import {
   generateToken,
   migrationFiles,
   rpc,
+  rpcNamed,
   rpcOk,
   rpcRows,
   scryptHash,
@@ -22,6 +24,7 @@ import {
   type LegacySeed,
   type TestDb,
 } from "./harness";
+import { verifyManagerPassword } from "../../src/lib/manager-password.server";
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 600_000 });
 
@@ -45,6 +48,24 @@ const seedLegacy: LegacySeed = async (c) => {
   );
 };
 
+// Duplicate legacy IDs that collide case-insensitively: the backfill migration
+// must FAIL CLOSED (review A2).
+const seedDuplicateLegacy: LegacySeed = async (c) => {
+  await c.query(
+    `insert into public.restaurants (id, code, display_name, pin_hash, credential_rotated_at) values
+       ($1, 'RESTO-1', 'Resto Satu', encode(extensions.digest('test-pin-1', 'sha256'), 'hex'), now())`,
+    [R1],
+  );
+  await c.query(
+    `insert into public.manager_accounts (id, id_manager, full_name, restaurant_id, password_hash, status) values
+       ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', 'admin', 'Admin Satu', $1, 'x:y', 'aktif'),
+       ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'ADMIN', 'Admin Dua', $1, 'x:y', 'aktif')`,
+    [R1],
+  );
+};
+
+type RpcJson = { ok?: boolean; error?: string; id?: string | null };
+
 let db: TestDb;
 let sa1Id = "";
 let sa2Id = "";
@@ -62,12 +83,39 @@ async function parallel<T>(fns: Array<() => Promise<T>>): Promise<T[]> {
   return Promise.all(fns.map((fn) => fn()));
 }
 
-async function expectRpcError(
-  promise: Promise<{ error: string | null }>,
-  fragment: string,
-): Promise<void> {
-  const result = await promise;
-  expect(result.error ?? "").toContain(fragment);
+/** Calls a mutating RPC and asserts the jsonb verdict contract (review B8). */
+async function verdict(
+  client: Client,
+  fn: string,
+  params: Record<string, unknown>,
+): Promise<RpcJson> {
+  const result = await rpc<RpcJson>(client, fn, params);
+  expect(result.error).toBeNull();
+  const data = result.data as RpcJson | null;
+  expect(data !== null && typeof data === "object" && typeof data.ok === "boolean").toBe(true);
+  return data as RpcJson;
+}
+
+async function okVerdict(
+  client: Client,
+  fn: string,
+  params: Record<string, unknown>,
+): Promise<RpcJson> {
+  const v = await verdict(client, fn, params);
+  expect(v.ok).toBe(true);
+  return v;
+}
+
+async function expectDenial(
+  client: Client,
+  fn: string,
+  params: Record<string, unknown>,
+  code: string,
+): Promise<RpcJson> {
+  const v = await verdict(client, fn, params);
+  expect(v.ok).toBe(false);
+  expect(v.error).toBe(code);
+  return v;
 }
 
 async function scalar(client: Client, sql: string, params: unknown[] = []): Promise<number> {
@@ -78,6 +126,47 @@ async function scalar(client: Client, sql: string, params: unknown[] = []): Prom
 async function oneText(client: Client, sql: string, params: unknown[] = []): Promise<string> {
   const result = await client.query(sql, params);
   return String(Object.values(result.rows[0] ?? { v: "" })[0]);
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Restores: both AMs aktif; am1+am2 assigned to R1; am1 assigned to R2 ONLY. */
+async function restoreAmState(c: Client): Promise<void> {
+  // Undo any assignment side effects from in-flight race tests (direct cleanup
+  // is test scaffolding only, not a production path). Canonical state:
+  // am1 -> {R1, R2}, am2 -> {R1}.
+  await c.query(
+    `delete from public.area_manager_assignments
+     where removed_at is null
+       and not (area_manager_id = $1 and restaurant_id in ($2, $4))
+       and not (area_manager_id = $3 and restaurant_id = $2)`,
+    [am1Id, R1, am2Id, R2],
+  );
+  await okVerdict(c, "set_area_manager_status", {
+    p_actor_id: sa1Id,
+    p_target_id: am1Id,
+    p_new_status: "aktif",
+  });
+  await okVerdict(c, "set_area_manager_status", {
+    p_actor_id: sa1Id,
+    p_target_id: am2Id,
+    p_new_status: "aktif",
+  });
+  await okVerdict(c, "assign_area_manager", {
+    p_actor_id: sa1Id,
+    p_am_id: am1Id,
+    p_restaurant_id: R1,
+  });
+  await okVerdict(c, "assign_area_manager", {
+    p_actor_id: sa1Id,
+    p_am_id: am2Id,
+    p_restaurant_id: R1,
+  });
+  await okVerdict(c, "assign_area_manager", {
+    p_actor_id: sa1Id,
+    p_am_id: am1Id,
+    p_restaurant_id: R2,
+  });
 }
 
 beforeAll(async () => {
@@ -99,7 +188,7 @@ describe("migration replay on legacy-shaped schema", () => {
       );
     const ids = claimed.rows.map((r) => String(r.staff_id));
     expect(ids).toContain("budi.santoso");
-    expect(ids).toContain("aguskasir");
+    expect(ids).toContain("aguskasir"); // legacy 'AgusKasir' claimed lowercased
     expect(claimed.rows.every((r) => r.account_kind === "manager")).toBe(true);
   });
 
@@ -114,23 +203,67 @@ describe("migration replay on legacy-shaped schema", () => {
 
   test("backfill is a hard gate on case-insensitive collisions", async () => {
     const c = await db.client();
-    const backfill = migrationFiles().find((f) => f.includes("backfill_staff_id_registry"));
-    expect(backfill).toBeTruthy();
-    await c.query("begin");
-    try {
-      await c.query(
+    // The unique index manager_accounts_lower_id_manager_uq (created by the
+    // backfill migration) makes ANY case-insensitive duplicate of a legacy ID
+    // impossible to insert — the fail-closed guarantee review A2 demands.
+    await expect(
+      c.query(
         `insert into public.manager_accounts (id, id_manager, full_name, restaurant_id, password_hash, status)
          values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9', 'BUDI.SANTOSO', 'Collision', $1, 'x:y', 'aktif')`,
         [R3],
-      );
-      const sql = readFileSync(
-        fileURLToPath(new URL(`../../supabase/migrations/${backfill}`, import.meta.url)),
-        "utf8",
-      );
-      await expect(c.query(sql)).rejects.toThrow(/STAFF_ID_BACKFILL_COLLISION/);
-    } finally {
-      await c.query("rollback");
+      ),
+    ).rejects.toThrow(/manager_accounts_lower_id_manager_uq/);
+  });
+
+  test("duplicate legacy case-insensitive IDs make the migration fail closed (A2)", async () => {
+    await expect(
+      createTestDb("lime_staff_p2_dup", { seedLegacy: seedDuplicateLegacy }),
+    ).rejects.toThrow(/STAFF_ID_BACKFILL_COLLISION/);
+    // The failed database is dropped with (force) by the next createTestDb call
+    // that reuses the name; nothing is kept alive here.
+  });
+});
+
+describe("legacy mixed-case manager identity (review A2)", () => {
+  test("legacy 'AgusKasir' resolves under every casing variant for login", async () => {
+    const c = await db.client();
+    for (const variant of ["AgusKasir", "aguskasir", "AGUSKASIR", " aGusKasIr "]) {
+      const cred = await rpcOk<Record<string, unknown>>(c, "get_manager_credential", {
+        p_id_manager: variant,
+      });
+      expect(String(cred.id)).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2");
     }
+  });
+
+  test("reset request resolves legacy mixed-case IDs case-insensitively", async () => {
+    const c = await db.client();
+    const candidate = await scryptHash("ResetLegacy#1");
+    expect(
+      await rpcOk<boolean>(c, "submit_manager_reset_request", {
+        p_staff_id: "AGUSKASIR",
+        p_candidate_hash: candidate,
+      }),
+    ).toBe(true);
+    // Clean up the pending request so later suites start clean.
+    await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+    ]);
+  });
+
+  test("a mixed-case legacy ID cannot be re-claimed by another role", async () => {
+    const c = await db.client();
+    const claim = await rpc(c, "claim_staff_id", {
+      p_staff_id: "AGUSKASIR",
+      p_kind: "area_manager",
+      p_account_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    });
+    expect(claim.error ?? "").toContain("STAFF_ID_TAKEN");
+    const claim2 = await rpc(c, "claim_staff_id", {
+      p_staff_id: "aguskasir",
+      p_kind: "manager",
+      p_account_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccd",
+    });
+    expect(claim2.error ?? "").toContain("STAFF_ID_TAKEN");
   });
 });
 
@@ -142,14 +275,14 @@ describe("bootstrap: CSPRNG token, one-time race, real acceptance", () => {
     const c2 = await freshClient();
     const [a, b] = await parallel([
       () =>
-        rpc<string>(c1, "bootstrap_create_super_admin", {
+        rpc<RpcJson>(c1, "bootstrap_create_super_admin", {
           p_staff_id: "sa.utama",
           p_full_name: "SA Utama",
           p_email: "sa.utama@example.test",
           p_verify_token_hash: sha256Hex(rawA),
         }),
       () =>
-        rpc<string>(c2, "bootstrap_create_super_admin", {
+        rpc<RpcJson>(c2, "bootstrap_create_super_admin", {
           p_staff_id: "sa.kedua",
           p_full_name: "SA Kedua",
           p_email: "sa.kedua@example.test",
@@ -158,47 +291,58 @@ describe("bootstrap: CSPRNG token, one-time race, real acceptance", () => {
     ]);
     await c1.end();
     await c2.end();
-    const winners = [a, b].filter((r) => !r.error && typeof r.data === "string");
+    const winners = [a, b].filter((r) => !r.error && (r.data as RpcJson)?.ok === true);
     expect(winners).toHaveLength(1);
-    const loser = a.error ? a : b;
-    expect(loser.error).toContain("BOOTSTRAP_CLOSED");
-    bootstrapRawToken = a.error ? rawB : rawA;
-    bootstrapWinnerStaffId = a.error ? "sa.kedua" : "sa.utama";
-    sa1Id = String(winners[0].data);
+    const loser = (a.data as RpcJson)?.ok === true ? b : a;
+    expect(loser.error).toBeNull();
+    expect((loser.data as RpcJson).error).toBe("BOOTSTRAP_CLOSED");
+    bootstrapRawToken = (a.data as RpcJson)?.ok === true ? rawA : rawB;
+    bootstrapWinnerStaffId = (a.data as RpcJson)?.ok === true ? "sa.utama" : "sa.kedua";
+    sa1Id = String((winners[0].data as RpcJson).id);
   });
 
-  test("raw token accepted end-to-end; gate closes permanently", async () => {
+  test("raw token accepted end-to-end; gate closes permanently; password stamped (A1)", async () => {
     const c = await db.client();
-    // The token that was EMAILED (raw) must satisfy sha256(raw) == stored hash.
-    const accepted = await rpc<boolean>(c, "accept_super_admin_invite", {
+    const accepted = await okVerdict(c, "accept_super_admin_invite", {
       p_staff_id: bootstrapWinnerStaffId,
       p_token: bootstrapRawToken,
       p_password_hash: await scryptHash("PasswordKuat#1"),
     });
-    expect(accepted.error).toBeNull();
-    expect(accepted.data).toBe(true);
+    expect(accepted.ok).toBe(true);
     const state = (await rpcOk<Record<string, unknown>>(c, "bootstrap_super_admin_state", {})) as {
       open: boolean;
       active_count: number;
     };
     expect(state.open).toBe(false);
     expect(Number(state.active_count)).toBe(1);
-    // Replay of the same token fails.
-    await expectRpcError(
-      rpc(c, "accept_super_admin_invite", {
+    const stamp = await c.query(
+      `select password_changed_at from public.super_admin_accounts where id = $1`,
+      [sa1Id],
+    );
+    expect(stamp.rows[0].password_changed_at).not.toBeNull();
+    await expectDenial(
+      c,
+      "accept_super_admin_invite",
+      {
         p_staff_id: bootstrapWinnerStaffId,
         p_token: bootstrapRawToken,
         p_password_hash: "x:y",
-      }),
+      },
       "INVALID_INVITATION",
     );
+    const denied = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'super_admin.activated' and result = 'denied' and reason = 'invalid invitation'`,
+    );
+    expect(denied).toBeGreaterThanOrEqual(1);
   });
 });
 
 describe("manager creation: atomic claim, collisions, scope", () => {
   test("Super Admin creates a manager; registry row lands atomically", async () => {
     const c = await db.client();
-    const id = await rpcOk<string>(c, "create_manager_account", {
+    const created = await okVerdict(c, "create_manager_account", {
       p_actor_kind: "super_admin",
       p_actor_id: sa1Id,
       p_staff_id: "kasir.satgas01",
@@ -206,8 +350,8 @@ describe("manager creation: atomic claim, collisions, scope", () => {
       p_restaurant_id: R1,
       p_password_hash: await scryptHash("AwalManager1"),
     });
-    expect(typeof id).toBe("string");
-    managerId = String(id);
+    managerId = String(created.id);
+    expect(managerId).toMatch(/^[0-9a-f-]{36}$/);
     const inRegistry = await scalar(
       c,
       `select count(*) as n from public.staff_id_registry
@@ -217,40 +361,46 @@ describe("manager creation: atomic claim, collisions, scope", () => {
     expect(inRegistry).toBe(1);
   });
 
-  test("collisions rejected across registry, legacy rows, and roles", async () => {
+  test("collisions rejected across registry, legacy rows (case-insensitive), and roles", async () => {
     const c = await db.client();
     const hash = await scryptHash("AwalManager1");
-    await expectRpcError(
-      rpc(c, "create_manager_account", {
+    await expectDenial(
+      c,
+      "create_manager_account",
+      {
         p_actor_kind: "super_admin",
         p_actor_id: sa1Id,
         p_staff_id: "KASIR.SATGAS01",
         p_full_name: "Dup",
         p_restaurant_id: R1,
         p_password_hash: hash,
-      }),
+      },
       "STAFF_ID_TAKEN",
     );
-    await expectRpcError(
-      rpc(c, "create_manager_account", {
+    await expectDenial(
+      c,
+      "create_manager_account",
+      {
         p_actor_kind: "super_admin",
         p_actor_id: sa1Id,
         p_staff_id: "AgusKasir",
         p_full_name: "Legacy clash",
         p_restaurant_id: R1,
         p_password_hash: hash,
-      }),
+      },
       "STAFF_ID_TAKEN",
     );
-    await expectRpcError(
-      rpc(c, "create_manager_account", {
+    await expectDenial(
+      c,
+      "create_manager_account",
+      {
         p_actor_kind: "super_admin",
         p_actor_id: sa1Id,
         p_staff_id: bootstrapWinnerStaffId,
         p_full_name: "Cross-role clash",
         p_restaurant_id: R1,
         p_password_hash: hash,
-      }),
+      },
       "STAFF_ID_TAKEN",
     );
   });
@@ -261,7 +411,7 @@ describe("manager creation: atomic claim, collisions, scope", () => {
     const hash = await scryptHash("AwalManager1");
     const [a, b] = await parallel([
       () =>
-        rpc(c1, "create_manager_account", {
+        rpc<RpcJson>(c1, "create_manager_account", {
           p_actor_kind: "super_admin",
           p_actor_id: sa1Id,
           p_staff_id: "race.manager",
@@ -270,7 +420,7 @@ describe("manager creation: atomic claim, collisions, scope", () => {
           p_password_hash: hash,
         }),
       () =>
-        rpc(c2, "create_manager_account", {
+        rpc<RpcJson>(c2, "create_manager_account", {
           p_actor_kind: "super_admin",
           p_actor_id: sa1Id,
           p_staff_id: "race.manager",
@@ -281,21 +431,22 @@ describe("manager creation: atomic claim, collisions, scope", () => {
     ]);
     await c1.end();
     await c2.end();
-    const wins = [a, b].filter((r) => !r.error).length;
-    expect(wins).toBe(1);
-    const loss = a.error ? a : b;
-    expect(loss.error).toContain("STAFF_ID_TAKEN");
+    const wins = [a, b].filter((r) => !r.error && (r.data as RpcJson)?.ok === true);
+    expect(wins).toHaveLength(1);
+    const loss = (a.data as RpcJson)?.ok === true ? b : a;
+    expect(loss.error).toBeNull();
+    expect((loss.data as RpcJson).error).toBe("STAFF_ID_TAKEN");
   });
 
-  test("Area Manager in scope creates; out-of-scope denied", async () => {
+  test("Area Manager in scope creates; out-of-scope denied with durable audit", async () => {
     const c = await db.client();
-    await rpcOk(c, "create_area_manager", {
+    await okVerdict(c, "create_area_manager", {
       p_actor_id: sa1Id,
       p_staff_id: "am.satu",
       p_full_name: "AM Satu",
       p_password_hash: await scryptHash("AmPass#111"),
     });
-    await rpcOk(c, "create_area_manager", {
+    await okVerdict(c, "create_area_manager", {
       p_actor_id: sa1Id,
       p_staff_id: "am.dua",
       p_full_name: "AM Dua",
@@ -309,23 +460,23 @@ describe("manager creation: atomic claim, collisions, scope", () => {
       c,
       `select id::text as n from public.area_manager_accounts where staff_id = 'am.dua'`,
     );
-    await rpcOk(c, "assign_area_manager", {
+    await okVerdict(c, "assign_area_manager", {
       p_actor_id: sa1Id,
       p_am_id: am1Id,
       p_restaurant_id: R1,
     });
-    await rpcOk(c, "assign_area_manager", {
+    await okVerdict(c, "assign_area_manager", {
       p_actor_id: sa1Id,
       p_am_id: am2Id,
       p_restaurant_id: R1,
     });
-    await rpcOk(c, "assign_area_manager", {
+    await okVerdict(c, "assign_area_manager", {
       p_actor_id: sa1Id,
       p_am_id: am1Id,
       p_restaurant_id: R2,
     });
 
-    const created = await rpc<string>(c, "create_manager_account", {
+    const created = await okVerdict(c, "create_manager_account", {
       p_actor_kind: "area_manager",
       p_actor_id: am1Id,
       p_staff_id: "kasir.restodua",
@@ -333,20 +484,29 @@ describe("manager creation: atomic claim, collisions, scope", () => {
       p_restaurant_id: R2,
       p_password_hash: await scryptHash("AwalManager2"),
     });
-    expect(created.error).toBeNull();
-    await expectRpcError(
-      rpc(c, "create_manager_account", {
+    expect(created.ok).toBe(true);
+    await expectDenial(
+      c,
+      "create_manager_account",
+      {
         p_actor_kind: "area_manager",
         p_actor_id: am1Id,
         p_staff_id: "kasir.restotiga",
         p_full_name: "Out of scope",
         p_restaurant_id: R3,
         p_password_hash: "x:y",
-      }),
+      },
       "NOT_AUTHORIZED",
     );
-    // SA creates one in R3 for the audit-scope test.
-    await rpcOk(c, "create_manager_account", {
+    const denied = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'manager.create' and actor_id = $1 and restaurant_id = $2
+         and result = 'denied' and reason = 'not authorized'`,
+      [am1Id, R3],
+    );
+    expect(denied).toBe(1);
+    await okVerdict(c, "create_manager_account", {
       p_actor_kind: "super_admin",
       p_actor_id: sa1Id,
       p_staff_id: "kasir.restotiga",
@@ -357,57 +517,256 @@ describe("manager creation: atomic claim, collisions, scope", () => {
   });
 });
 
+describe("AM scope revocation is serialized with every scoped action (review A3)", () => {
+  /**
+   * Deterministic parallel interleaving: a helper transaction holds the
+   * 'area_manager_lifecycle' advisory lock (the same key every scoped action
+   * must take), the scoped action is launched on another connection and
+   * BLOCKS on the lock, then the revocation commits inside the holder
+   * transaction before the lock is released. The blocked action acquires the
+   * lock only AFTER the revocation committed and must fail its re-check.
+   */
+  async function actionBlockedByPendingRevoke(
+    action: (client: Client) => Promise<{ data: unknown; error: string | null }>,
+  ): Promise<RpcJson> {
+    const holder = await freshClient();
+    const actor = await freshClient();
+    try {
+      await holder.query("begin");
+      await holder.query(`select pg_advisory_xact_lock(hashtext('area_manager_lifecycle'))`);
+      const actionPromise = action(actor);
+      await sleep(200); // let the action queue on the lock
+      await okVerdict(holder, "revoke_area_manager_assignment", {
+        p_actor_id: sa1Id,
+        p_am_id: am1Id,
+        p_restaurant_id: R1,
+      });
+      await holder.query("commit"); // revoke committed; lock released
+      const result = await actionPromise;
+      expect(result.error).toBeNull();
+      return result.data as RpcJson;
+    } finally {
+      await holder.end().catch(() => undefined);
+      await actor.end().catch(() => undefined);
+      await restoreAmState(await db.client());
+    }
+  }
+
+  test("revoke commits while AM create-manager is blocked -> create fails", async () => {
+    const result = await actionBlockedByPendingRevoke((client) =>
+      rpc<RpcJson>(client, "create_manager_account", {
+        p_actor_kind: "area_manager",
+        p_actor_id: am1Id,
+        p_staff_id: "kasir.afterrevoke",
+        p_full_name: "Too Late",
+        p_restaurant_id: R1,
+        p_password_hash: "salt:hash",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("NOT_AUTHORIZED");
+    const created = await scalar(
+      await db.client(),
+      `select count(*) as n from public.manager_accounts where lower(id_manager) = 'kasir.afterrevoke'`,
+    );
+    expect(created).toBe(0);
+  });
+
+  test("revoke commits while AM rename is blocked -> rename fails", async () => {
+    const result = await actionBlockedByPendingRevoke((client) =>
+      rpc<RpcJson>(client, "update_staff_profile", {
+        p_actor_kind: "area_manager",
+        p_actor_id: am1Id,
+        p_target_kind: "manager",
+        p_target_id: managerId,
+        p_full_name: "Renamed After Revoke",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("NOT_AUTHORIZED");
+    const name = await oneText(
+      await db.client(),
+      `select full_name as n from public.manager_accounts where id = $1`,
+      [managerId],
+    );
+    expect(name).toBe("Kasir Satgas");
+  });
+
+  test("revoke commits while AM status change is blocked -> status change fails", async () => {
+    const result = await actionBlockedByPendingRevoke((client) =>
+      rpc<RpcJson>(client, "set_manager_status", {
+        p_actor_kind: "area_manager",
+        p_actor_id: am1Id,
+        p_manager_id: managerId,
+        p_new_status: "nonaktif",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("NOT_AUTHORIZED");
+    const status = await oneText(
+      await db.client(),
+      `select status as n from public.manager_accounts where id = $1`,
+      [managerId],
+    );
+    expect(status).toBe("aktif");
+  });
+
+  test("revoke commits while AM reset decision is blocked -> decision fails with durable audit", async () => {
+    const c = await db.client();
+    await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [managerId]);
+    expect(
+      await rpcOk<boolean>(c, "submit_manager_reset_request", {
+        p_staff_id: "kasir.satgas01",
+        p_candidate_hash: await scryptHash("ResetDuringRace#1"),
+      }),
+    ).toBe(true);
+    const requestId = await oneText(
+      c,
+      `select id::text as n from public.manager_reset_requests where manager_id = $1 and status = 'pending'`,
+      [managerId],
+    );
+    const result = await actionBlockedByPendingRevoke((client) =>
+      rpc<RpcJson>(client, "decide_manager_reset", {
+        p_decider_kind: "area_manager",
+        p_decider_id: am1Id,
+        p_request_id: requestId,
+        p_decision: "approved",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("NOT_AUTHORIZED");
+    const stillPending = await scalar(
+      c,
+      `select count(*) as n from public.manager_reset_requests where id = $1 and status = 'pending'`,
+      [requestId],
+    );
+    expect(stillPending).toBe(1);
+    const denied = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'manager_reset.decide' and actor_id = $1 and result = 'denied' and reason = 'out of scope'`,
+      [am1Id],
+    );
+    expect(denied).toBeGreaterThanOrEqual(1);
+    await c.query(`delete from public.manager_reset_requests where id = $1`, [requestId]);
+  });
+
+  test("AM deactivated first -> in-flight scoped action still fails", async () => {
+    const holder = await freshClient();
+    const actor = await freshClient();
+    try {
+      await holder.query("begin");
+      await holder.query(`select pg_advisory_xact_lock(hashtext('area_manager_lifecycle'))`);
+      const actionPromise = rpc<RpcJson>(actor, "create_manager_account", {
+        p_actor_kind: "area_manager",
+        p_actor_id: am1Id,
+        p_staff_id: "kasir.afterdeact",
+        p_full_name: "Too Late",
+        p_restaurant_id: R2,
+        p_password_hash: "salt:hash",
+      });
+      await sleep(200);
+      // am1 must stay assignable-in-scope for the action attempt, but the
+      // deactivation below (committed under the same lock) revokes that right.
+      await okVerdict(holder, "assign_area_manager", {
+        p_actor_id: sa1Id,
+        p_am_id: am2Id,
+        p_restaurant_id: R2,
+      });
+      await okVerdict(holder, "set_area_manager_status", {
+        p_actor_id: sa1Id,
+        p_target_id: am1Id,
+        p_new_status: "nonaktif",
+      });
+      await holder.query("commit");
+      const result = await actionPromise;
+      expect(result.error).toBeNull();
+      expect((result.data as RpcJson).ok).toBe(false);
+      expect((result.data as RpcJson).error).toBe("NOT_AUTHORIZED");
+    } finally {
+      await holder.end().catch(() => undefined);
+      await actor.end().catch(() => undefined);
+      await restoreAmState(await db.client());
+    }
+  });
+
+  test("authorized action commits first; revocation then applies on top", async () => {
+    const c = await db.client();
+    await restoreAmState(c);
+    const created = await okVerdict(c, "create_manager_account", {
+      p_actor_kind: "area_manager",
+      p_actor_id: am1Id,
+      p_staff_id: "kasir.firstwins",
+      p_full_name: "First Wins",
+      p_restaurant_id: R1,
+      p_password_hash: await scryptHash("FirstWins#1"),
+    });
+    expect(created.ok).toBe(true);
+    const revoked = await okVerdict(c, "revoke_area_manager_assignment", {
+      p_actor_id: sa1Id,
+      p_am_id: am1Id,
+      p_restaurant_id: R1,
+    });
+    expect(revoked.ok).toBe(true);
+    const still = await scalar(
+      c,
+      `select count(*) as n from public.manager_accounts where lower(id_manager) = 'kasir.firstwins'`,
+    );
+    expect(still).toBe(1);
+    const removed = await scalar(
+      c,
+      `select count(*) as n from public.area_manager_assignments
+       where area_manager_id = $1 and restaurant_id = $2 and removed_at is null`,
+      [am1Id, R1],
+    );
+    expect(removed).toBe(0);
+  });
+});
+
 describe("last-active invariants hold under parallelism", () => {
   test("parallel Super Admin deactivations never reach zero active", async () => {
     const c = await db.client();
-    // SA1 invites + activates a second individual Super Admin.
     const raw = generateToken();
-    sa2Id = String(
-      await rpcOk<string>(c, "create_super_admin_invite", {
-        p_staff_id: "sa.mitra",
-        p_full_name: "SA Mitra",
-        p_email: "sa.mitra@example.test",
-        p_invitation_token_hash: sha256Hex(raw),
-        p_creator_id: sa1Id,
-      }),
-    );
+    const invited = await okVerdict(c, "create_super_admin_invite", {
+      p_staff_id: "sa.mitra",
+      p_full_name: "SA Mitra",
+      p_email: "sa.mitra@example.test",
+      p_invitation_token_hash: sha256Hex(raw),
+      p_creator_id: sa1Id,
+    });
+    sa2Id = String(invited.id);
     const c1 = await freshClient();
     const c2 = await freshClient();
     try {
-      await rpcOk(c1, "accept_super_admin_invite", {
+      await okVerdict(c1, "accept_super_admin_invite", {
         p_staff_id: "sa.mitra",
         p_token: raw,
         p_password_hash: await scryptHash("PasswordKuat#2"),
       });
-      // Race their mutual deactivation. Serialized by the lifecycle lock:
-      // exactly one succeeds; the other is refused (either LAST_ACTIVE after
-      // the first commit, or NOT_AUTHORIZED because its actor was just
-      // deactivated). Either way the min-1-active invariant holds.
       const [a, b] = await parallel([
         () =>
-          rpc(c1, "set_super_admin_status", {
+          rpc<RpcJson>(c1, "set_super_admin_status", {
             p_actor_id: sa1Id,
             p_target_id: sa2Id,
             p_new_status: "nonaktif",
           }),
         () =>
-          rpc(c2, "set_super_admin_status", {
+          rpc<RpcJson>(c2, "set_super_admin_status", {
             p_actor_id: sa2Id,
             p_target_id: sa1Id,
             p_new_status: "nonaktif",
           }),
       ]);
-      const succeeded = [a, b].filter((r) => !r.error);
-      expect(succeeded).toHaveLength(1);
+      const winners = [a, b].filter((r) => !r.error && (r.data as RpcJson)?.ok === true);
+      expect(winners).toHaveLength(1);
       const activeCount = await scalar(
         c,
         `select count(*) as n from public.super_admin_accounts where status = 'aktif'`,
       );
       expect(activeCount).toBe(1);
-      // Restore: reactivate the deactivated one so later tests have two admins.
-      const deactivatedId = succeeded[0] === a ? sa2Id : sa1Id;
+      const deactivatedId = (a.data as RpcJson)?.ok === true ? sa2Id : sa1Id;
       const actorId = deactivatedId === sa1Id ? sa2Id : sa1Id;
-      await rpcOk(c, "set_super_admin_status", {
+      await okVerdict(c, "set_super_admin_status", {
         p_actor_id: actorId,
         p_target_id: deactivatedId,
         p_new_status: "aktif",
@@ -418,18 +777,20 @@ describe("last-active invariants hold under parallelism", () => {
     }
   });
 
-  test("parallel assignment revokes keep >=1 active AM per restaurant", async () => {
+  test("parallel assignment revokes keep >=1 active AM per restaurant, denial audited durably", async () => {
+    const c = await db.client();
+    await restoreAmState(c);
     const c1 = await freshClient();
     const c2 = await freshClient();
     const [a, b] = await parallel([
       () =>
-        rpc(c1, "revoke_area_manager_assignment", {
+        rpc<RpcJson>(c1, "revoke_area_manager_assignment", {
           p_actor_id: sa1Id,
           p_am_id: am1Id,
           p_restaurant_id: R1,
         }),
       () =>
-        rpc(c2, "revoke_area_manager_assignment", {
+        rpc<RpcJson>(c2, "revoke_area_manager_assignment", {
           p_actor_id: sa1Id,
           p_am_id: am2Id,
           p_restaurant_id: R1,
@@ -437,9 +798,10 @@ describe("last-active invariants hold under parallelism", () => {
     ]);
     await c1.end();
     await c2.end();
-    const denied = [a, b].filter((r) => (r.error ?? "").includes("LAST_ACTIVE_AREA_MANAGER"));
-    expect(denied).toHaveLength(1);
-    const c = await db.client();
+    const denials = [a, b].filter(
+      (r) => !r.error && (r.data as RpcJson)?.error === "LAST_ACTIVE_AREA_MANAGER",
+    );
+    expect(denials).toHaveLength(1);
     const active = await scalar(
       c,
       `select count(distinct a.area_manager_id)::int as n
@@ -449,51 +811,40 @@ describe("last-active invariants hold under parallelism", () => {
       [R1],
     );
     expect(active).toBeGreaterThanOrEqual(1);
+    const durable = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'assignment.remove' and restaurant_id = $1
+         and result = 'denied' and reason = 'last active area manager'`,
+      [R1],
+    );
+    expect(durable).toBe(1);
   });
 
-  test("parallel AM deactivations keep >=1 active AM per restaurant", async () => {
+  test("parallel AM deactivations keep >=1 active AM per restaurant, denial audited durably", async () => {
     const c = await db.client();
-    // Make sure both AMs are active and (re-)assigned to R1 — the revoke race
-    // in the previous test removed exactly one of them from R1.
-    await rpcOk(c, "set_area_manager_status", {
-      p_actor_id: sa1Id,
-      p_target_id: am1Id,
-      p_new_status: "aktif",
-    });
-    await rpcOk(c, "set_area_manager_status", {
-      p_actor_id: sa1Id,
-      p_target_id: am2Id,
-      p_new_status: "aktif",
-    });
-    await rpcOk(c, "assign_area_manager", {
-      p_actor_id: sa1Id,
-      p_am_id: am1Id,
-      p_restaurant_id: R1,
-    });
-    await rpcOk(c, "assign_area_manager", {
-      p_actor_id: sa1Id,
-      p_am_id: am2Id,
-      p_restaurant_id: R1,
-    });
+    await restoreAmState(c);
     const c1 = await freshClient();
     const c2 = await freshClient();
     try {
       const [a, b] = await parallel([
         () =>
-          rpc(c1, "set_area_manager_status", {
+          rpc<RpcJson>(c1, "set_area_manager_status", {
             p_actor_id: sa1Id,
             p_target_id: am1Id,
             p_new_status: "nonaktif",
           }),
         () =>
-          rpc(c2, "set_area_manager_status", {
+          rpc<RpcJson>(c2, "set_area_manager_status", {
             p_actor_id: sa1Id,
             p_target_id: am2Id,
             p_new_status: "nonaktif",
           }),
       ]);
-      const denied = [a, b].filter((r) => (r.error ?? "").includes("LAST_ACTIVE_AREA_MANAGER"));
-      expect(denied).toHaveLength(1);
+      const denials = [a, b].filter(
+        (r) => !r.error && (r.data as RpcJson)?.error === "LAST_ACTIVE_AREA_MANAGER",
+      );
+      expect(denials).toHaveLength(1);
       const active = await scalar(
         c,
         `select count(distinct a.area_manager_id)::int as n
@@ -503,6 +854,13 @@ describe("last-active invariants hold under parallelism", () => {
         [R1],
       );
       expect(active).toBeGreaterThanOrEqual(1);
+      const durable = await scalar(
+        c,
+        `select count(*) as n from public.admin_audit_log
+         where action = 'area_manager.deactivate' and result = 'denied'
+           and reason = 'last active area manager of a restaurant'`,
+      );
+      expect(durable).toBe(1);
     } finally {
       await c1.end().catch(() => undefined);
       await c2.end().catch(() => undefined);
@@ -512,12 +870,10 @@ describe("last-active invariants hold under parallelism", () => {
   test("set_area_manager_status on a missing target is NOT_FOUND before any audit", async () => {
     const c = await db.client();
     const ghost = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-    await expectRpcError(
-      rpc(c, "set_area_manager_status", {
-        p_actor_id: sa1Id,
-        p_target_id: ghost,
-        p_new_status: "aktif",
-      }),
+    await expectDenial(
+      c,
+      "set_area_manager_status",
+      { p_actor_id: sa1Id, p_target_id: ghost, p_new_status: "aktif" },
       "NOT_FOUND",
     );
     const audited = await scalar(
@@ -529,31 +885,233 @@ describe("last-active invariants hold under parallelism", () => {
   });
 });
 
+describe("durable denial audits (review B8)", () => {
+  test("last-active Super Admin denial is audited and committed", async () => {
+    const c = await db.client();
+    await okVerdict(c, "set_super_admin_status", {
+      p_actor_id: sa1Id,
+      p_target_id: sa2Id,
+      p_new_status: "nonaktif",
+    });
+    const denial = await expectDenial(
+      c,
+      "set_super_admin_status",
+      { p_actor_id: sa1Id, p_target_id: sa1Id, p_new_status: "nonaktif" },
+      "LAST_ACTIVE_SUPER_ADMIN",
+    );
+    expect(denial.ok).toBe(false);
+    const durable = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'super_admin.deactivate' and target_id = $1
+         and result = 'denied' and reason = 'last active super admin'`,
+      [sa1Id],
+    );
+    expect(durable).toBe(1);
+    await okVerdict(c, "set_super_admin_status", {
+      p_actor_id: sa1Id,
+      p_target_id: sa2Id,
+      p_new_status: "aktif",
+    });
+  });
+
+  test("out-of-scope AM status change is audited durably", async () => {
+    const c = await db.client();
+    await restoreAmState(c);
+    // am2 is assigned only to R1; kasir.restodua lives in R2.
+    const r2Manager = await oneText(
+      c,
+      `select id::text as n from public.manager_accounts where lower(id_manager) = 'kasir.restodua'`,
+    );
+    await expectDenial(
+      c,
+      "set_manager_status",
+      {
+        p_actor_kind: "area_manager",
+        p_actor_id: am2Id,
+        p_manager_id: r2Manager,
+        p_new_status: "nonaktif",
+      },
+      "NOT_AUTHORIZED",
+    );
+    const outOfScope = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'manager.status' and actor_id = $1 and result = 'denied' and reason = 'not authorized'`,
+      [am2Id],
+    );
+    expect(outOfScope).toBeGreaterThanOrEqual(1);
+  });
+
+  test("invalid lifecycle transitions are audited durably", async () => {
+    const c = await db.client();
+    await expectDenial(
+      c,
+      "set_manager_status",
+      {
+        p_actor_kind: "super_admin",
+        p_actor_id: sa1Id,
+        p_manager_id: managerId,
+        p_new_status: "paused",
+      },
+      "INVALID_STATUS",
+    );
+    const statusAudit = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'manager.status' and result = 'denied' and reason = 'invalid status'`,
+    );
+    expect(statusAudit).toBe(1);
+    await expectDenial(
+      c,
+      "set_area_manager_status",
+      { p_actor_id: sa1Id, p_target_id: am1Id, p_new_status: "archived" },
+      "INVALID_STATUS",
+    );
+    const amAudit = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'area_manager.status' and result = 'denied' and reason = 'invalid status'`,
+    );
+    expect(amAudit).toBe(1);
+  });
+
+  test("duplicate pending reset is audited durably as a failed attempt", async () => {
+    const c = await db.client();
+    await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [managerId]);
+    const before = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'manager_reset.submit' and result = 'failed' and reason = 'already pending'`,
+    );
+    expect(
+      await rpcOk<boolean>(c, "submit_manager_reset_request", {
+        p_staff_id: "kasir.satgas01",
+        p_candidate_hash: await scryptHash("DupPending#1"),
+      }),
+    ).toBe(true);
+    const second = await rpcOk<boolean>(c, "submit_manager_reset_request", {
+      p_staff_id: "kasir.satgas01",
+      p_candidate_hash: await scryptHash("DupPending#1"),
+    });
+    expect(second).toBe(false);
+    const after = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'manager_reset.submit' and result = 'failed' and reason = 'already pending'`,
+    );
+    expect(after).toBe(before + 1);
+    await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [managerId]);
+  });
+
+  test("denial audits never carry secrets or candidate hashes in metadata", async () => {
+    const c = await db.client();
+    const withSecrets = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where metadata::text ~ 'candidate_hash|password_hash|token'`,
+    );
+    expect(withSecrets).toBe(0);
+  });
+});
+
+describe("Super Admin change-password RPC (review A1)", () => {
+  test("set_staff_password swaps hash, stamps password_changed_at, revokes all sessions", async () => {
+    const c = await db.client();
+    const oldHash = await scryptHash("Lama#Rahasia1");
+    const newHash = await scryptHash("Baru#Rahasia2");
+    await okVerdict(c, "set_staff_password", {
+      p_kind: "super_admin",
+      p_account_id: sa1Id,
+      p_password_hash: oldHash,
+    });
+    // A fresh session exists BEFORE the change and must be gone AFTER it.
+    const liveToken = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "super_admin",
+      p_account_id: sa1Id,
+    });
+    const stampedAt = (
+      await c.query(`select password_changed_at from public.super_admin_accounts where id = $1`, [
+        sa1Id,
+      ])
+    ).rows[0].password_changed_at;
+    expect(stampedAt).not.toBeNull();
+    await okVerdict(c, "set_staff_password", {
+      p_kind: "super_admin",
+      p_account_id: sa1Id,
+      p_password_hash: newHash,
+    });
+    const row = (
+      await c.query(
+        `select password_hash, password_changed_at > $2 as advanced
+         from public.super_admin_accounts where id = $1`,
+        [sa1Id, stampedAt],
+      )
+    ).rows[0];
+    expect(String(row.password_hash)).toBe(newHash);
+    expect(row.advanced).toBe(true);
+    const sessions = await scalar(
+      c,
+      `select count(*) as n from public.staff_sessions
+       where session_kind = 'super_admin' and account_id = $1`,
+      [sa1Id],
+    );
+    expect(sessions).toBe(0);
+    // The OLD password no longer verifies; the NEW one does (login gate).
+    expect(await verifyManagerPassword("Lama#Rahasia1", String(row.password_hash))).toBe(false);
+    expect(await verifyManagerPassword("Baru#Rahasia2", String(row.password_hash))).toBe(true);
+    // ...and the stale bearer is dead against the session gate.
+    const dead = await rpcOk<unknown>(c, "get_staff_session", {
+      p_kind: "super_admin",
+      p_token: liveToken,
+    });
+    expect(dead).toBeNull();
+  });
+
+  test("set_staff_password on an inactive account is a durable denial without hash swap", async () => {
+    const c = await db.client();
+    const hashBefore = await oneText(
+      c,
+      `select password_hash as n from public.super_admin_accounts where id = $1`,
+      [sa2Id],
+    );
+    await okVerdict(c, "set_super_admin_status", {
+      p_actor_id: sa1Id,
+      p_target_id: sa2Id,
+      p_new_status: "nonaktif",
+    });
+    await expectDenial(
+      c,
+      "set_staff_password",
+      { p_kind: "super_admin", p_account_id: sa2Id, p_password_hash: "attacker:hash" },
+      "NOT_AUTHORIZED",
+    );
+    const hashAfter = await oneText(
+      c,
+      `select password_hash as n from public.super_admin_accounts where id = $1`,
+      [sa2Id],
+    );
+    expect(hashAfter).toBe(hashBefore);
+    const durable = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'password.change' and target_id = $1 and result = 'denied'`,
+      [sa2Id],
+    );
+    expect(durable).toBe(1);
+    await okVerdict(c, "set_super_admin_status", {
+      p_actor_id: sa1Id,
+      p_target_id: sa2Id,
+      p_new_status: "aktif",
+    });
+  });
+});
+
 describe("password reset: one-pending, first decision wins, bookkeeping", () => {
   test("duplicate pending rejected; approval flips hash, stamps password_changed_at, revokes sessions", async () => {
     const c = await db.client();
-    // The previous race tests leave one AM deactivated: restore a deterministic
-    // state where both AMs are active and assigned to the manager's restaurant.
-    await rpcOk(c, "set_area_manager_status", {
-      p_actor_id: sa1Id,
-      p_target_id: am1Id,
-      p_new_status: "aktif",
-    });
-    await rpcOk(c, "set_area_manager_status", {
-      p_actor_id: sa1Id,
-      p_target_id: am2Id,
-      p_new_status: "aktif",
-    });
-    await rpcOk(c, "assign_area_manager", {
-      p_actor_id: sa1Id,
-      p_am_id: am1Id,
-      p_restaurant_id: R1,
-    });
-    await rpcOk(c, "assign_area_manager", {
-      p_actor_id: sa1Id,
-      p_am_id: am2Id,
-      p_restaurant_id: R1,
-    });
+    await restoreAmState(c);
+    await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [managerId]);
     const candidate = await scryptHash("PasswordBaru#1");
     expect(
       await rpcOk<boolean>(c, "submit_manager_reset_request", {
@@ -574,14 +1132,12 @@ describe("password reset: one-pending, first decision wins, bookkeeping", () => 
       `select id::text as n from public.manager_reset_requests where manager_id = $1 and status = 'pending'`,
       [managerId],
     );
-    expect(
-      await rpcOk<boolean>(c, "decide_manager_reset", {
-        p_decider_kind: "area_manager",
-        p_decider_id: am2Id,
-        p_request_id: pendingId,
-        p_decision: "approved",
-      }),
-    ).toBe(true);
+    await okVerdict(c, "decide_manager_reset", {
+      p_decider_kind: "area_manager",
+      p_decider_id: am2Id,
+      p_request_id: pendingId,
+      p_decision: "approved",
+    });
     const row = await c.query(
       `select password_hash, password_changed_at from public.manager_accounts where id = $1`,
       [managerId],
@@ -594,40 +1150,63 @@ describe("password reset: one-pending, first decision wins, bookkeeping", () => 
       [managerId],
     );
     expect(sessions).toBe(0);
+    // Re-deciding an already decided request is durable as well (B8).
+    await expectDenial(
+      c,
+      "decide_manager_reset",
+      {
+        p_decider_kind: "area_manager",
+        p_decider_id: am2Id,
+        p_request_id: pendingId,
+        p_decision: "rejected",
+      },
+      "ALREADY_DECIDED",
+    );
+    const decided = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'manager_reset.decide' and result = 'failed' and reason = 'already decided'`,
+    );
+    expect(decided).toBe(1);
   });
 
   test("Super Admin is not a Manager reset approver; first decision wins under parallelism", async () => {
     const c = await db.client();
-    await rpcOk<boolean>(c, "submit_manager_reset_request", {
-      p_staff_id: "kasir.satgas01",
-      p_candidate_hash: await scryptHash("PasswordBaru#2"),
-    });
+    await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [managerId]);
+    expect(
+      await rpcOk<boolean>(c, "submit_manager_reset_request", {
+        p_staff_id: "kasir.satgas01",
+        p_candidate_hash: await scryptHash("PasswordBaru#2"),
+      }),
+    ).toBe(true);
     const requestId = await oneText(
       c,
       `select id::text as n from public.manager_reset_requests where manager_id = $1 and status = 'pending'`,
       [managerId],
     );
-    await expectRpcError(
-      rpc(c, "decide_manager_reset", {
+    await expectDenial(
+      c,
+      "decide_manager_reset",
+      {
         p_decider_kind: "super_admin",
         p_decider_id: sa1Id,
         p_request_id: requestId,
         p_decision: "approved",
-      }),
+      },
       "NOT_AUTHORIZED",
     );
     const c1 = await freshClient();
     const c2 = await freshClient();
     const [a, b] = await parallel([
       () =>
-        rpc<boolean>(c1, "decide_manager_reset", {
+        rpc<RpcJson>(c1, "decide_manager_reset", {
           p_decider_kind: "area_manager",
           p_decider_id: am1Id,
           p_request_id: requestId,
           p_decision: "approved",
         }),
       () =>
-        rpc<boolean>(c2, "decide_manager_reset", {
+        rpc<RpcJson>(c2, "decide_manager_reset", {
           p_decider_kind: "area_manager",
           p_decider_id: am2Id,
           p_request_id: requestId,
@@ -636,13 +1215,13 @@ describe("password reset: one-pending, first decision wins, bookkeeping", () => 
     ]);
     await c1.end();
     await c2.end();
-    const trueCount = [a, b].filter((r) => !r.error && r.data === true).length;
+    const trueCount = [a, b].filter((r) => !r.error && (r.data as RpcJson)?.ok === true).length;
     expect(trueCount).toBe(1);
   });
 
   test("AM reset approved by Super Admin stamps password_changed_at and revokes sessions", async () => {
     const c = await db.client();
-    await rpcOk(c, "set_area_manager_status", {
+    await okVerdict(c, "set_area_manager_status", {
       p_actor_id: sa1Id,
       p_target_id: am1Id,
       p_new_status: "aktif",
@@ -660,13 +1239,11 @@ describe("password reset: one-pending, first decision wins, bookkeeping", () => 
       `select id::text as n from public.am_reset_requests where area_manager_id = $1 and status = 'pending'`,
       [am1Id],
     );
-    expect(
-      await rpcOk<boolean>(c, "decide_am_reset", {
-        p_decider_id: sa1Id,
-        p_request_id: requestId,
-        p_decision: "approved",
-      }),
-    ).toBe(true);
+    await okVerdict(c, "decide_am_reset", {
+      p_decider_id: sa1Id,
+      p_request_id: requestId,
+      p_decision: "approved",
+    });
     const row = await c.query(
       `select password_changed_at from public.area_manager_accounts where id = $1`,
       [am1Id],
@@ -681,9 +1258,167 @@ describe("password reset: one-pending, first decision wins, bookkeeping", () => 
   });
 });
 
+describe("Super Admin recovery tokens (review B6)", () => {
+  async function recoverySetup(): Promise<{ c: Client; raw: string }> {
+    const c = await db.client();
+    const raw = generateToken();
+    await okVerdict(c, "create_super_admin_recovery_token", {
+      p_super_admin_id: sa2Id,
+      p_token_hash: sha256Hex(raw),
+    });
+    return { c, raw };
+  }
+
+  test("single-use raw token resets password, stamps timestamp, revokes sessions", async () => {
+    const { c, raw } = await recoverySetup();
+    const beforeHash = await oneText(
+      c,
+      `select password_hash as n from public.super_admin_accounts where id = $1`,
+      [sa2Id],
+    );
+    await rpcOk(c, "create_staff_session", { p_kind: "super_admin", p_account_id: sa2Id });
+    const newHash = await scryptHash("Recovered#123");
+    await okVerdict(c, "consume_super_admin_recovery_token", {
+      p_super_admin_id: sa2Id,
+      p_token: raw,
+      p_password_hash: newHash,
+    });
+    const after = (
+      await c.query(
+        `select password_hash, password_changed_at from public.super_admin_accounts where id = $1`,
+        [sa2Id],
+      )
+    ).rows[0];
+    expect(String(after.password_hash)).not.toBe(beforeHash);
+    expect(after.password_changed_at).not.toBeNull();
+    expect(String(after.password_hash)).toBe(newHash);
+    const sessions = await scalar(
+      c,
+      `select count(*) as n from public.staff_sessions where session_kind = 'super_admin' and account_id = $1`,
+      [sa2Id],
+    );
+    expect(sessions).toBe(0);
+    await expectDenial(
+      c,
+      "consume_super_admin_recovery_token",
+      { p_super_admin_id: sa2Id, p_token: raw, p_password_hash: "x:y" },
+      "INVALID_TOKEN",
+    );
+  });
+
+  test("issuing a NEW recovery token atomically invalidates the previous live one", async () => {
+    const { c, raw: first } = await recoverySetup();
+    const second = generateToken();
+    await okVerdict(c, "create_super_admin_recovery_token", {
+      p_super_admin_id: sa2Id,
+      p_token_hash: sha256Hex(second),
+    });
+    await expectDenial(
+      c,
+      "consume_super_admin_recovery_token",
+      { p_super_admin_id: sa2Id, p_token: first, p_password_hash: "x:y" },
+      "INVALID_TOKEN",
+    );
+    await okVerdict(c, "consume_super_admin_recovery_token", {
+      p_super_admin_id: sa2Id,
+      p_token: second,
+      p_password_hash: await scryptHash("SecondWins#1"),
+    });
+  });
+
+  test("successful consume kills every sibling token of the same account", async () => {
+    const c = await db.client();
+    // Two live tokens exist only via direct SQL (simulating a pre-fix window).
+    const tokenA = generateToken();
+    const tokenB = generateToken();
+    await c.query(
+      `insert into public.super_admin_recovery_tokens (super_admin_id, token_hash, expires_at)
+       values ($1, $2, now() + interval '30 minutes'), ($1, $3, now() + interval '30 minutes')`,
+      [sa2Id, sha256Hex(tokenA), sha256Hex(tokenB)],
+    );
+    await okVerdict(c, "consume_super_admin_recovery_token", {
+      p_super_admin_id: sa2Id,
+      p_token: tokenA,
+      p_password_hash: await scryptHash("SiblingsDie#1"),
+    });
+    const live = await scalar(
+      c,
+      `select count(*) as n from public.super_admin_recovery_tokens
+       where super_admin_id = $1 and used_at is null`,
+      [sa2Id],
+    );
+    expect(live).toBe(0);
+    await expectDenial(
+      c,
+      "consume_super_admin_recovery_token",
+      { p_super_admin_id: sa2Id, p_token: tokenB, p_password_hash: "x:y" },
+      "INVALID_TOKEN",
+    );
+  });
+
+  test("two parallel consumes of live sibling tokens: exactly one winner", async () => {
+    const c = await db.client();
+    const tokenA = generateToken();
+    const tokenB = generateToken();
+    await c.query(
+      `insert into public.super_admin_recovery_tokens (super_admin_id, token_hash, expires_at)
+       values ($1, $2, now() + interval '30 minutes'), ($1, $3, now() + interval '30 minutes')`,
+      [sa2Id, sha256Hex(tokenA), sha256Hex(tokenB)],
+    );
+    const c1 = await freshClient();
+    const c2 = await freshClient();
+    const winnerHash = await scryptHash("RaceWinner#1");
+    const loserHash = await scryptHash("RaceLoser#1");
+    const [a, b] = await parallel([
+      () =>
+        rpc<RpcJson>(c1, "consume_super_admin_recovery_token", {
+          p_super_admin_id: sa2Id,
+          p_token: tokenA,
+          p_password_hash: winnerHash,
+        }),
+      () =>
+        rpc<RpcJson>(c2, "consume_super_admin_recovery_token", {
+          p_super_admin_id: sa2Id,
+          p_token: tokenB,
+          p_password_hash: loserHash,
+        }),
+    ]);
+    await c1.end();
+    await c2.end();
+    const wins = [a, b].filter((r) => !r.error && (r.data as RpcJson)?.ok === true);
+    expect(wins).toHaveLength(1);
+    const loss = (a.data as RpcJson)?.ok === true ? b : a;
+    expect((loss.data as RpcJson).error).toBe("INVALID_TOKEN");
+  });
+
+  test("expired tokens are rejected and audited as failed attempts", async () => {
+    const c = await db.client();
+    const raw = generateToken();
+    await c.query(
+      `insert into public.super_admin_recovery_tokens (super_admin_id, token_hash, expires_at)
+       values ($1, $2, now() - interval '1 minute')`,
+      [sa2Id, sha256Hex(raw)],
+    );
+    await expectDenial(
+      c,
+      "consume_super_admin_recovery_token",
+      { p_super_admin_id: sa2Id, p_token: raw, p_password_hash: "x:y" },
+      "INVALID_TOKEN",
+    );
+    const failed = await scalar(
+      c,
+      `select count(*) as n from public.admin_audit_log
+       where action = 'super_admin.recovery_reset' and result = 'failed'
+         and reason = 'invalid recovery token'`,
+    );
+    expect(failed).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe("audit read models: scoped, hash-free", () => {
   test("AM sees scoped manager events incl. reset lifecycle; nothing out of scope; no metadata", async () => {
     const c = await db.client();
+    await restoreAmState(c);
     const amView = (
       await rpcRows<Record<string, unknown>>(c, "list_admin_audit_for_actor", {
         p_kind: "area_manager",
@@ -710,16 +1445,45 @@ describe("audit read models: scoped, hash-free", () => {
   });
 });
 
-describe("realtime isolation for Manager", () => {
+describe("realtime isolation for Manager (review C14)", () => {
+  test("binder is called with its FINAL named parameter p_session_token", async () => {
+    const c = await db.client();
+    const user = await oneText(
+      c,
+      `insert into auth.users (email) values ('named.bind@example.test') returning (id::text) as n`,
+    );
+    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const b = await freshClient();
+    await b.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    const bound = await rpcNamed<boolean>(b, "bind_manager_session_realtime", {
+      p_restaurant_id: R1,
+      p_session_token: token,
+    });
+    expect(bound.error).toBeNull();
+    expect(bound.data).toBe(true);
+    await b.end();
+  });
+
+  test("calling the binder with a WRONG parameter name fails (contract guard)", async () => {
+    const c = await db.client();
+    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const wrong = await rpcNamed<boolean>(c, "bind_manager_session_realtime", {
+      p_restaurant_id: R1,
+      p_manager_token: token,
+    });
+    expect(wrong.error ?? "").toMatch(/parameter .*p_manager_token|does not exist/i);
+    expect(wrong.data).toBeNull();
+  });
+
   test("channel authorization is bound to the manager's own restaurant only", async () => {
     const c = await db.client();
     const u1 = await oneText(
       c,
-      `insert into auth.users (email) values ('m1.device@example.test') returning (id::text) as n`,
+      `insert into auth.users (email) values ('m2.device@example.test') returning (id::text) as n`,
     );
     const u2 = await oneText(
       c,
-      `insert into auth.users (email) values ('intruder@example.test') returning (id::text) as n`,
+      `insert into auth.users (email) values ('intruder2@example.test') returning (id::text) as n`,
     );
     const managerToken = await rpcOk<string>(c, "create_manager_session", {
       p_manager_id: managerId,
@@ -727,12 +1491,11 @@ describe("realtime isolation for Manager", () => {
 
     const b1 = await freshClient();
     await b1.query("select set_config('request.jwt.claim.sub', $1, false)", [u1]);
-    expect(
-      await rpcOk<boolean>(b1, "bind_manager_session_realtime", {
-        p_restaurant_id: R1,
-        p_manager_token: managerToken,
-      }),
-    ).toBe(true);
+    const bind1 = await rpcNamed<boolean>(b1, "bind_manager_session_realtime", {
+      p_restaurant_id: R1,
+      p_session_token: managerToken,
+    });
+    expect(bind1.data).toBe(true);
     expect(
       await rpcOk<boolean>(b1, "can_read_table_occupancy_broadcast", {
         p_topic: `table-occupancy:${R1}`,
@@ -743,18 +1506,22 @@ describe("realtime isolation for Manager", () => {
         p_topic: `table-occupancy:${R2}`,
       }),
     ).toBe(false);
+    // Even with a forged restaurant id in the bind call, a second-restaurant
+    // channel never opens for this identity.
+    const forged = await rpcNamed<boolean>(b1, "bind_manager_session_realtime", {
+      p_restaurant_id: R2,
+      p_session_token: managerToken,
+    });
+    expect(forged.error ?? "").toContain("INVALID_SESSION");
     await b1.end();
 
-    // Intruder with a stolen bearer token but a different auth identity.
     const b2 = await freshClient();
     await b2.query("select set_config('request.jwt.claim.sub', $1, false)", [u2]);
-    await expectRpcError(
-      rpc(b2, "bind_manager_session_realtime", {
-        p_restaurant_id: R1,
-        p_manager_token: managerToken,
-      }),
-      "INVALID_SESSION",
-    );
+    const stolen = await rpcNamed(b2, "bind_manager_session_realtime", {
+      p_restaurant_id: R1,
+      p_session_token: managerToken,
+    });
+    expect(stolen.error ?? "").toContain("INVALID_SESSION");
     expect(
       await rpcOk<boolean>(b2, "can_read_table_occupancy_broadcast", {
         p_topic: `table-occupancy:${R1}`,
@@ -762,10 +1529,6 @@ describe("realtime isolation for Manager", () => {
     ).toBe(false);
     await b2.end();
 
-    // RLS on realtime.messages mirrors Supabase's per-channel authorization:
-    // the policy evaluates can_read_table_occupancy_broadcast(realtime.topic())
-    // for the channel the client subscribes to. Bound user on R1 channel sees
-    // R1 traffic; the same user's foreign R2 channel subscription is denied.
     await c.query("insert into realtime.messages (topic, payload) values ($1, '{}'), ($2, '{}')", [
       `table-occupancy:${R1}`,
       `table-occupancy:${R2}`,
@@ -793,73 +1556,126 @@ describe("realtime isolation for Manager", () => {
   });
 });
 
-describe("Super Admin recovery tokens", () => {
-  test("single-use raw token resets password and revokes sessions", async () => {
-    const c = await db.client();
-    const raw = generateToken();
-    const beforeHash = await c.query(
-      `select password_hash from public.super_admin_accounts where id = $1`,
-      [sa2Id],
-    );
-    await rpcOk(c, "create_staff_session", { p_kind: "super_admin", p_account_id: sa2Id });
-    await rpcOk(c, "create_super_admin_recovery_token", {
-      p_super_admin_id: sa2Id,
-      p_token_hash: sha256Hex(raw),
-    });
-    const newHash = await scryptHash("Recovered#123");
-    expect(
-      await rpcOk<boolean>(c, "consume_super_admin_recovery_token", {
-        p_super_admin_id: sa2Id,
-        p_token: raw,
-        p_password_hash: newHash,
-      }),
-    ).toBe(true);
-    const afterHash = await c.query(
-      `select password_hash from public.super_admin_accounts where id = $1`,
-      [sa2Id],
-    );
-    expect(String(afterHash.rows[0].password_hash)).not.toBe(
-      String(beforeHash.rows[0].password_hash),
-    );
-    const sessions = await scalar(
-      c,
-      `select count(*) as n from public.staff_sessions where session_kind = 'super_admin' and account_id = $1`,
-      [sa2Id],
-    );
-    expect(sessions).toBe(0);
-    await expectRpcError(
-      rpc(c, "consume_super_admin_recovery_token", {
-        p_super_admin_id: sa2Id,
-        p_token: raw,
-        p_password_hash: "x:y",
-      }),
-      "INVALID_TOKEN",
-    );
-  });
-});
+describe("privilege matrix: every Poin 2 SECURITY DEFINER function (review B5)", () => {
+  const SERVICE_ONLY: string[] = [
+    "write_admin_audit(text,uuid,text,text,text,uuid,uuid,text,text,jsonb)",
+    "normalize_staff_id(text)",
+    "staff_id_is_valid(text)",
+    "claim_staff_id(text,text,uuid)",
+    "lock_staff_id_claim(text)",
+    "create_staff_session(text,uuid)",
+    "get_staff_session(text,text)",
+    "revoke_staff_sessions(text,uuid)",
+    "revoke_manager_sessions(uuid)",
+    "get_manager_id_by_token(text)",
+    "get_super_admin_credential_by_id(uuid)",
+    "get_area_manager_credential_by_id(uuid)",
+    "get_manager_credential_by_id(uuid)",
+    "get_super_admin_credential(text)",
+    "get_manager_credential(text)",
+    "bootstrap_super_admin_state()",
+    "bootstrap_create_super_admin(text,text,text,text)",
+    "create_super_admin_invite(text,text,text,text,uuid)",
+    "resend_super_admin_invite(uuid,text,uuid)",
+    "cancel_super_admin_invite(uuid,uuid)",
+    "accept_super_admin_invite(text,text,text)",
+    "create_super_admin_recovery_token(uuid,text)",
+    "consume_super_admin_recovery_token(uuid,text,text)",
+    "set_super_admin_status(uuid,uuid,text)",
+    "update_staff_profile(text,uuid,text,uuid,text)",
+    "set_staff_password(text,uuid,text)",
+    "assign_area_manager(uuid,uuid,uuid)",
+    "revoke_area_manager_assignment(uuid,uuid,uuid)",
+    "list_restaurants_without_active_am()",
+    "get_am_rollout_readiness()",
+    "get_area_manager_credential(text)",
+    "create_area_manager(uuid,text,text,text)",
+    "set_area_manager_status(uuid,uuid,text)",
+    "actor_can_manage_restaurant(text,uuid,uuid)",
+    "create_manager_account(text,uuid,text,text,uuid,text)",
+    "set_manager_status(text,uuid,uuid,text)",
+    "submit_manager_reset_request(text,text)",
+    "submit_am_reset_request(text,text)",
+    "decide_manager_reset(text,uuid,uuid,text)",
+    "decide_am_reset(uuid,uuid,text)",
+    "list_am_scope_restaurants(uuid)",
+    "list_managers_for_scope(uuid)",
+    "list_pending_manager_resets(uuid)",
+    "list_pending_am_resets()",
+    "get_manager_reset_requester_scope(uuid,uuid)",
+    "list_admin_audit_for_actor(text,uuid)",
+  ];
+  const BROWSER_BOUND: string[] = [
+    "bind_role_session_realtime(uuid,text)",
+    "bind_manager_session_realtime(uuid,text)",
+  ];
 
-describe("privilege surface", () => {
-  test("staff RPCs are service_role-only; audit log stays append-only", async () => {
+  test("no Poin 2 function is executable by anon/authenticated/a fresh PUBLIC role", async () => {
     const c = await db.client();
-    const sig = "create_manager_account(text,uuid,text,text,uuid,text)";
-    expect(
-      await scalar(
-        c,
-        `select has_function_privilege('anon', 'public.${sig}', 'execute')::int as n`,
-      ),
-    ).toBe(0);
-    expect(
-      await scalar(
-        c,
-        `select has_function_privilege('authenticated', 'public.${sig}', 'execute')::int as n`,
-      ),
-    ).toBe(0);
-    expect(
-      await scalar(
-        c,
-        `select has_function_privilege('service_role', 'public.${sig}', 'execute')::int as n`,
-      ),
-    ).toBe(1);
+    await c.query(`do $$ begin
+      if not exists (select 1 from pg_roles where rolname = 'p2_probe') then
+        create role p2_probe;
+      end if;
+    end $$`);
+    for (const sig of SERVICE_ONLY) {
+      for (const role of ["anon", "authenticated", "p2_probe"]) {
+        expect(
+          await scalar(
+            c,
+            `select has_function_privilege('${role}', 'public.${sig}', 'execute')::int as n`,
+          ),
+          `public.${sig} must not be executable by ${role}`,
+        ).toBe(0);
+      }
+      expect(
+        await scalar(
+          c,
+          `select has_function_privilege('service_role', 'public.${sig}', 'execute')::int as n`,
+        ),
+        `public.${sig} must be executable by service_role`,
+      ).toBe(1);
+    }
+    for (const sig of BROWSER_BOUND) {
+      expect(
+        await scalar(
+          c,
+          `select has_function_privilege('anon', 'public.${sig}', 'execute')::int as n`,
+        ),
+      ).toBe(0);
+      expect(
+        await scalar(
+          c,
+          `select has_function_privilege('p2_probe', 'public.${sig}', 'execute')::int as n`,
+        ),
+      ).toBe(0);
+      expect(
+        await scalar(
+          c,
+          `select has_function_privilege('authenticated', 'public.${sig}', 'execute')::int as n`,
+        ),
+        `public.${sig} is the browser channel binder`,
+      ).toBe(1);
+    }
+  });
+
+  test("every SECURITY DEFINER Poin 2 function pins its search_path", async () => {
+    const c = await db.client();
+    const names = [...SERVICE_ONLY, ...BROWSER_BOUND].map((s) => s.split("(")[0]);
+    const missing = await c.query(
+      `select p.proname as n from pg_proc p
+       join pg_namespace ns on ns.oid = p.pronamespace
+       where ns.nspname = 'public' and p.prosecdef
+         and p.proname = any($1::text[])
+         and (p.proconfig is null or not exists (
+           select 1 from unnest(p.proconfig) cfg where cfg like 'search_path=%'
+         ))`,
+      [[...new Set(names)]],
+    );
+    expect(missing.rows.map((r) => r.n)).toEqual([]);
+  });
+
+  test("audit log stays append-only even for service_role", async () => {
+    const c = await db.client();
     expect(
       await scalar(
         c,
@@ -872,5 +1688,38 @@ describe("privilege surface", () => {
         `select has_table_privilege('service_role', 'public.admin_audit_log', 'delete')::int as n`,
       ),
     ).toBe(0);
+  });
+});
+
+describe("AM rollout readiness gate (review B10)", () => {
+  test("readiness reports not-ready while a restaurant lacks an active AM", async () => {
+    const c = await db.client();
+    await restoreAmState(c);
+    const state = (await rpcOk<Record<string, unknown>>(c, "get_am_rollout_readiness", {})) as {
+      restaurants_total: number;
+      restaurants_covered: number;
+      uncovered: Array<{ restaurant_id: string; display_name: string }>;
+    };
+    expect(Number(state.restaurants_total)).toBe(3);
+    expect(state.uncovered.map((u) => String(u.restaurant_id))).toContain(R3);
+    // R3 has only a Manager (created by SA), no AM assignment yet.
+    expect(Number(state.restaurants_covered)).toBe(2);
+  });
+
+  test("readiness flips to ready once every active restaurant has an active AM", async () => {
+    const c = await db.client();
+    await okVerdict(c, "assign_area_manager", {
+      p_actor_id: sa1Id,
+      p_am_id: am2Id,
+      p_restaurant_id: R3,
+    });
+    const state = (await rpcOk<Record<string, unknown>>(c, "get_am_rollout_readiness", {})) as {
+      restaurants_total: number;
+      restaurants_covered: number;
+      uncovered: unknown[];
+    };
+    expect(Number(state.restaurants_total)).toBe(3);
+    expect(Number(state.restaurants_covered)).toBe(3);
+    expect(state.uncovered).toHaveLength(0);
   });
 });

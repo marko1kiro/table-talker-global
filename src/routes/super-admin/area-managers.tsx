@@ -5,16 +5,18 @@ import { Loader2 } from "lucide-react";
 import { TaCard } from "@/components/dashboard/ui";
 import { listOwnerRestaurants } from "@/lib/owner-restaurants.server";
 import {
+  saAmRolloutReadiness,
   saAreaManagers,
   saAssignAreaManager,
   saCreateAreaManager,
   saDecideAmReset,
   saPendingAmResets,
-  saRestaurantsWithoutAm,
   saRevokeAreaManagerAssignment,
   saSetAreaManagerStatus,
   type AreaManagerRow,
 } from "@/lib/area-manager.server";
+import { saRenameStaff } from "@/lib/super-admin-auth.server";
+import { EditProfileDialog } from "@/components/dashboard/EditProfileDialog";
 
 export const Route = createFileRoute("/super-admin/area-managers")({
   head: () => ({ meta: [{ title: "Area Manager - Console" }] }),
@@ -30,9 +32,9 @@ function activeRestaurantsOf(row: AreaManagerRow): string[] {
 function AreaManagersPage() {
   const queryClient = useQueryClient();
   const ams = useQuery({ queryKey: ["sa", "ams"], queryFn: () => saAreaManagers() });
-  const withoutAm = useQuery({
-    queryKey: ["sa", "without-am"],
-    queryFn: () => saRestaurantsWithoutAm(),
+  const readiness = useQuery({
+    queryKey: ["sa", "am-readiness"],
+    queryFn: () => saAmRolloutReadiness(),
   });
   const restaurants = useQuery({
     queryKey: ["sa", "restaurants"],
@@ -110,6 +112,18 @@ function AreaManagersPage() {
       saDecideAmReset({ data: input }),
     onSuccess: invalidate,
   });
+  // Review C13: Super Admin renames an Area Manager (ID immutable).
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+  const rename = useMutation({
+    mutationFn: (input: { targetId: string; fullName: string }) =>
+      saRenameStaff({
+        data: { targetKind: "area_manager", targetId: input.targetId, fullName: input.fullName },
+      }),
+    onSuccess: (result) => {
+      if (!result.ok) setFeedback(`Ubah nama gagal: ${result.code ?? "error"}`);
+      invalidate();
+    },
+  });
 
   function submitCreate(event: FormEvent) {
     event.preventDefault();
@@ -131,22 +145,40 @@ function AreaManagersPage() {
         Relasi many-to-many. Semua AM aktif yang ditugaskan punya hak penuh dan setara.
       </p>
 
-      {withoutAm.data?.ok && withoutAm.data.restaurants.length > 0 && (
+      {readiness.data?.ok && readiness.data.readiness && (
         <TaCard
-          title="Readiness Gate: Restoran Tanpa Area Manager"
-          description=" tugaskan minimal satu AM aktif untuk restoran berikut."
-          className="mt-4 border-red-200 bg-red-50/40"
+          title="Readiness Gate: Cakupan Area Manager"
+          description={
+            readiness.data.readiness.restaurants_total > 0 &&
+            readiness.data.readiness.restaurants_covered ===
+              readiness.data.readiness.restaurants_total
+              ? "Siap: semua restoran aktif punya minimal satu AM aktif."
+              : "Belum siap: tugaskan minimal satu AM aktif untuk restoran berikut."
+          }
+          className={
+            readiness.data.readiness.restaurants_total > 0 &&
+            readiness.data.readiness.restaurants_covered ===
+              readiness.data.readiness.restaurants_total
+              ? "mt-4 border-emerald-200 bg-emerald-50/40"
+              : "mt-4 border-red-200 bg-red-50/40"
+          }
         >
-          <ul className="flex flex-wrap gap-2">
-            {withoutAm.data.restaurants.map((r) => (
-              <li
-                key={String(r.restaurant_id)}
-                className="rounded-full bg-white px-3 py-1 text-xs font-bold text-red-600"
-              >
-                {String(r.display_name)}
-              </li>
-            ))}
-          </ul>
+          <p className="text-sm font-bold">
+            {readiness.data.readiness.restaurants_covered}/
+            {readiness.data.readiness.restaurants_total} restoran aktif tercakup
+          </p>
+          {readiness.data.readiness.uncovered.length > 0 && (
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {readiness.data.readiness.uncovered.map((r) => (
+                <li
+                  key={r.restaurant_id}
+                  className="rounded-full bg-white px-3 py-1 text-xs font-bold text-red-600"
+                >
+                  {r.display_name}
+                </li>
+              ))}
+            </ul>
+          )}
         </TaCard>
       )}
 
@@ -251,6 +283,13 @@ function AreaManagersPage() {
                       {String(row.status)}
                     </span>
                     <span className="ml-auto flex gap-2">
+                      <button
+                        type="button"
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700"
+                        onClick={() => setRenameTarget({ id: amId, name: String(row.full_name) })}
+                      >
+                        Ubah Nama
+                      </button>
                       {row.status === "aktif" ? (
                         <button
                           type="button"
@@ -323,6 +362,19 @@ function AreaManagersPage() {
           </ul>
         )}
       </TaCard>
+
+      <EditProfileDialog
+        key={renameTarget?.id ?? "none"}
+        open={renameTarget !== null}
+        currentName={renameTarget?.name ?? ""}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null);
+        }}
+        onSubmit={async (fullName) => {
+          if (!renameTarget) return { ok: false, code: "UNAVAILABLE" };
+          return rename.mutateAsync({ targetId: renameTarget.id, fullName });
+        }}
+      />
     </div>
   );
 }

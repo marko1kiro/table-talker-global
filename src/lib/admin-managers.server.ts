@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSuperAdmin } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
+import { readRpcVerdict } from "./rpc-contract.server";
 
 export type AdminManagerRow = {
   id: string;
@@ -52,13 +53,14 @@ export const disableManager = createServerFn({ method: "POST" })
     if (!client) return { ok: false, error: "Tidak dapat mengubah data manager." };
     // Routed through the security-definer RPC: authoritative authority check,
     // atomic session revocation, and an append-only audit entry.
-    const { error } = await client.rpc("set_manager_status", {
+    const res = await client.rpc("set_manager_status", {
       p_actor_kind: "super_admin",
       p_actor_id: session.data.superAdminAccountId,
       p_manager_id: data.managerId,
       p_new_status: "nonaktif",
     });
-    if (error) return { ok: false, error: "Tidak dapat mengubah data manager." };
+    const verdict = readRpcVerdict(res.data, res.error);
+    if (!verdict.ok) return { ok: false, error: "Tidak dapat mengubah data manager." };
     return { ok: true };
   });
 
@@ -84,7 +86,7 @@ export const saCreateManager = createServerFn({ method: "POST" })
     if (!staffPasswordIsValid(data.password)) return { ok: false, code: "WEAK_PASSWORD" };
     const { hashManagerPassword } = await import("./manager-password.server");
     const passwordHash = await hashManagerPassword(data.password);
-    const { error } = await client.rpc("create_manager_account", {
+    const res = await client.rpc("create_manager_account", {
       p_actor_kind: "super_admin",
       p_actor_id: session.data.superAdminAccountId,
       p_staff_id: staffId,
@@ -92,8 +94,8 @@ export const saCreateManager = createServerFn({ method: "POST" })
       p_restaurant_id: data.restaurantId,
       p_password_hash: passwordHash,
     });
-    if (error) return { ok: false, code: error.message };
-    return { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const saRenameManager = createServerFn({ method: "POST" })
@@ -102,14 +104,15 @@ export const saRenameManager = createServerFn({ method: "POST" })
     const session = await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await client.rpc("update_staff_profile", {
+    const res = await client.rpc("update_staff_profile", {
       p_actor_kind: "super_admin",
       p_actor_id: session.data.superAdminAccountId,
       p_target_kind: "manager",
       p_target_id: data.managerId,
       p_full_name: data.fullName,
     });
-    return error ? { ok: false, code: error.message } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const enableManager = createServerFn({ method: "POST" })
@@ -118,11 +121,12 @@ export const enableManager = createServerFn({ method: "POST" })
     const session = await requireSuperAdmin();
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await client.rpc("set_manager_status", {
+    const res = await client.rpc("set_manager_status", {
       p_actor_kind: "super_admin",
       p_actor_id: session.data.superAdminAccountId,
       p_manager_id: data.managerId,
       p_new_status: "aktif",
     });
-    return error ? { ok: false, code: error.message } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });

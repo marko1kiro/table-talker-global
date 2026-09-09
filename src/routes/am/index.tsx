@@ -23,6 +23,7 @@ import {
 } from "@/lib/area-manager.server";
 import { EditProfileDialog } from "@/components/dashboard/EditProfileDialog";
 import { isOwnerQueryKey } from "@/lib/owner-query-cache";
+import { browserManagerStorage, removeManagerIdentity } from "@/lib/manager-session-identity";
 
 export const Route = createFileRoute("/am/")({
   loader: () => getAmStatus(),
@@ -79,6 +80,8 @@ function AreaManagerDashboard() {
 
   async function handleLogout() {
     await amLogout();
+    // Review A4: one role per browser — clear any manager identity too.
+    removeManagerIdentity(browserManagerStorage());
     queryClient.removeQueries({ predicate: (query) => isOwnerQueryKey(query.queryKey) });
     await navigate({ to: "/manager/login" });
   }

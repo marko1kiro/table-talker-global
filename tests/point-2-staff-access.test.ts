@@ -69,7 +69,7 @@ describe("changeStaffPasswordCore", () => {
     ) {
       return { data: credData, error: null };
     }
-    return { data: null, error: null };
+    return { data: { ok: true }, error: null };
   };
   it("rejects weak new password before any RPC", async () => {
     const calls: string[] = [];
@@ -105,7 +105,7 @@ describe("changeStaffPasswordCore", () => {
         calls.push(fn);
         if (fn === "set_staff_password") {
           setParams = params;
-          return { data: null, error: null };
+          return { data: { ok: true }, error: null };
         }
         return { data: cred, error: null };
       },
@@ -185,17 +185,20 @@ describe("point-2 RPC invariants", () => {
     );
   });
   it("Super Admin cannot approve Manager resets", () => {
+    // Result contract (B8): denial is a durable audited verdict, not a raise.
     expect(rpcs).toMatch(
-      /if p_decider_kind <> 'area_manager' then raise exception 'NOT_AUTHORIZED'/i,
+      /if p_decider_kind <> 'area_manager' then[\s\S]{0,200}?return jsonb_build_object\('ok', false, 'error', 'NOT_AUTHORIZED'\)/i,
     );
   });
-  it("last active AM / last active Super Admin guards raise", () => {
-    expect(rpcs).toMatch(/raise exception 'LAST_ACTIVE_AREA_MANAGER'/i);
-    expect(rpcs).toMatch(/raise exception 'LAST_ACTIVE_SUPER_ADMIN'/i);
-    // guards appear in: assignment revoke, AM deactivation, and their audit
-    // reasons — the exception must be raised from BOTH revoke and deactivate
-    // paths (>= 2 raise sites for the AM guard).
-    expect((rpcs.match(/raise exception 'LAST_ACTIVE_AREA_MANAGER'/gi) ?? []).length).toBe(2);
+  it("last active AM / last active Super Admin guards return durable verdict codes", () => {
+    expect(rpcs).toMatch(/jsonb_build_object\('ok', false, 'error', 'LAST_ACTIVE_AREA_MANAGER'\)/i);
+    expect(rpcs).toMatch(/jsonb_build_object\('ok', false, 'error', 'LAST_ACTIVE_SUPER_ADMIN'\)/i);
+    // guards appear in: assignment revoke and AM deactivation — the verdict
+    // must be returned from BOTH revoke and deactivate paths (2 sites).
+    expect(
+      (rpcs.match(/jsonb_build_object\('ok', false, 'error', 'LAST_ACTIVE_AREA_MANAGER'\)/gi) ?? [])
+        .length,
+    ).toBe(2);
     expect((rpcs.match(/last active area manager/gi) ?? []).length).toBeGreaterThanOrEqual(2);
   });
   it("invitation tokens are verified server-side as sha256 and expire", () => {

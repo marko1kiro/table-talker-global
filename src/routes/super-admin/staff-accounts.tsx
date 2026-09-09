@@ -8,8 +8,10 @@ import {
   getSuperAdmins,
   inviteSuperAdmin,
   resendSuperAdminInvite,
+  saRenameStaff,
   setSuperAdminStatus,
 } from "@/lib/super-admin-auth.server";
+import { EditProfileDialog } from "@/components/dashboard/EditProfileDialog";
 
 export const Route = createFileRoute("/super-admin/staff-accounts")({
   head: () => ({ meta: [{ title: "Super Admin - Console" }] }),
@@ -64,6 +66,22 @@ function StaffAccountsPage() {
         return;
       }
       invalidate();
+    },
+  });
+  // Review C13: Super Admin renames other staff profiles (ID immutable).
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+  const rename = useMutation({
+    mutationFn: (input: { targetId: string; fullName: string }) =>
+      saRenameStaff({
+        data: { targetKind: "super_admin", targetId: input.targetId, fullName: input.fullName },
+      }),
+    onSuccess: (result) => {
+      if (result.ok) {
+        setFeedback("Nama diperbarui.");
+        invalidate();
+      } else {
+        setFeedback(`Ubah nama gagal: ${result.code ?? "error"}`);
+      }
     },
   });
 
@@ -167,22 +185,40 @@ function StaffAccountsPage() {
                         </span>
                       )}
                       {a.status === "aktif" && (
-                        <button
-                          type="button"
-                          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600"
-                          onClick={() => status.mutate({ id: a.id, status: "nonaktif" })}
-                        >
-                          Nonaktifkan
-                        </button>
+                        <span className="flex gap-2">
+                          <button
+                            type="button"
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700"
+                            onClick={() => setRenameTarget({ id: a.id, name: a.fullName })}
+                          >
+                            Ubah Nama
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600"
+                            onClick={() => status.mutate({ id: a.id, status: "nonaktif" })}
+                          >
+                            Nonaktifkan
+                          </button>
+                        </span>
                       )}
                       {a.status === "nonaktif" && (
-                        <button
-                          type="button"
-                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-600"
-                          onClick={() => status.mutate({ id: a.id, status: "aktif" })}
-                        >
-                          Aktifkan
-                        </button>
+                        <span className="flex gap-2">
+                          <button
+                            type="button"
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700"
+                            onClick={() => setRenameTarget({ id: a.id, name: a.fullName })}
+                          >
+                            Ubah Nama
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-600"
+                            onClick={() => status.mutate({ id: a.id, status: "aktif" })}
+                          >
+                            Aktifkan
+                          </button>
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -192,6 +228,19 @@ function StaffAccountsPage() {
           </div>
         )}
       </TaCard>
+
+      <EditProfileDialog
+        key={renameTarget?.id ?? "none"}
+        open={renameTarget !== null}
+        currentName={renameTarget?.name ?? ""}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null);
+        }}
+        onSubmit={async (fullName) => {
+          if (!renameTarget) return { ok: false, code: "UNAVAILABLE" };
+          return rename.mutateAsync({ targetId: renameTarget.id, fullName });
+        }}
+      />
     </div>
   );
 }

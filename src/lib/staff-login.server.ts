@@ -9,7 +9,7 @@
 // inactive account, and session-mint RPC errors are all failures.
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { updateAuthSession } from "./auth.server";
+import { updateAuthSession, clearAuthSession, type TableTalkerSession } from "./auth.server";
 import { loginManagerCore } from "./manager-auth.server";
 import { verifyManagerPassword } from "./manager-password.server";
 import { getServiceClient } from "./remote-audio.server";
@@ -53,10 +53,9 @@ export type StaffLoginDeps = {
   rpc: RpcCaller;
   report: (valid: boolean) => Promise<unknown>;
   verify?: (password: string, stored: string) => Promise<boolean>;
-  updateSession?: (update: {
-    areaManagerAccountId: string;
-    areaManagerSessionToken: string;
-  }) => Promise<unknown>;
+  updateSession?: (update: Partial<TableTalkerSession>) => Promise<unknown>;
+  /** Review A4: wipes the shared cookie session when a manager takes over. */
+  clearSession?: () => Promise<unknown>;
   managerExtras?: (staffId: string) => Promise<{ password_changed_at: string | null } | null>;
 };
 
@@ -78,6 +77,9 @@ export async function loginStaffCore(
     },
   ).catch(() => null);
   if (managerResult?.ok) {
+    // Review A4: a manager login in a shared browser must wipe any previous
+    // Super Admin / Area Manager cookie session first.
+    await deps.clearSession?.().catch(() => undefined);
     await deps.report(true);
     const extras = deps.managerExtras
       ? await deps.managerExtras(staffId)
@@ -129,7 +131,17 @@ export async function loginStaffCore(
   }
   await deps.report(true);
   const updateSession = deps.updateSession ?? ((u) => updateAuthSession(u));
-  await updateSession({ areaManagerAccountId: am.id, areaManagerSessionToken: token });
+  // Review A4: an AM login strips every Super Admin field from the shared
+  // cookie (undefined-valued keys are removed by the session layer).
+  await updateSession({
+    areaManagerAccountId: am.id,
+    areaManagerSessionToken: token,
+    superAdmin: undefined,
+    superAdminAccountId: undefined,
+    superAdminSessionToken: undefined,
+    superAdminReauthenticatedAt: undefined,
+    dashboard: undefined,
+  });
   return {
     ok: true,
     role: "area_manager",
@@ -153,6 +165,8 @@ export const loginStaff = createServerFn({ method: "POST" })
     return loginStaffCore(data.staffId, data.password, {
       rpc: async (fn, params) => client.rpc(fn, params),
       report: (valid) => completeOwnerLoginAttempt(reservationId, valid),
+      updateSession: updateAuthSession,
+      clearSession: clearAuthSession,
       managerExtras: async (staffId) => {
         const { data: extra, error } = await client
           .from("manager_accounts")

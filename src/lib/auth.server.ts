@@ -104,7 +104,13 @@ async function readBootstrapState(): Promise<BootstrapState | null> {
   };
 }
 
-async function staffSessionAccount(
+/**
+ * Maps a staff bearer token to its account id, or null when the token does
+ * not live in staff_sessions. Exported for session-authoritative status
+ * checks (review C12) — callers MUST compare the result to their own
+ * account id, never trust the cookie alone.
+ */
+export async function staffSessionAccount(
   kind: "super_admin" | "area_manager",
   token: string,
 ): Promise<string | null> {

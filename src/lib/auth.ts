@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { GENERIC_AUTH_FAILURE } from "./staff-identity.server";
+import type { TableTalkerSession } from "./auth.server";
 
 export type AuthStatus = { superAdmin: boolean };
 
@@ -67,6 +68,129 @@ async function withLoginRateLimit<T>(
   }
 }
 
+type LoginRpcCaller = (
+  fn: string,
+  params: Record<string, unknown>,
+) => Promise<{ data: unknown; error: { message: string } | null }>;
+
+/** Constant-time shared-secret comparison (no node:crypto — client-safe module). */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+export type SuperAdminLoginDeps = {
+  rpc: LoginRpcCaller;
+  report: (valid: boolean) => Promise<unknown>;
+  verify: (password: string, stored: string) => Promise<boolean>;
+  updateSession: (update: Partial<TableTalkerSession>) => Promise<unknown>;
+  legacyPassword: string;
+};
+
+type SuperAdminLoginData = {
+  mode: "legacy" | "individual";
+  staffId?: string;
+  password: string;
+};
+
+/**
+ * Super Admin login core (review B9/A4). Rate-limit accounting is EXACT: the
+ * limiter is reported exactly once — report(true) only AFTER the credentials
+ * verified, the DB session was minted, AND the cookie update succeeded; every
+ * other outcome (including a thrown cookie write) reports false first.
+ * A successful login also strips every other staff role from the shared
+ * session cookie (undefined-valued keys are removed by the session layer).
+ */
+export async function superAdminLoginCore(
+  data: SuperAdminLoginData,
+  deps: SuperAdminLoginDeps,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const fail = () => ({ ok: false as const, message: GENERIC_AUTH_FAILURE });
+  const report = async (valid: boolean) => {
+    try {
+      await deps.report(valid);
+    } catch {
+      // the limiter must never break the login outcome
+    }
+  };
+  try {
+    if (data.mode === "legacy") {
+      let valid = false;
+      try {
+        valid = timingSafeEqualStr(data.password, deps.legacyPassword);
+      } catch {
+        valid = false;
+      }
+      if (!valid) {
+        await report(false);
+        return fail();
+      }
+      const { data: state, error } = await deps.rpc("bootstrap_super_admin_state", {});
+      const raw = state as { open?: boolean; active_count?: number } | null;
+      if (error || !raw || raw.open !== true || (raw.active_count ?? 0) > 0) {
+        await report(false);
+        return fail();
+      }
+      await deps.updateSession({
+        superAdmin: true,
+        superAdminAccountId: undefined,
+        superAdminSessionToken: undefined,
+        superAdminReauthenticatedAt: undefined,
+        dashboard: undefined,
+        areaManagerAccountId: undefined,
+        areaManagerSessionToken: undefined,
+      });
+      await report(true);
+      return { ok: true as const };
+    }
+
+    if (!data.staffId) {
+      await report(false);
+      return fail();
+    }
+    const { data: cred, error } = await deps.rpc("get_super_admin_credential", {
+      p_staff_id: data.staffId,
+    });
+    const c = cred as { id: string; password_hash: string | null; status: string } | null;
+    let valid = false;
+    let accountId: string | null = null;
+    if (!error && c && typeof c === "object" && c.status === "aktif" && c.password_hash) {
+      valid = await deps.verify(data.password, c.password_hash).catch(() => false);
+      accountId = c.id;
+    }
+    if (!valid || !accountId) {
+      await report(false);
+      return fail();
+    }
+    const { data: token, error: sessionError } = await deps.rpc("create_staff_session", {
+      p_kind: "super_admin",
+      p_account_id: accountId,
+    });
+    if (sessionError || typeof token !== "string" || !token) {
+      await report(false);
+      return fail();
+    }
+    await deps.updateSession({
+      superAdmin: true,
+      superAdminAccountId: accountId,
+      superAdminSessionToken: token,
+      superAdminReauthenticatedAt: undefined,
+      dashboard: undefined,
+      areaManagerAccountId: undefined,
+      areaManagerSessionToken: undefined,
+    });
+    await report(true);
+    return { ok: true as const };
+  } catch {
+    // updateSession (cookie write) or an unexpected transport error — the
+    // reservation must be accounted as a failure, never left open as success.
+    await report(false);
+    return fail();
+  }
+}
+
 /**
  * Super Admin login, dua mode:
  *  - "legacy": shared-password bootstrap era. Hanya diizinkan selama gerbang
@@ -81,7 +205,6 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
     const { isPasswordValid, updateAuthSession } = await import("./auth.server");
     const { getServiceClient } = await import("./remote-audio.server");
     const { verifyManagerPassword } = await import("./manager-password.server");
-    const { normalizeStaffId } = await import("./staff-identity.server");
     const client = getServiceClient();
     if (!client) return ownerLoginFailure();
 
@@ -90,57 +213,40 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
       if (expectedPassword === null) return ownerLoginFailure();
       return withLoginRateLimit(
         data.clientKey,
-        async (report) => {
-          let valid = false;
-          try {
-            valid = isPasswordValid(data.password, expectedPassword);
-          } catch {
-            valid = false;
-          }
-          if (!(await report(valid))) return ownerLoginFailure();
-          if (!valid) return ownerLoginFailure();
-          const { data: state, error } = await client.rpc("bootstrap_super_admin_state");
-          const raw = state as { open?: boolean; active_count?: number } | null;
-          if (error || !raw || raw.open !== true || (raw.active_count ?? 0) > 0) {
-            return ownerLoginFailure();
-          }
-          await updateAuthSession({ superAdmin: true });
-          return { ok: true as const };
-        },
+        (report) =>
+          superAdminLoginCore(
+            { mode: "legacy", password: data.password },
+            {
+              rpc: async (fn, params) => client.rpc(fn, params),
+              report,
+              verify: async (password, stored) => isPasswordValid(password, stored),
+              updateSession: updateAuthSession,
+              legacyPassword: expectedPassword,
+            },
+          ),
         ownerLoginFailure,
       );
     }
 
     if (!data.staffId) return ownerLoginFailure();
-    const staffId = normalizeStaffId(data.staffId);
+    const { normalizeStaffId } = await import("./staff-identity.server");
     return withLoginRateLimit(
       data.clientKey,
-      async (report) => {
-        const { data: cred, error } = await client.rpc("get_super_admin_credential", {
-          p_staff_id: staffId,
-        });
-        const c = cred as { id: string; password_hash: string | null; status: string } | null;
-        let valid = false;
-        let accountId: string | null = null;
-        if (!error && c && typeof c === "object" && c.status === "aktif" && c.password_hash) {
-          valid = await verifyManagerPassword(data.password, c.password_hash).catch(() => false);
-          accountId = c.id;
-        }
-        if (!(await report(valid))) return ownerLoginFailure();
-        if (!valid || !accountId) return ownerLoginFailure();
-        const { data: token, error: sessionError } = await client.rpc("create_staff_session", {
-          p_kind: "super_admin",
-          p_account_id: accountId,
-        });
-        if (sessionError || typeof token !== "string" || !token) return ownerLoginFailure();
-        await updateAuthSession({
-          superAdmin: true,
-          superAdminAccountId: accountId,
-          superAdminSessionToken: token,
-          superAdminReauthenticatedAt: undefined,
-        });
-        return { ok: true as const };
-      },
+      (report) =>
+        superAdminLoginCore(
+          {
+            mode: "individual",
+            staffId: normalizeStaffId(data.staffId ?? ""),
+            password: data.password,
+          },
+          {
+            rpc: async (fn, params) => client.rpc(fn, params),
+            report,
+            verify: verifyManagerPassword,
+            updateSession: updateAuthSession,
+            legacyPassword: "",
+          },
+        ),
       ownerLoginFailure,
     );
   });

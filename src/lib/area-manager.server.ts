@@ -9,6 +9,7 @@ import { writeAdminAudit } from "./admin-audit.server";
 import { changeStaffPasswordCore } from "./super-admin-auth.server";
 import { hashManagerPassword, verifyManagerPassword } from "./manager-password.server";
 import { getServiceClient } from "./remote-audio.server";
+import { readRpcVerdict } from "./rpc-contract.server";
 import {
   normalizeStaffId,
   staffIdIsValid,
@@ -132,7 +133,7 @@ export const amCreateManager = createServerFn({ method: "POST" })
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
     const passwordHash = await hashManagerPassword(data.password);
-    const { error } = await rpc("create_manager_account", {
+    const res = await rpc("create_manager_account", {
       p_actor_kind: "area_manager",
       p_actor_id: am.id,
       p_staff_id: staffId,
@@ -140,8 +141,8 @@ export const amCreateManager = createServerFn({ method: "POST" })
       p_restaurant_id: data.restaurantId,
       p_password_hash: passwordHash,
     });
-    if (error) return { ok: false, code: error.message };
-    return { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const amManagerStatusInput = z.object({
@@ -156,13 +157,14 @@ export const amSetManagerStatus = createServerFn({ method: "POST" })
     if (!am) return { ok: false, code: "UNAUTHORIZED" };
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await rpc("set_manager_status", {
+    const res = await rpc("set_manager_status", {
       p_actor_kind: "area_manager",
       p_actor_id: am.id,
       p_manager_id: data.managerId,
       p_new_status: data.status,
     });
-    return error ? { ok: false, code: error.message } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const amRenameManagerInput = z.object({
@@ -177,14 +179,15 @@ export const amRenameManager = createServerFn({ method: "POST" })
     if (!am) return { ok: false, code: "UNAUTHORIZED" };
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await rpc("update_staff_profile", {
+    const res = await rpc("update_staff_profile", {
       p_actor_kind: "area_manager",
       p_actor_id: am.id,
       p_target_kind: "manager",
       p_target_id: data.managerId,
       p_full_name: data.fullName,
     });
-    return error ? { ok: false, code: error.message } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 // --- Manager password reset approvals ---------------------------------------
@@ -211,14 +214,14 @@ export const amDecideManagerReset = createServerFn({ method: "POST" })
     if (!am) return { ok: false, code: "UNAUTHORIZED" };
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
-    const { data: result, error } = await rpc("decide_manager_reset", {
+    const res = await rpc("decide_manager_reset", {
       p_decider_kind: "area_manager",
       p_decider_id: am.id,
       p_request_id: data.requestId,
       p_decision: data.decision,
     });
-    if (error) return { ok: false, code: error.message };
-    return result === true ? { ok: true } : { ok: false, code: "ALREADY_DECIDED" };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 // --- AM self-service + audit -------------------------------------------------
@@ -291,14 +294,14 @@ export const saCreateAreaManager = createServerFn({ method: "POST" })
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
     const passwordHash = await hashManagerPassword(data.password);
-    const { data: id, error } = await rpc("create_area_manager", {
+    const res = await rpc("create_area_manager", {
       p_actor_id: actorId,
       p_staff_id: staffId,
       p_full_name: data.fullName,
       p_password_hash: passwordHash,
     });
-    if (error) return { ok: false, code: error.message };
-    return { ok: true, id: typeof id === "string" ? id : undefined };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true, id: verdict.id } : { ok: false, code: verdict.code };
   });
 
 export const saSetAreaManagerStatus = createServerFn({ method: "POST" })
@@ -309,15 +312,13 @@ export const saSetAreaManagerStatus = createServerFn({ method: "POST" })
     if (!actorId) return { ok: false, code: "INDIVIDUAL_REQUIRED" };
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await rpc("set_area_manager_status", {
+    const res = await rpc("set_area_manager_status", {
       p_actor_id: actorId,
       p_target_id: data.areaManagerId,
       p_new_status: data.status,
     });
-    if (error?.message === "LAST_ACTIVE_AREA_MANAGER") {
-      return { ok: false, code: "LAST_ACTIVE_AREA_MANAGER" };
-    }
-    return error ? { ok: false, code: "UNAVAILABLE" } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const saAssignAreaManager = createServerFn({ method: "POST" })
@@ -328,12 +329,13 @@ export const saAssignAreaManager = createServerFn({ method: "POST" })
     if (!actorId) return { ok: false, code: "INDIVIDUAL_REQUIRED" };
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await rpc("assign_area_manager", {
+    const res = await rpc("assign_area_manager", {
       p_actor_id: actorId,
       p_am_id: data.areaManagerId,
       p_restaurant_id: data.restaurantId,
     });
-    return error ? { ok: false, code: error.message } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const saRevokeAreaManagerAssignment = createServerFn({ method: "POST" })
@@ -344,15 +346,13 @@ export const saRevokeAreaManagerAssignment = createServerFn({ method: "POST" })
     if (!actorId) return { ok: false, code: "INDIVIDUAL_REQUIRED" };
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await rpc("revoke_area_manager_assignment", {
+    const res = await rpc("revoke_area_manager_assignment", {
       p_actor_id: actorId,
       p_am_id: data.areaManagerId,
       p_restaurant_id: data.restaurantId,
     });
-    if (error?.message === "LAST_ACTIVE_AREA_MANAGER") {
-      return { ok: false, code: "LAST_ACTIVE_AREA_MANAGER" };
-    }
-    return error ? { ok: false, code: "UNAVAILABLE" } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const saRestaurantsWithoutAm = createServerFn({ method: "GET" }).handler(async () => {
@@ -362,6 +362,22 @@ export const saRestaurantsWithoutAm = createServerFn({ method: "GET" }).handler(
   const { data, error } = await client.rpc("list_restaurants_without_active_am");
   if (error) return { ok: false as const, error: GENERIC };
   return { ok: true as const, restaurants: (data as RestaurantWithoutAmRow[]) ?? [] };
+});
+
+export type AmRolloutReadiness = {
+  restaurants_total: number;
+  restaurants_covered: number;
+  uncovered: Array<{ restaurant_id: string; display_name: string }>;
+};
+
+/** Review B10: single DB-derived readiness snapshot for the AM rollout gate. */
+export const saAmRolloutReadiness = createServerFn({ method: "GET" }).handler(async () => {
+  await requireSuperAdmin();
+  const rpc = serviceRpc();
+  if (!rpc) return { ok: false as const, error: GENERIC };
+  const { data, error } = await rpc("get_am_rollout_readiness", {});
+  if (error) return { ok: false as const, error: GENERIC };
+  return { ok: true as const, readiness: (data as AmRolloutReadiness | null) ?? null };
 });
 
 export const saPendingAmResets = createServerFn({ method: "GET" }).handler(async () => {
@@ -381,13 +397,13 @@ export const saDecideAmReset = createServerFn({ method: "POST" })
     if (!actorId) return { ok: false, code: "INDIVIDUAL_REQUIRED" };
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
-    const { data: result, error } = await rpc("decide_am_reset", {
+    const res = await rpc("decide_am_reset", {
       p_decider_id: actorId,
       p_request_id: data.requestId,
       p_decision: data.decision,
     });
-    if (error) return { ok: false, code: error.message };
-    return result === true ? { ok: true } : { ok: false, code: "ALREADY_DECIDED" };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const saAdminAudit = createServerFn({ method: "GET" }).handler(async () => {
@@ -408,27 +424,27 @@ export { writeAdminAudit };
 
 // --- session status (AM dashboard loader) -----------------------------------
 
-export const getAmStatus = createServerFn({ method: "GET" }).handler(async () => {
-  const { getAuthSession } = await import("./auth.server");
-  const session = await getAuthSession();
-  const accountId = session.data.areaManagerAccountId;
-  if (!accountId || !session.data.areaManagerSessionToken) {
-    return { authenticated: false as const };
-  }
-  const client = getServiceClient();
-  if (!client) return { authenticated: false as const };
-  const { data } = await client
-    .from("area_manager_accounts")
-    .select("id, staff_id, full_name, password_changed_at")
-    .eq("id", accountId)
-    .eq("status", "aktif")
-    .single();
-  const row = data as {
-    id: string;
+export type AmStatusDeps = {
+  accountId: string;
+  sessionToken: string;
+  /** Maps the bearer token to its account id, or null when revoked. */
+  sessionAccount: (kind: "area_manager", token: string) => Promise<string | null>;
+  fetchAccount: () => Promise<{
     staff_id: string;
     full_name: string;
     password_changed_at: string | null;
-  } | null;
+  } | null>;
+};
+
+/**
+ * Session-authoritative AM status (review C12): the cookie pair alone proves
+ * nothing — the bearer token must still live in staff_sessions AND map to
+ * the SAME account id, and the account row must exist and be active.
+ */
+export async function amStatusCore(deps: AmStatusDeps) {
+  const live = await deps.sessionAccount("area_manager", deps.sessionToken).catch(() => null);
+  if (!live || live !== deps.accountId) return { authenticated: false as const };
+  const row = await deps.fetchAccount().catch(() => null);
   if (!row) return { authenticated: false as const };
   return {
     authenticated: true as const,
@@ -436,6 +452,38 @@ export const getAmStatus = createServerFn({ method: "GET" }).handler(async () =>
     staffId: row.staff_id,
     mustRemindPassword: row.password_changed_at === null,
   };
+}
+
+export const getAmStatus = createServerFn({ method: "GET" }).handler(async () => {
+  const { getAuthSession, staffSessionAccount } = await import("./auth.server");
+  const session = await getAuthSession();
+  const accountId = session.data.areaManagerAccountId;
+  const sessionToken = session.data.areaManagerSessionToken;
+  if (!accountId || !sessionToken) {
+    return { authenticated: false as const };
+  }
+  const client = getServiceClient();
+  if (!client) return { authenticated: false as const };
+  return amStatusCore({
+    accountId,
+    sessionToken,
+    sessionAccount: staffSessionAccount,
+    fetchAccount: async () => {
+      const { data } = await client
+        .from("area_manager_accounts")
+        .select("id, staff_id, full_name, password_changed_at")
+        .eq("id", accountId)
+        .eq("status", "aktif")
+        .single();
+      const row = data as {
+        id: string;
+        staff_id: string;
+        full_name: string;
+        password_changed_at: string | null;
+      } | null;
+      return row ?? null;
+    },
+  });
 });
 
 /** Self-service rename for the logged-in Area Manager (ID immutable). */
@@ -446,14 +494,15 @@ export const updateOwnAmProfile = createServerFn({ method: "POST" })
     if (!am) return { ok: false, code: "UNAUTHORIZED" };
     const rpc = serviceRpc();
     if (!rpc) return { ok: false, code: "UNAVAILABLE" };
-    const { error } = await rpc("update_staff_profile", {
+    const res = await rpc("update_staff_profile", {
       p_actor_kind: "area_manager",
       p_actor_id: am.id,
       p_target_kind: "area_manager",
       p_target_id: am.id,
       p_full_name: data.fullName,
     });
-    return error ? { ok: false, code: error.message } : { ok: true };
+    const verdict = readRpcVerdict(res.data, res.error);
+    return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
 
 export const amLogout = createServerFn({ method: "POST" }).handler(async () => {
