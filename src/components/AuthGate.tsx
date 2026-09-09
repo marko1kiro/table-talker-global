@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, LockKeyhole, Loader2 } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { getOwnerLoginClientKey } from "@/lib/owner-login-client-key";
+import { browserManagerStorage, readManagerIdentity } from "@/lib/manager-session-identity";
 
 export type SuperAdminLoginInput = {
   data: {
@@ -9,6 +10,9 @@ export type SuperAdminLoginInput = {
     staffId?: string;
     password: string;
     clientKey: string;
+    // R3-A: the manager bearer token held by this browser, so a super admin
+    // login revokes the previous manager session server-side.
+    managerToken?: string;
   };
 };
 
@@ -66,6 +70,9 @@ export function AuthGate({
           staffId: mode === "individual" ? staffId : undefined,
           password,
           clientKey: getOwnerLoginClientKey(),
+          ...(staffLogin
+            ? { managerToken: readManagerIdentity(browserManagerStorage())?.managerToken }
+            : {}),
         },
       });
       if (!result.ok) {

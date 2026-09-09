@@ -23,8 +23,12 @@ export const Route = createFileRoute("/super-admin/recovery")({
   component: RecoveryPage,
 });
 
-function RecoveryPage() {
-  const search = Route.useSearch();
+/**
+ * Inner component takes the validated search as a plain prop so the runtime
+ * behaviour (stage selection + prefill) is testable with react-dom/server
+ * without a DOM router (review R3-D). RecoveryPage only bridges the router.
+ */
+export function RecoveryPageInner({ search }: { search: { staff_id?: string; token?: string } }) {
   const [stage, setStage] = useState<"request" | "reset">(
     search.staff_id && search.token ? "reset" : "request",
   );
@@ -235,4 +239,8 @@ function RecoveryPage() {
       <Footer className="mt-6" />
     </AuthLayout>
   );
+}
+
+function RecoveryPage() {
+  return <RecoveryPageInner search={Route.useSearch()} />;
 }

@@ -42,7 +42,7 @@ import type { InstructionThread } from "@/lib/instruction-domain";
 import { TABLE_COUNT } from "@/lib/audio";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { ChangePasswordDialog } from "@/components/dashboard/ChangePasswordDialog";
-import { changeManagerPassword } from "@/lib/manager-auth.server";
+import { changeManagerPassword, logoutManagerSession } from "@/lib/manager-auth.server";
 import { logout as logoutServer } from "@/lib/auth";
 
 export const Route = createFileRoute("/manager/")({
@@ -292,8 +292,22 @@ function ManagerDashboard() {
     // Review A4: also clear the shared cookie session (may hold another role
     // from a previous login in this browser).
     void logoutServer().catch(() => undefined);
-    removeManagerIdentity(browserManagerStorage());
-    void navigate({ to: "/manager/login" });
+    const managerToken = identity?.managerToken;
+    if (!managerToken) {
+      removeManagerIdentity(browserManagerStorage());
+      void navigate({ to: "/manager/login" });
+      return;
+    }
+    // R3-A: revoke the manager bearer server-side first. If revocation fails,
+    // keep the identity (fail closed) so the session stays consistent and the
+    // user can retry logout.
+    void logoutManagerSession({ data: { managerToken } })
+      .then((result) => {
+        if (!result.ok) return;
+        removeManagerIdentity(browserManagerStorage());
+        void navigate({ to: "/manager/login" });
+      })
+      .catch(() => undefined);
   };
 
   if (!hydrated || !identity) return null;

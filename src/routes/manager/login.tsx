@@ -8,6 +8,7 @@ import { loginStaff } from "@/lib/staff-login.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   browserManagerStorage,
+  readManagerIdentity,
   removeManagerIdentity,
   writeManagerIdentity,
 } from "@/lib/manager-session-identity";
@@ -41,6 +42,8 @@ function StaffLoginPage() {
           staffId: staffId.trim(),
           password,
           clientKey: getOwnerLoginClientKey(),
+          // R3-A: revoke the previous manager session held by this browser.
+          managerToken: readManagerIdentity(browserManagerStorage())?.managerToken,
         },
       });
       if (!result.ok) {

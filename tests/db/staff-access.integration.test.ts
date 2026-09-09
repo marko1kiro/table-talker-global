@@ -1604,6 +1604,8 @@ describe("privilege matrix: every Poin 2 SECURITY DEFINER function (review B5)",
     "list_pending_am_resets()",
     "get_manager_reset_requester_scope(uuid,uuid)",
     "list_admin_audit_for_actor(text,uuid)",
+    "revoke_staff_session_by_token(text,text)",
+    "revoke_manager_session_by_token(text)",
   ];
   const BROWSER_BOUND: string[] = [
     "bind_role_session_realtime(uuid,text)",
@@ -1721,5 +1723,507 @@ describe("AM rollout readiness gate (review B10)", () => {
     expect(Number(state.restaurants_total)).toBe(3);
     expect(Number(state.restaurants_covered)).toBe(3);
     expect(state.uncovered).toHaveLength(0);
+  });
+});
+
+// --- ROUND 3 (R3-A/E/F/G): DB-level evidence ---------------------------------
+
+describe("R3-A: single-session revocation by raw token", () => {
+  test("revoking a staff session kills exactly that session (idempotent)", async () => {
+    const c = await db.client();
+    const t1 = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "super_admin",
+      p_account_id: sa1Id,
+    });
+    const t2 = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "super_admin",
+      p_account_id: sa1Id,
+    });
+    expect(
+      await rpcOk<string | null>(c, "get_staff_session", { p_kind: "super_admin", p_token: t1 }),
+    ).toBe(sa1Id);
+    expect(
+      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+        p_kind: "super_admin",
+        p_token: t1,
+      }),
+    ).toBe(true);
+    expect(
+      await rpcOk<string | null>(c, "get_staff_session", { p_kind: "super_admin", p_token: t1 }),
+    ).toBeNull();
+    // Single-row scope: a sibling session of the SAME account survives.
+    expect(
+      await rpcOk<string | null>(c, "get_staff_session", { p_kind: "super_admin", p_token: t2 }),
+    ).toBe(sa1Id);
+    // Idempotent: a second revoke reports false, not an error.
+    expect(
+      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+        p_kind: "super_admin",
+        p_token: t1,
+      }),
+    ).toBe(false);
+    await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+      p_kind: "super_admin",
+      p_token: t2,
+    });
+  });
+
+  test("kind mismatch and junk tokens never revoke anything", async () => {
+    const c = await db.client();
+    const t = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "area_manager",
+      p_account_id: am1Id,
+    });
+    expect(
+      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+        p_kind: "super_admin",
+        p_token: t,
+      }),
+    ).toBe(false);
+    expect(
+      await rpcOk<string | null>(c, "get_staff_session", { p_kind: "area_manager", p_token: t }),
+    ).toBe(am1Id);
+    expect(
+      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+        p_kind: "area_manager",
+        p_token: "junk-token",
+      }),
+    ).toBe(false);
+    expect(
+      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+        p_kind: "area_manager",
+        p_token: t,
+      }),
+    ).toBe(true);
+    expect(
+      await rpcOk<string | null>(c, "get_staff_session", { p_kind: "area_manager", p_token: t }),
+    ).toBeNull();
+  });
+
+  test("revoking a manager bearer kills it for get_manager_id_by_token (idempotent)", async () => {
+    const c = await db.client();
+    const t = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    expect(await rpcOk<string | null>(c, "get_manager_id_by_token", { p_token: t })).toBe(
+      managerId,
+    );
+    expect(await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: t })).toBe(true);
+    expect(await rpcOk<string | null>(c, "get_manager_id_by_token", { p_token: t })).toBeNull();
+    expect(await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: t })).toBe(false);
+    expect(await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: "junk" })).toBe(
+      false,
+    );
+  });
+
+  test("role-switch primitive: old AM cookie + old manager token die, new session stays live", async () => {
+    // DB half of the role-switch matrix: whichever order the Node core
+    // revokes, these primitives make BOTH old credentials unusable while the
+    // newly minted session keeps working.
+    const c = await db.client();
+    const oldAm = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "area_manager",
+      p_account_id: am1Id,
+    });
+    const oldMgr = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const newAm = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "area_manager",
+      p_account_id: am1Id,
+    });
+    await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+      p_kind: "area_manager",
+      p_token: oldAm,
+    });
+    await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: oldMgr });
+    expect(
+      await rpcOk<string | null>(c, "get_staff_session", {
+        p_kind: "area_manager",
+        p_token: oldAm,
+      }),
+    ).toBeNull();
+    expect(
+      await rpcOk<string | null>(c, "get_manager_id_by_token", { p_token: oldMgr }),
+    ).toBeNull();
+    expect(
+      await rpcOk<string | null>(c, "get_staff_session", {
+        p_kind: "area_manager",
+        p_token: newAm,
+      }),
+    ).toBe(am1Id);
+    await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+      p_kind: "area_manager",
+      p_token: newAm,
+    });
+  });
+});
+
+describe("R3-E: AM status is session-authoritative at the DB level", () => {
+  // Executes the exact predicates amStatusCore composes (live bearer ->
+  // same account -> active row) against the real database.
+  async function amRow(c: Client, accountId: string) {
+    const r = await c.query(
+      `select staff_id, full_name, password_changed_at from public.area_manager_accounts
+       where id = $1 and status = 'aktif'`,
+      [accountId],
+    );
+    return r.rows[0] ?? null;
+  }
+
+  test("live bearer + active row: authenticated, reminder until first password change", async () => {
+    const c = await db.client();
+    // A freshly created AM carries the initial password: no stamp yet.
+    const created = await okVerdict(c, "create_area_manager", {
+      p_actor_id: sa1Id,
+      p_staff_id: "am.tiga",
+      p_full_name: "AM Tiga",
+      p_password_hash: await scryptHash("AmPass#333"),
+    });
+    const am3Id = String(created.id);
+    const token = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "area_manager",
+      p_account_id: am3Id,
+    });
+    const live = await rpcOk<string | null>(c, "get_staff_session", {
+      p_kind: "area_manager",
+      p_token: token,
+    });
+    expect(live).toBe(am3Id);
+    const row = await amRow(c, am3Id);
+    expect(row).not.toBeNull();
+    // password_changed_at is NULL right after creation => mustRemindPassword true
+    expect(row.password_changed_at).toBeNull();
+    // After a real password set (the same primitive the reset flow uses),
+    // the stamp appears => mustRemindPassword false.
+    await rpcOk(c, "set_staff_password", {
+      p_kind: "area_manager",
+      p_account_id: am3Id,
+      p_password_hash: await scryptHash("AmPass#baru3"),
+    });
+    expect((await amRow(c, am3Id)).password_changed_at).not.toBeNull();
+    await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+      p_kind: "area_manager",
+      p_token: token,
+    });
+  });
+
+  test("revoked bearer: not authenticated even though the cookie pair still exists", async () => {
+    const c = await db.client();
+    const token = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "area_manager",
+      p_account_id: am1Id,
+    });
+    await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+      p_kind: "area_manager",
+      p_token: token,
+    });
+    const live = await rpcOk<string | null>(c, "get_staff_session", {
+      p_kind: "area_manager",
+      p_token: token,
+    });
+    expect(live).toBeNull();
+  });
+
+  test("deactivated account: not authenticated (row filtered by status='aktif')", async () => {
+    const c = await db.client();
+    // R3's only AM is am2 after B10; cover R3 with am1 first so the
+    // last-active-AM guard permits freeing am2, then restore everything.
+    await okVerdict(c, "assign_area_manager", {
+      p_actor_id: sa1Id,
+      p_am_id: am1Id,
+      p_restaurant_id: R3,
+    });
+    await okVerdict(c, "revoke_area_manager_assignment", {
+      p_actor_id: sa1Id,
+      p_am_id: am2Id,
+      p_restaurant_id: R3,
+    });
+    await okVerdict(c, "set_area_manager_status", {
+      p_actor_id: sa1Id,
+      p_target_id: am2Id,
+      p_new_status: "nonaktif",
+    });
+    expect(await amRow(c, am2Id)).toBeNull();
+    await okVerdict(c, "set_area_manager_status", {
+      p_actor_id: sa1Id,
+      p_target_id: am2Id,
+      p_new_status: "aktif",
+    });
+    await okVerdict(c, "assign_area_manager", {
+      p_actor_id: sa1Id,
+      p_am_id: am2Id,
+      p_restaurant_id: R3,
+    });
+    await okVerdict(c, "revoke_area_manager_assignment", {
+      p_actor_id: sa1Id,
+      p_am_id: am1Id,
+      p_restaurant_id: R3,
+    });
+    expect(await amRow(c, am2Id)).not.toBeNull();
+  });
+
+  test("bearer of a DIFFERENT account than the cookie claims: not authenticated", async () => {
+    const c = await db.client();
+    const token = await rpcOk<string>(c, "create_staff_session", {
+      p_kind: "area_manager",
+      p_account_id: am1Id,
+    });
+    const live = await rpcOk<string | null>(c, "get_staff_session", {
+      p_kind: "area_manager",
+      p_token: token,
+    });
+    // Cookie claims am2; the bearer maps to am1 => core compares and rejects.
+    expect(live === am2Id).toBe(false);
+    expect(live).toBe(am1Id);
+    await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+      p_kind: "area_manager",
+      p_token: token,
+    });
+  });
+});
+
+describe("R3-F: profile rename matrix (IDs immutable, lifecycle-safe)", () => {
+  test("AM renames own profile; staff_id untouched; audit lands", async () => {
+    const c = await db.client();
+    await okVerdict(c, "update_staff_profile", {
+      p_actor_kind: "area_manager",
+      p_actor_id: am1Id,
+      p_target_kind: "area_manager",
+      p_target_id: am1Id,
+      p_full_name: "AM Satu Rebrand",
+    });
+    expect(
+      await oneText(c, `select full_name from public.area_manager_accounts where id = $1`, [am1Id]),
+    ).toBe("AM Satu Rebrand");
+    expect(
+      await oneText(c, `select staff_id from public.area_manager_accounts where id = $1`, [am1Id]),
+    ).toBe("am.satu");
+    expect(
+      await scalar(
+        c,
+        `select count(*) as n from public.admin_audit_log
+         where action = 'profile.update' and actor_id = $1 and result = 'ok'`,
+        [am1Id],
+      ),
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  test("AM renames an in-scope manager; SA renames every kind; out-of-scope and manager-as-actor denied", async () => {
+    const c = await db.client();
+    await okVerdict(c, "update_staff_profile", {
+      p_actor_kind: "area_manager",
+      p_actor_id: am1Id,
+      p_target_kind: "manager",
+      p_target_id: managerId,
+      p_full_name: "Kasir Satgas Baru",
+    });
+    for (const [kind, id] of [
+      ["super_admin", sa1Id],
+      ["area_manager", am2Id],
+      ["manager", managerId],
+    ] as const) {
+      await okVerdict(c, "update_staff_profile", {
+        p_actor_kind: "super_admin",
+        p_actor_id: sa1Id,
+        p_target_kind: kind,
+        p_target_id: id,
+        p_full_name: `SA Rename ${kind}`,
+      });
+    }
+    const r3Manager = await oneText(
+      c,
+      `select id::text from public.manager_accounts where id_manager = 'kasir.restotiga'`,
+    );
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "area_manager",
+        p_actor_id: am1Id,
+        p_target_kind: "manager",
+        p_target_id: r3Manager,
+        p_full_name: "Out of scope",
+      },
+      "NOT_AUTHORIZED",
+    );
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "manager",
+        p_actor_id: managerId,
+        p_target_kind: "manager",
+        p_target_id: managerId,
+        p_full_name: "Self rename",
+      },
+      "NOT_AUTHORIZED",
+    );
+    expect(
+      await scalar(
+        c,
+        `select count(*) as n from public.admin_audit_log
+         where action = 'profile.update' and actor_id = $1 and restaurant_id = $2
+           and result = 'denied' and reason = 'not authorized'`,
+        [am1Id, R3],
+      ),
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  test("GUARD (R3-F): renaming an INACTIVE target fails NOT_FOUND", async () => {
+    const c = await db.client();
+    await okVerdict(c, "set_manager_status", {
+      p_actor_kind: "super_admin",
+      p_actor_id: sa1Id,
+      p_manager_id: managerId,
+      p_new_status: "nonaktif",
+    });
+    for (const [kind, id] of [
+      ["area_manager", am1Id],
+      ["super_admin", sa1Id],
+    ] as const) {
+      await expectDenial(
+        c,
+        "update_staff_profile",
+        {
+          p_actor_kind: kind,
+          p_actor_id: id,
+          p_target_kind: "manager",
+          p_target_id: managerId,
+          p_full_name: "Ghost",
+        },
+        "NOT_FOUND",
+      );
+    }
+    // Inactive AM target (cover R3 with am1 first so the lifecycle guard
+    // allows freeing am2).
+    await okVerdict(c, "assign_area_manager", {
+      p_actor_id: sa1Id,
+      p_am_id: am1Id,
+      p_restaurant_id: R3,
+    });
+    await okVerdict(c, "revoke_area_manager_assignment", {
+      p_actor_id: sa1Id,
+      p_am_id: am2Id,
+      p_restaurant_id: R3,
+    });
+    await okVerdict(c, "set_area_manager_status", {
+      p_actor_id: sa1Id,
+      p_target_id: am2Id,
+      p_new_status: "nonaktif",
+    });
+    await expectDenial(
+      c,
+      "update_staff_profile",
+      {
+        p_actor_kind: "super_admin",
+        p_actor_id: sa1Id,
+        p_target_kind: "area_manager",
+        p_target_id: am2Id,
+        p_full_name: "Ghost",
+      },
+      "NOT_FOUND",
+    );
+    // Restore canonical state; IDs never changed anywhere.
+    await okVerdict(c, "set_area_manager_status", {
+      p_actor_id: sa1Id,
+      p_target_id: am2Id,
+      p_new_status: "aktif",
+    });
+    await okVerdict(c, "assign_area_manager", {
+      p_actor_id: sa1Id,
+      p_am_id: am2Id,
+      p_restaurant_id: R3,
+    });
+    await okVerdict(c, "revoke_area_manager_assignment", {
+      p_actor_id: sa1Id,
+      p_am_id: am1Id,
+      p_restaurant_id: R3,
+    });
+    await okVerdict(c, "set_manager_status", {
+      p_actor_kind: "super_admin",
+      p_actor_id: sa1Id,
+      p_manager_id: managerId,
+      p_new_status: "aktif",
+    });
+    expect(
+      await oneText(c, `select id_manager from public.manager_accounts where id = $1`, [managerId]),
+    ).toBe("kasir.satgas01");
+  });
+});
+
+describe("R3-G: realtime bind isolation under revocation", () => {
+  test("revoked manager token cannot bind and grants no broadcast read", async () => {
+    const c = await db.client();
+    const user = await oneText(
+      c,
+      `insert into auth.users (email) values ('r3.revoke@example.test') returning (id::text) as n`,
+    );
+    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: token });
+    const b = await freshClient();
+    await b.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    const bound = await rpcNamed<boolean>(b, "bind_manager_session_realtime", {
+      p_restaurant_id: R1,
+      p_session_token: token,
+    });
+    expect(bound.error ?? "").toContain("INVALID_SESSION");
+    expect(
+      await rpcOk<boolean>(b, "can_read_table_occupancy_broadcast", {
+        p_topic: `table-occupancy:${R1}`,
+      }),
+    ).toBe(false);
+    await b.end();
+  });
+
+  test("live manager token binds ONLY its own restaurant", async () => {
+    const c = await db.client();
+    const user = await oneText(
+      c,
+      `insert into auth.users (email) values ('r3.live@example.test') returning (id::text) as n`,
+    );
+    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const b = await freshClient();
+    await b.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    const bound = await rpcNamed<boolean>(b, "bind_manager_session_realtime", {
+      p_restaurant_id: R1,
+      p_session_token: token,
+    });
+    expect(bound.error).toBeNull();
+    expect(bound.data).toBe(true);
+    expect(
+      await rpcOk<boolean>(b, "can_read_table_occupancy_broadcast", {
+        p_topic: `table-occupancy:${R1}`,
+      }),
+    ).toBe(true);
+    expect(
+      await rpcOk<boolean>(b, "can_read_table_occupancy_broadcast", {
+        p_topic: `table-occupancy:${R2}`,
+      }),
+    ).toBe(false);
+    const forged = await rpcNamed<boolean>(b, "bind_manager_session_realtime", {
+      p_restaurant_id: R2,
+      p_session_token: token,
+    });
+    expect(forged.error ?? "").toContain("INVALID_SESSION");
+    await b.end();
+    await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: token });
+  });
+
+  test("unknown/absent role-session token cannot bind a role channel", async () => {
+    const c = await db.client();
+    const user = await oneText(
+      c,
+      `insert into auth.users (email) values ('r3.role@example.test') returning (id::text) as n`,
+    );
+    const b = await freshClient();
+    await b.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    const bound = await rpcNamed<boolean>(b, "bind_role_session_realtime", {
+      p_restaurant_id: R1,
+      p_session_token: "deadbeef-dead-beef-dead-deadbeefdead",
+    });
+    expect(bound.error ?? "").toContain("INVALID_SESSION");
+    expect(
+      await rpcOk<boolean>(b, "can_read_table_occupancy_broadcast", {
+        p_topic: `table-occupancy:${R1}`,
+      }),
+    ).toBe(false);
+    await b.end();
   });
 });

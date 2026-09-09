@@ -674,15 +674,17 @@ declare
   v_actor public.super_admin_accounts%rowtype;
   v_target public.super_admin_accounts%rowtype;
 begin
+  -- Serialize lifecycle mutations: two parallel deactivations can never both
+  -- pass the "more than one active" check (min-1-active invariant). The actor
+  -- row is re-read AFTER the lock so a concurrently deactivated actor is
+  -- judged on fresh state, never on a pre-lock snapshot (R3-F hardening).
+  perform pg_advisory_xact_lock(hashtext('super_admin_lifecycle'));
   select * into v_actor from public.super_admin_accounts where id = p_actor_id and status = 'aktif';
   if v_actor.id is null then
     perform public.write_admin_audit('super_admin', p_actor_id, null, 'super_admin.status',
       'super_admin', p_target_id, null, 'denied', 'not authorized', '{}');
     return jsonb_build_object('ok', false, 'error', 'NOT_AUTHORIZED');
   end if;
-  -- Serialize lifecycle mutations: two parallel deactivations can never both
-  -- pass the "more than one active" check (min-1-active invariant).
-  perform pg_advisory_xact_lock(hashtext('super_admin_lifecycle'));
   select * into v_target from public.super_admin_accounts where id = p_target_id for update;
   if v_target.id is null or v_target.status = 'cancelled' then
     return jsonb_build_object('ok', false, 'error', 'NOT_FOUND');
@@ -767,18 +769,25 @@ begin
     v_ok := false;
   end if;
   if not v_ok then
-    perform public.write_admin_audit(p_actor_kind, p_actor_id, v_actor_label,
-      'profile.update', p_target_kind, p_target_id, v_restaurant_id, 'denied', 'not authorized', '{}');
+    -- Denied-audit actor kinds are constrained to the admin roles; a
+    -- disallowed actor kind (e.g. 'manager') is still durably recorded, as
+    -- 'system' with the attempted kind in metadata, instead of crashing the
+    -- verdict with a check-constraint error (review R3-F).
+    perform public.write_admin_audit(
+      case when p_actor_kind in ('super_admin','area_manager') then p_actor_kind else 'system' end,
+      p_actor_id, v_actor_label,
+      'profile.update', p_target_kind, p_target_id, v_restaurant_id, 'denied', 'not authorized',
+      jsonb_build_object('attempted_actor_kind', p_actor_kind));
     return jsonb_build_object('ok', false, 'error', 'NOT_AUTHORIZED');
   end if;
 
   case p_target_kind
     when 'super_admin' then
-      update public.super_admin_accounts set full_name = trim(p_full_name), updated_at = now() where id = p_target_id;
+      update public.super_admin_accounts set full_name = trim(p_full_name), updated_at = now() where id = p_target_id and status = 'aktif';
     when 'area_manager' then
-      update public.area_manager_accounts set full_name = trim(p_full_name), updated_at = now() where id = p_target_id;
+      update public.area_manager_accounts set full_name = trim(p_full_name), updated_at = now() where id = p_target_id and status = 'aktif';
     when 'manager' then
-      update public.manager_accounts set full_name = trim(p_full_name), updated_at = now() where id = p_target_id;
+      update public.manager_accounts set full_name = trim(p_full_name), updated_at = now() where id = p_target_id and status = 'aktif';
     else return jsonb_build_object('ok', false, 'error', 'INVALID_TARGET');
   end case;
   if not found then
@@ -857,14 +866,16 @@ declare
   v_actor public.super_admin_accounts%rowtype;
   v_am public.area_manager_accounts%rowtype;
 begin
+  -- Assignments participate in the same serialization domain (A3). The actor
+  -- row is re-read AFTER the lock: a concurrently deactivated actor must be
+  -- judged on fresh state, never on a pre-lock snapshot (R3-F hardening).
+  perform pg_advisory_xact_lock(hashtext('area_manager_lifecycle'));
   select * into v_actor from public.super_admin_accounts where id = p_actor_id and status = 'aktif';
   if v_actor.id is null then
     perform public.write_admin_audit('super_admin', p_actor_id, null, 'assignment.add',
       'area_manager', p_am_id, p_restaurant_id, 'denied', 'not authorized', '{}');
     return jsonb_build_object('ok', false, 'error', 'NOT_AUTHORIZED');
   end if;
-  -- Assignments participate in the same serialization domain (A3).
-  perform pg_advisory_xact_lock(hashtext('area_manager_lifecycle'));
   select * into v_am from public.area_manager_accounts where id = p_am_id;
   if v_am.id is null then
     return jsonb_build_object('ok', false, 'error', 'NOT_FOUND');
@@ -901,15 +912,17 @@ declare
   v_actor public.super_admin_accounts%rowtype;
   v_active_am_count integer;
 begin
+  -- Shared serialization key with every AM-scoped action and
+  -- set_area_manager_status (min-1-active-AM invariant across all of them).
+  -- The actor row is re-read AFTER the lock: a concurrently deactivated actor
+  -- must be judged on fresh state, never on a pre-lock snapshot (R3-F).
+  perform pg_advisory_xact_lock(hashtext('area_manager_lifecycle'));
   select * into v_actor from public.super_admin_accounts where id = p_actor_id and status = 'aktif';
   if v_actor.id is null then
     perform public.write_admin_audit('super_admin', p_actor_id, null, 'assignment.remove',
       'area_manager', p_am_id, p_restaurant_id, 'denied', 'not authorized', '{}');
     return jsonb_build_object('ok', false, 'error', 'NOT_AUTHORIZED');
   end if;
-  -- Shared serialization key with every AM-scoped action and
-  -- set_area_manager_status (min-1-active-AM invariant across all of them).
-  perform pg_advisory_xact_lock(hashtext('area_manager_lifecycle'));
 
   select count(distinct a.area_manager_id) into v_active_am_count
   from public.area_manager_assignments a
@@ -1081,13 +1094,16 @@ declare
   v_target public.area_manager_accounts%rowtype;
   v_guarded_restaurant uuid;
 begin
+  -- The actor row is re-read AFTER the lifecycle lock: a concurrently
+  -- deactivated actor must be judged on fresh state, never on a pre-lock
+  -- snapshot (R3-F hardening).
+  perform pg_advisory_xact_lock(hashtext('area_manager_lifecycle'));
   select * into v_actor from public.super_admin_accounts where id = p_actor_id and status = 'aktif';
   if v_actor.id is null then
     perform public.write_admin_audit('super_admin', p_actor_id, null, 'area_manager.status',
       'area_manager', p_target_id, null, 'denied', 'not authorized', '{}');
     return jsonb_build_object('ok', false, 'error', 'NOT_AUTHORIZED');
   end if;
-  perform pg_advisory_xact_lock(hashtext('area_manager_lifecycle'));
   -- Reject a missing target before any audit write or session revocation.
   select * into v_target from public.area_manager_accounts where id = p_target_id for update;
   if v_target.id is null then

@@ -26,6 +26,8 @@ export const loginInputSchema = z.object({
   staffId: z.string().optional(),
   password: z.string(),
   clientKey: z.string().min(16).max(200),
+  // R3-A: the OLD manager bearer token surrendered on a Manager -> SA switch.
+  managerToken: z.string().min(1).max(200).optional(),
 });
 
 export function ownerLoginFailure() {
@@ -87,6 +89,19 @@ export type SuperAdminLoginDeps = {
   verify: (password: string, stored: string) => Promise<boolean>;
   updateSession: (update: Partial<TableTalkerSession>) => Promise<unknown>;
   legacyPassword: string;
+  /** R3-A: bearer tokens currently held by this browser's session cookie. */
+  cookieStaffTokens?: () => Promise<{
+    superAdminToken: string | null;
+    areaManagerToken: string | null;
+  }>;
+  /** R3-A: server-side revocation of one staff/manager bearer session. */
+  revokeStaffSessionByToken?: (
+    kind: "super_admin" | "area_manager",
+    token: string,
+  ) => Promise<void>;
+  revokeManagerSessionByToken?: (token: string) => Promise<void>;
+  /** R3-A: the OLD manager bearer token surrendered by this browser. */
+  managerTokenToRevoke?: string | null;
 };
 
 type SuperAdminLoginData = {
@@ -115,6 +130,23 @@ export async function superAdminLoginCore(
       // the limiter must never break the login outcome
     }
   };
+  /**
+   * R3-A: revoke every OLD credential carried by this browser context before
+   * the replacement session is minted. Throws on failure so the caller can
+   * fail closed instead of leaving two usable credentials.
+   */
+  const revokePrevious = async () => {
+    const cookie = deps.cookieStaffTokens ? await deps.cookieStaffTokens() : null;
+    if (cookie?.superAdminToken) {
+      await deps.revokeStaffSessionByToken?.("super_admin", cookie.superAdminToken);
+    }
+    if (cookie?.areaManagerToken) {
+      await deps.revokeStaffSessionByToken?.("area_manager", cookie.areaManagerToken);
+    }
+    if (deps.managerTokenToRevoke) {
+      await deps.revokeManagerSessionByToken?.(deps.managerTokenToRevoke);
+    }
+  };
   try {
     if (data.mode === "legacy") {
       let valid = false;
@@ -124,6 +156,12 @@ export async function superAdminLoginCore(
         valid = false;
       }
       if (!valid) {
+        await report(false);
+        return fail();
+      }
+      try {
+        await revokePrevious();
+      } catch {
         await report(false);
         return fail();
       }
@@ -164,6 +202,14 @@ export async function superAdminLoginCore(
       await report(false);
       return fail();
     }
+    // R3-A: revoke the previous credentials BEFORE the new session exists —
+    // a failed revocation aborts the switch with the old state intact.
+    try {
+      await revokePrevious();
+    } catch {
+      await report(false);
+      return fail();
+    }
     const { data: token, error: sessionError } = await deps.rpc("create_staff_session", {
       p_kind: "super_admin",
       p_account_id: accountId,
@@ -172,15 +218,23 @@ export async function superAdminLoginCore(
       await report(false);
       return fail();
     }
-    await deps.updateSession({
-      superAdmin: true,
-      superAdminAccountId: accountId,
-      superAdminSessionToken: token,
-      superAdminReauthenticatedAt: undefined,
-      dashboard: undefined,
-      areaManagerAccountId: undefined,
-      areaManagerSessionToken: undefined,
-    });
+    try {
+      await deps.updateSession({
+        superAdmin: true,
+        superAdminAccountId: accountId,
+        superAdminSessionToken: token,
+        superAdminReauthenticatedAt: undefined,
+        dashboard: undefined,
+        areaManagerAccountId: undefined,
+        areaManagerSessionToken: undefined,
+      });
+    } catch {
+      // R3-A.8: the cookie write failed — revoke the just-minted session so
+      // no orphan bearer token survives, then account the attempt as a failure.
+      await deps.revokeStaffSessionByToken?.("super_admin", token).catch(() => undefined);
+      await report(false);
+      return fail();
+    }
     await report(true);
     return { ok: true as const };
   } catch {
@@ -202,11 +256,23 @@ export async function superAdminLoginCore(
 export const loginSuperAdmin = createServerFn({ method: "POST" })
   .validator(loginInputSchema)
   .handler(async ({ data }): Promise<{ ok: boolean; message?: string }> => {
-    const { isPasswordValid, updateAuthSession } = await import("./auth.server");
+    const {
+      isPasswordValid,
+      updateAuthSession,
+      readCookieStaffTokens,
+      revokeStaffSessionByToken,
+      revokeManagerSessionByToken,
+    } = await import("./auth.server");
     const { getServiceClient } = await import("./remote-audio.server");
     const { verifyManagerPassword } = await import("./manager-password.server");
     const client = getServiceClient();
     if (!client) return ownerLoginFailure();
+    const revocationDeps = {
+      cookieStaffTokens: readCookieStaffTokens,
+      revokeStaffSessionByToken,
+      revokeManagerSessionByToken,
+      managerTokenToRevoke: data.managerToken ?? null,
+    };
 
     if (data.mode === "legacy") {
       const expectedPassword = readEnv("SUPER_ADMIN_PASSWORD");
@@ -222,6 +288,7 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
               verify: async (password, stored) => isPasswordValid(password, stored),
               updateSession: updateAuthSession,
               legacyPassword: expectedPassword,
+              ...revocationDeps,
             },
           ),
         ownerLoginFailure,
@@ -245,6 +312,7 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
             verify: verifyManagerPassword,
             updateSession: updateAuthSession,
             legacyPassword: "",
+            ...revocationDeps,
           },
         ),
       ownerLoginFailure,
@@ -252,7 +320,16 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
   });
 
 export const logout = createServerFn({ method: "POST" }).handler(async () => {
-  const { clearAuthSession } = await import("./auth.server");
+  const { getAuthSession, revokeStaffSessionByToken, clearAuthSession } =
+    await import("./auth.server");
+  // R3-A: revoke the CURRENT server session BEFORE clearing the cookie. On
+  // revocation failure the cookie stays (fail closed) — the caller reports a
+  // failed logout instead of silently leaving a live bearer behind.
+  const session = await getAuthSession();
+  const token = session.data.superAdminSessionToken;
+  if (token) {
+    await revokeStaffSessionByToken("super_admin", token);
+  }
   await clearAuthSession();
   return { ok: true };
 });

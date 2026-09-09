@@ -81,6 +81,53 @@ export function clearAuthSession() {
   return clearSession(getAuthSessionConfig());
 }
 
+/**
+ * Server-authoritative credential hygiene (review R3-A): read the staff
+ * bearer tokens currently held by this browser's session cookie so a role
+ * switch can revoke them BEFORE minting the replacement session.
+ */
+export async function readCookieStaffTokens(): Promise<{
+  superAdminToken: string | null;
+  areaManagerToken: string | null;
+}> {
+  const session = await getAuthSession();
+  return {
+    superAdminToken: session.data.superAdminSessionToken ?? null,
+    areaManagerToken: session.data.areaManagerSessionToken ?? null,
+  };
+}
+
+/**
+ * Revokes exactly ONE staff session by its raw bearer token (the token acts
+ * as its own revocation proof, like a logout endpoint). Scoped to a single
+ * row — never all devices. Throws on transport failure so callers can fail
+ * closed instead of leaving two usable credentials.
+ */
+export async function revokeStaffSessionByToken(
+  kind: "super_admin" | "area_manager",
+  token: string,
+): Promise<void> {
+  const { getServiceClient } = await import("./remote-audio.server");
+  const client = getServiceClient();
+  if (!client) throw new Error("UNAVAILABLE");
+  const { error } = await client.rpc("revoke_staff_session_by_token", {
+    p_kind: kind,
+    p_token: token,
+  });
+  if (error) throw new Error("REVOKE_FAILED");
+}
+
+/** Same as revokeStaffSessionByToken for the manager bearer namespace. */
+export async function revokeManagerSessionByToken(token: string): Promise<void> {
+  const { getServiceClient } = await import("./remote-audio.server");
+  const client = getServiceClient();
+  if (!client) throw new Error("UNAVAILABLE");
+  const { error } = await client.rpc("revoke_manager_session_by_token", {
+    p_token: token,
+  });
+  if (error) throw new Error("REVOKE_FAILED");
+}
+
 export async function requireDashboard() {
   const session = await getAuthSession();
   if (session.data.dashboard !== true) {

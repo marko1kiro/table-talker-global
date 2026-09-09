@@ -100,6 +100,28 @@ export async function loginManagerCore(
 // /manager/login uses loginStaff, which maps every failure to the generic
 // message.
 
+// --- logout (server-authoritative, R3-A) -------------------------------------
+
+export const logoutManagerInputSchema = z.object({ managerToken: z.string().min(1).max(200) });
+
+/**
+ * Revokes the manager bearer session server-side BEFORE the client drops its
+ * sessionStorage identity. A stolen token can no longer be replayed after
+ * logout. Returns ok:false on transport failure so the client keeps its
+ * credential (fail closed) instead of silently leaving a live bearer.
+ */
+export const logoutManagerSession = createServerFn({ method: "POST" })
+  .validator(logoutManagerInputSchema)
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const client = getServiceClient();
+    if (!client) return { ok: false };
+    const { error } = await client.rpc("revoke_manager_session_by_token", {
+      p_token: data.managerToken,
+    });
+    if (error) return { ok: false };
+    return { ok: true };
+  });
+
 // --- change own password (while logged in) ----------------------------------
 
 export const changeManagerPasswordInputSchema = z.object({

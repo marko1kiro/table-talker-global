@@ -55,10 +55,10 @@ describe("magic-link origin is absolute HTTPS, fail-closed (review B7)", () => {
     }
     restore();
   });
-  it("empty config falls back to the request origin; http only allowed outside production", () => {
+  it("production NEVER falls back to the request origin (review R3-B)", () => {
     delete process.env.STAFF_EMAIL_APP_URL;
     process.env.NODE_ENV = "production";
-    expect(staffAppOrigin("https://req.lime.test")).toBe("https://req.lime.test");
+    expect(() => staffAppOrigin("https://req.lime.test")).toThrow(StaffEmailConfigError);
     expect(() => staffAppOrigin("http://insecure.lime.test")).toThrow(StaffEmailConfigError);
     process.env.NODE_ENV = "development";
     expect(staffAppOrigin("http://localhost:3000")).toBe("http://localhost:3000");

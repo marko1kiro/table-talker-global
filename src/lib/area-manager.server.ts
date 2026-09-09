@@ -506,6 +506,15 @@ export const updateOwnAmProfile = createServerFn({ method: "POST" })
   });
 
 export const amLogout = createServerFn({ method: "POST" }).handler(async () => {
+  // R3-A: revoke the AM bearer session BEFORE clearing the cookie; failure
+  // keeps the cookie (fail closed) and surfaces as a failed logout.
+  const { getAuthSession, revokeStaffSessionByToken, clearAuthSession } =
+    await import("./auth.server");
+  const session = await getAuthSession();
+  const token = session.data.areaManagerSessionToken;
+  if (token) {
+    await revokeStaffSessionByToken("area_manager", token);
+  }
   await clearAuthSession();
   return { ok: true };
 });

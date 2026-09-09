@@ -43,22 +43,32 @@ function validateAppOrigin(raw: string, allowHttp: boolean): string {
   if (url.protocol !== "https:" && !(allowHttp && url.protocol === "http:")) {
     throw new StaffEmailConfigError();
   }
+  // Never mint links that carry credentials in the authority component.
+  if (url.username !== "" || url.password !== "") {
+    throw new StaffEmailConfigError();
+  }
   return url.origin;
 }
 
 /**
- * Absolute HTTPS origin used in emailed links (review B7, fail-closed):
+ * Absolute HTTPS origin used in emailed links (review B7 + R3-B, fail-closed):
  * STAFF_EMAIL_APP_URL wins and must parse as an absolute http(s) URL (https
- * enforced in production); otherwise the explicit request origin is used
- * under the same rules; with neither, the current request's own origin is
- * used. Anything invalid throws StaffEmailConfigError — never a relative or
- * attacker-controlled link value.
+ * enforced in production, credentials in the authority rejected). In
+ * PRODUCTION the variable is REQUIRED — an empty/unset value never falls back
+ * to the request origin or any host-derived guess. The request-origin
+ * fallback exists ONLY outside production. Anything invalid throws
+ * StaffEmailConfigError — never a relative or attacker-controlled link value.
  */
 export function staffAppOrigin(requestOrigin?: string): string {
   const allowHttp = process.env.NODE_ENV !== "production";
   const configured = process.env.STAFF_EMAIL_APP_URL;
   if (typeof configured === "string" && configured.trim() !== "") {
     return validateAppOrigin(configured.trim(), allowHttp);
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new StaffEmailConfigError(
+      "STAFF_EMAIL_APP_URL wajib diisi dengan URL https absolut di production.",
+    );
   }
   let candidate = requestOrigin;
   if (candidate === undefined) {
