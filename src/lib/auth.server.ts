@@ -98,11 +98,16 @@ export async function readCookieStaffTokens(): Promise<{
 }
 
 /**
- * R4-B: the RPC verdict is part of the contract. true = the row was deleted
+ * R5-B: the RPC verdict is part of the contract. true = the row was deleted
  * (provably revoked). false = nothing matched — for IDEMPOTENT logout/cleanup
  * that proves the token is already unusable, but for a MANDATORY switch
  * revocation of a known-live session it is an unexplained no-op and MUST fail
  * closed. Malformed payloads and transport errors are never silent successes.
+ *
+ * R5-B hardening: the probe-then-revoke pattern (IfLive) is ELIMINATED.
+ * Every caller uses a single RPC that atomically determines liveness and
+ * revokes in one DB transaction. Unknown/error verdicts ALWAYS throw —
+ * they are never treated as "inactive" (no fail-open).
  */
 export type RevokeSessionByTokenOpts = { requireRevoked?: boolean };
 
@@ -147,46 +152,49 @@ export async function revokeManagerSessionByToken(
 }
 
 /**
- * R4-B: an OLD credential read from a cookie/sessionStorage may already be
- * dead (expired, previously revoked). A dead token provably cannot
- * authenticate, so it is skipped; a LIVE one is revoked with mandatory
- * semantics — a no-op there fails closed. This keeps a stale cookie/session
- * identity from wedging every future login while never tolerating a live
- * credential that failed to be revoked.
+ * R5-B: atomic "revoke if live" — one RPC determines liveness AND revokes
+ * in a single DB transaction. The RPC returns:
+ *   true  = session was live and is now revoked (REVOKED)
+ *   false = session was already inactive or not found (ALREADY_INACTIVE)
+ *
+ * On transport/RPC error the RPC itself throws, which propagates here as a
+ * thrown error — never a silent skip. This eliminates the fail-open
+ * probe-then-revoke pattern: unknown/error verdicts ALWAYS propagate as
+ * exceptions so callers fail closed.
+ *
+ * For mandatory role switches: caller MUST await this and treat thrown
+ * errors as switch-failed. For idempotent logout: same semantics — an
+ * RPC error means "cannot confirm logout" and must not silently succeed.
  */
 export async function revokeStaffSessionByTokenIfLive(
   kind: "super_admin" | "area_manager",
   token: string,
 ): Promise<void> {
-  if (await staffSessionTokenLive(kind, token)) {
-    await revokeStaffSessionByToken(kind, token, { requireRevoked: true });
-  }
+  const { getServiceClient } = await import("./remote-audio.server");
+  const client = getServiceClient();
+  if (!client) throw new Error("UNAVAILABLE");
+  // Single atomic RPC: the DB hashes the token, checks liveness, and
+  // deletes in one transaction. No race between probe and revoke.
+  const { data, error } = await client.rpc("revoke_staff_session_by_token", {
+    p_kind: kind,
+    p_token: token,
+  });
+  if (error) throw new Error("REVOKE_FAILED");
+  if (data !== true && data !== false) throw new Error("REVOKE_MALFORMED");
+  // false = already inactive — acceptable for both idempotent logout
+  // and mandatory switch (session was already gone).
 }
 
 export async function revokeManagerSessionByTokenIfLive(token: string): Promise<void> {
-  if (await managerSessionTokenLive(token)) {
-    await revokeManagerSessionByToken(token, { requireRevoked: true });
-  }
-}
-
-async function staffSessionTokenLive(
-  kind: "super_admin" | "area_manager",
-  token: string,
-): Promise<boolean> {
-  const live = await staffSessionAccount(kind, token);
-  return typeof live === "string" && live.length > 0;
-}
-
-async function managerSessionTokenLive(token: string): Promise<boolean> {
   const { getServiceClient } = await import("./remote-audio.server");
   const client = getServiceClient();
-  if (!client) return false;
-  try {
-    const { data, error } = await client.rpc("get_manager_id_by_token", { p_token: token });
-    return !error && typeof data === "string" && data.length > 0;
-  } catch {
-    return false;
-  }
+  if (!client) throw new Error("UNAVAILABLE");
+  const { data, error } = await client.rpc("revoke_manager_session_by_token", {
+    p_token: token,
+  });
+  if (error) throw new Error("REVOKE_FAILED");
+  if (data !== true && data !== false) throw new Error("REVOKE_MALFORMED");
+  // false = already inactive.
 }
 
 export async function requireDashboard() {

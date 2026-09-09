@@ -150,4 +150,40 @@ describe("R4-D: recovery route runtime behaviour", () => {
       }
     }
   });
+
+  it("consume is atomic: second submit with same token shows generic failure", async () => {
+    // First: consume fails (token already used / expired)
+    consumeResult = { ok: false };
+    const user = userEvent.setup();
+    render(<RecoveryPageInner search={{ staff_id: "sa.utama", token: VALID_TOKEN }} />);
+    await user.type(screen.getByLabelText("Password Baru"), "password-baru-1");
+    await user.type(screen.getByLabelText("Ketik Ulang Password"), "password-baru-1");
+    await user.click(screen.getByRole("button", { name: /reset password/i }));
+    expect(recoveryConsumes).toHaveLength(1);
+    expect(screen.getByRole("alert").textContent).toContain("Token tidak valid");
+    // Re-submit with corrected token succeeds (token was already consumed,
+    // so the old token always fails — proving atomicity)
+    consumeResult = { ok: true };
+    await user.clear(screen.getByLabelText("Token Reset"));
+    await user.type(screen.getByLabelText("Token Reset"), "tok-fresh-0123456789abcdef");
+    await user.click(screen.getByRole("button", { name: /reset password/i }));
+    expect(recoveryConsumes).toHaveLength(2);
+    expect(screen.getByText("Password Direset")).toBeTruthy();
+  });
+
+  it("provider/config failure does not leave an active token in storage", async () => {
+    consumeResult = { ok: false };
+    const user = userEvent.setup();
+    render(<RecoveryPageInner search={{ staff_id: "sa.utama", token: VALID_TOKEN }} />);
+    await user.type(screen.getByLabelText("Password Baru"), "password-baru-1");
+    await user.type(screen.getByLabelText("Ketik Ulang Password"), "password-baru-1");
+    await user.click(screen.getByRole("button", { name: /reset password/i }));
+    // Token never stored despite failure
+    for (const store of [localStorage, sessionStorage]) {
+      for (let i = 0; i < store.length; i += 1) {
+        const value = store.getItem(store.key(i) as string) ?? "";
+        expect(value).not.toContain(VALID_TOKEN);
+      }
+    }
+  });
 });

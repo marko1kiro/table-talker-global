@@ -4,7 +4,11 @@ import { ArrowLeft, Eye, EyeOff, Hash, Loader2, Lock } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
 import { Footer } from "@/components/Footer";
-import { loginStaff, revokeManagerLoginCompensation } from "@/lib/staff-login.server";
+import {
+  loginStaff,
+  confirmManagerHandoff,
+  cleanupManagerPendingSession,
+} from "@/lib/staff-login.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { managerLoginHandoffCore } from "@/lib/manager-login-handoff";
 import {
@@ -76,9 +80,12 @@ function StaffLoginPage() {
               }
             },
             navigate: () => navigate({ to: "/manager" }),
-            revokeCompensation: async (managerToken) => {
-              const r = await revokeManagerLoginCompensation({ data: { managerToken } });
+            confirmHandoff: async (managerToken) => {
+              const r = await confirmManagerHandoff({ data: { managerToken } });
               return r?.ok === true;
+            },
+            cleanupPending: async (managerToken) => {
+              await cleanupManagerPendingSession({ data: { managerToken } });
             },
           },
         );

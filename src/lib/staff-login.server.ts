@@ -110,10 +110,20 @@ async function safeReport(
  * session, clear the cookie) and return a generic failure. Exactly ONE report
  * happens per attempt: a failed completion is never retried (that would
  * double-report and could flip a failed attempt into a success).
+ *
+ * R5-C: bounded timeout — a hung reporter must not block the login forever.
+ * The timeout is generous (10s) to avoid false negatives on slow DB, but
+ * bounded to prevent resource exhaustion.
  */
+const REPORT_TIMEOUT_MS = 10_000;
+
 async function confirmDurableSuccess(deps: StaffLoginDeps): Promise<boolean> {
   try {
-    return (await deps.report(true)) === true;
+    const result = await Promise.race([
+      deps.report(true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), REPORT_TIMEOUT_MS)),
+    ]);
+    return result === true;
   } catch {
     return false;
   }
@@ -253,9 +263,10 @@ export async function loginStaffCore(
     });
   } catch {
     // R3-A.8/R3-C: the cookie write failed — revoke the just-minted session
-    // so no orphan bearer token survives, and account the attempt as a failure.
+    // so no orphan bearer token survives. R5-C: do NOT report here — the
+    // failure happened BEFORE completion was attempted. The rate-limit
+    // reservation expires via TTL; no accounting outcome is emitted.
     await deps.revokeStaffSessionByToken?.("area_manager", token).catch(() => undefined);
-    await safeReport(deps.report, false);
     return { ok: false, message: GENERIC };
   }
   // R4-C: report(true) only AFTER the cookie write made the login usable,
@@ -333,6 +344,52 @@ export const revokeManagerLoginCompensation = createServerFn({ method: "POST" })
       // already unusable; only transport/malformed errors fail the call.
       // No liveness probe here — a probe failure must not read as "done".
       await revokeManagerSessionByToken(data.managerToken);
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  });
+
+// R5-A: pending→active handshake. confirmManagerHandoff atomically promotes
+// a pending session to active. Idempotent: if the session is already active
+// or expired, returns true (nothing to do). If the token is invalid, returns false.
+export const confirmManagerHandoffInput = z.object({
+  managerToken: z.string().min(1).max(200),
+});
+
+export const confirmManagerHandoff = createServerFn({ method: "POST" })
+  .validator(confirmManagerHandoffInput)
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const client = getServiceClient();
+    if (!client) return { ok: false };
+    try {
+      const { data: result, error } = await client.rpc("confirm_manager_session", {
+        p_token: data.managerToken,
+      });
+      if (error) return { ok: false };
+      return { ok: result === true };
+    } catch {
+      return { ok: false };
+    }
+  });
+
+// R5-A: best-effort cleanup of a pending session that was never confirmed.
+// The pending session expires via TTL regardless, but explicit cleanup is
+// faster and prevents resource waste.
+export const cleanupManagerPendingSessionInput = z.object({
+  managerToken: z.string().min(1).max(200),
+});
+
+export const cleanupManagerPendingSession = createServerFn({ method: "POST" })
+  .validator(cleanupManagerPendingSessionInput)
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const client = getServiceClient();
+    if (!client) return { ok: false };
+    try {
+      const { error } = await client.rpc("cleanup_pending_manager_session", {
+        p_token: data.managerToken,
+      });
+      if (error) return { ok: false };
       return { ok: true };
     } catch {
       return { ok: false };

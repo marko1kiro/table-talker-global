@@ -80,7 +80,7 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
     expect(order).toEqual(["cookie", "report:true"]);
   });
 
-  it("cookie write failure counts EXACTLY ONE failure and revokes the minted session", async () => {
+  it("cookie write failure: session revoked, NO report (failure before completion)", async () => {
     const revoked: string[] = [];
     const { reports, deps } = amDeps({
       updateSession: async () => {
@@ -95,7 +95,9 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
     };
     const r = await loginStaffCore("am.satu", "pw", withRevoke);
     expect(r.ok).toBe(false);
-    expect(reports).toEqual([false]);
+    // R5-C: cookie write failure happened BEFORE completion was attempted.
+    // No rate-limit report is emitted — the reservation expires via TTL.
+    expect(reports).toEqual([]);
     expect(revoked).toEqual(["area_manager:amtok"]);
   });
 

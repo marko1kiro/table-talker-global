@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // R4-A route-level runtime evidence: the ACTUAL /manager/login component runs
 // in jsdom, submits the real form, and every browser-handoff failure provably
-// calls the server compensation (revoking the just-minted session) while no
+// calls the server cleanup (deleting the pending session) while no
 // navigation and no identity write happens. Success writes exactly one
-// usable identity.
+// usable identity and confirms the pending→active session.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -12,8 +12,9 @@ const navigations: string[] = [];
 let loginResult: unknown = { ok: false, message: "Login gagal." };
 let anonToken: string | null = null;
 let anonThrows = false;
-const compensations: string[] = [];
-let compensationOk = true;
+const cleanups: string[] = [];
+const confirmations: string[] = [];
+let confirmOk = true;
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => options,
@@ -26,9 +27,13 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 vi.mock("@/lib/staff-login.server", () => ({
   loginStaff: async () => loginResult,
-  revokeManagerLoginCompensation: async ({ data }: { data: { managerToken: string } }) => {
-    compensations.push(data.managerToken);
-    return { ok: compensationOk };
+  confirmManagerHandoff: async ({ data }: { data: { managerToken: string } }) => {
+    confirmations.push(data.managerToken);
+    return { ok: confirmOk };
+  },
+  cleanupManagerPendingSession: async ({ data }: { data: { managerToken: string } }) => {
+    cleanups.push(data.managerToken);
+    return { ok: true };
   },
 }));
 vi.mock("@/lib/supabase-browser", () => ({
@@ -61,8 +66,9 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     sessionStorage.clear();
     localStorage.clear();
     navigations.length = 0;
-    compensations.length = 0;
-    compensationOk = true;
+    cleanups.length = 0;
+    confirmations.length = 0;
+    confirmOk = true;
     anonThrows = false;
     loginResult = { ...managerLogin };
     anonToken = "anon-tok";
@@ -78,12 +84,13 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     await user.click(screen.getByRole("button", { name: /login/i }));
   }
 
-  it("success: exactly one usable identity, one navigation, zero compensations", async () => {
+  it("success: exactly one usable identity, one navigation, one confirmation", async () => {
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);
     expect(navigations).toEqual(["/manager"]);
-    expect(compensations).toEqual([]);
+    expect(confirmations).toEqual(["minted-tok"]);
+    expect(cleanups).toEqual([]);
     const raw = sessionStorage.getItem("table-talker.manager-identity");
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw as string);
@@ -92,28 +99,29 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("anon token failure: server compensation revokes the minted token, no navigation, no identity", async () => {
+  it("anon token failure: pending session cleaned up, no navigation, no identity", async () => {
     anonToken = null;
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);
-    expect(compensations).toEqual(["minted-tok"]);
+    expect(cleanups).toEqual(["minted-tok"]);
+    expect(confirmations).toEqual([]);
     expect(navigations).toEqual([]);
     expect(sessionStorage.getItem("table-talker.manager-identity")).toBeNull();
     expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
   });
 
-  it("anon token TRANSPORT failure: same server compensation", async () => {
+  it("anon token TRANSPORT failure: same pending cleanup", async () => {
     anonThrows = true;
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);
-    expect(compensations).toEqual(["minted-tok"]);
+    expect(cleanups).toEqual(["minted-tok"]);
     expect(navigations).toEqual([]);
     expect(sessionStorage.getItem("table-talker.manager-identity")).toBeNull();
   });
 
-  it("storage unavailable: server compensation fires, nothing navigates", async () => {
+  it("storage unavailable: pending cleanup fires, nothing navigates", async () => {
     const original = Object.getOwnPropertyDescriptor(window, "sessionStorage");
     Object.defineProperty(window, "sessionStorage", {
       configurable: true,
@@ -125,7 +133,7 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
       const user = userEvent.setup();
       render(<StaffLoginPage />);
       await submit(user);
-      expect(compensations).toEqual(["minted-tok"]);
+      expect(cleanups).toEqual(["minted-tok"]);
       expect(navigations).toEqual([]);
       expect(screen.getByRole("alert")).toBeTruthy();
     } finally {
@@ -133,20 +141,20 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     }
   });
 
-  it("FAILED compensation is still fail closed: generic failure, never navigates", async () => {
-    anonToken = null;
-    compensationOk = false;
+  it("FAILED confirmation: pending session cleaned up, generic failure, navigates before confirm", async () => {
+    confirmOk = false;
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);
-    expect(compensations).toEqual(["minted-tok"]);
-    expect(navigations).toEqual([]);
+    // Navigate happens before confirm; on confirm failure, pending is cleaned up
+    expect(navigations).toEqual(["/manager"]);
+    expect(confirmations).toEqual(["minted-tok"]);
+    expect(cleanups).toEqual(["minted-tok"]);
     expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
-    // The raw token never leaks into the visible failure message.
     expect(screen.getByRole("alert").textContent).not.toContain("minted-tok");
   });
 
-  it("AM role: cookie session made server-side; old manager identity cleared; no compensation", async () => {
+  it("AM role: cookie session made server-side; old manager identity cleared; no confirm/cleanup", async () => {
     sessionStorage.setItem(
       "table-talker.manager-identity",
       JSON.stringify({ managerToken: "old-tok" }),
@@ -156,7 +164,8 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     render(<StaffLoginPage />);
     await submit(user);
     expect(navigations).toEqual(["/am"]);
-    expect(compensations).toEqual([]);
+    expect(confirmations).toEqual([]);
+    expect(cleanups).toEqual([]);
     expect(sessionStorage.getItem("table-talker.manager-identity")).toBeNull();
   });
 });

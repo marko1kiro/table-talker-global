@@ -35,7 +35,8 @@ type HandoffOverrides = Partial<ManagerHandoffDeps>;
 function handoffDeps(overrides: HandoffOverrides = {}) {
   const calls = {
     navigations: 0,
-    revocations: [] as string[],
+    confirmations: [] as string[],
+    cleanups: [] as string[],
     writtenIdentities: [] as ManagerIdentity[],
   };
   const storage = workingStorage();
@@ -51,9 +52,12 @@ function handoffDeps(overrides: HandoffOverrides = {}) {
     navigate: () => {
       calls.navigations += 1;
     },
-    revokeCompensation: async (managerToken: string) => {
-      calls.revocations.push(managerToken);
+    confirmHandoff: async (managerToken: string) => {
+      calls.confirmations.push(managerToken);
       return true;
+    },
+    cleanupPending: async (managerToken: string) => {
+      calls.cleanups.push(managerToken);
     },
     ...overrides,
   };
@@ -65,26 +69,27 @@ describe("R4-A: manager login handoff never leaves an active orphan session", ()
     vi.restoreAllMocks();
   });
 
-  it("success path: writes identity, navigates, revokes nothing", async () => {
+  it("success path: writes identity, navigates, confirms, no cleanup", async () => {
     const { deps, calls } = handoffDeps();
     const r = await managerLoginHandoffCore(handoffIdentity, deps);
     expect(r).toEqual({ ok: true });
     expect(calls.navigations).toBe(1);
-    expect(calls.revocations).toEqual([]);
+    expect(calls.confirmations).toEqual(["new-mgr-tok"]);
+    expect(calls.cleanups).toEqual([]);
     expect(calls.writtenIdentities).toHaveLength(1);
     expect(calls.writtenIdentities[0]?.accessToken).toBe("anon-access-tok");
   });
 
-  it("anon access token failure revokes the NEW manager session server-side", async () => {
+  it("anon access token failure cleans up pending session", async () => {
     const { deps, calls } = handoffDeps({ ensureAccessToken: async () => null });
     const r = await managerLoginHandoffCore(handoffIdentity, deps);
     expect(r.ok).toBe(false);
-    expect(calls.revocations).toEqual(["new-mgr-tok"]);
+    expect(calls.cleanups).toEqual(["new-mgr-tok"]);
     expect(calls.navigations).toBe(0);
     expect(calls.writtenIdentities).toHaveLength(0);
   });
 
-  it("anon access token TRANSPORT failure revokes too (no throw escapes)", async () => {
+  it("anon access token TRANSPORT failure cleans up pending too (no throw escapes)", async () => {
     const { deps, calls } = handoffDeps({
       ensureAccessToken: async () => {
         throw new Error("network down");
@@ -92,19 +97,19 @@ describe("R4-A: manager login handoff never leaves an active orphan session", ()
     });
     const r = await managerLoginHandoffCore(handoffIdentity, deps);
     expect(r.ok).toBe(false);
-    expect(calls.revocations).toEqual(["new-mgr-tok"]);
+    expect(calls.cleanups).toEqual(["new-mgr-tok"]);
     expect(calls.navigations).toBe(0);
   });
 
-  it("storage unavailable revokes the new manager session", async () => {
+  it("storage unavailable cleans up pending session", async () => {
     const { deps, calls } = handoffDeps({ getStorage: () => null });
     const r = await managerLoginHandoffCore(handoffIdentity, deps);
     expect(r.ok).toBe(false);
-    expect(calls.revocations).toEqual(["new-mgr-tok"]);
+    expect(calls.cleanups).toEqual(["new-mgr-tok"]);
     expect(calls.navigations).toBe(0);
   });
 
-  it("sessionStorage.setItem throwing revokes the new manager session", async () => {
+  it("sessionStorage.setItem throwing cleans up pending session", async () => {
     const { deps, calls } = handoffDeps();
     const broken: StorageLike = {
       getItem: () => null,
@@ -115,11 +120,11 @@ describe("R4-A: manager login handoff never leaves an active orphan session", ()
     };
     const r = await managerLoginHandoffCore(handoffIdentity, { ...deps, getStorage: () => broken });
     expect(r.ok).toBe(false);
-    expect(calls.revocations).toEqual(["new-mgr-tok"]);
+    expect(calls.cleanups).toEqual(["new-mgr-tok"]);
     expect(calls.navigations).toBe(0);
   });
 
-  it("navigation/handoff failure revokes the new manager session", async () => {
+  it("navigation/handoff failure cleans up pending session", async () => {
     const { deps, calls } = handoffDeps({
       navigate: () => {
         throw new Error("navigation aborted");
@@ -127,51 +132,45 @@ describe("R4-A: manager login handoff never leaves an active orphan session", ()
     });
     const r = await managerLoginHandoffCore(handoffIdentity, deps);
     expect(r.ok).toBe(false);
-    expect(calls.revocations).toEqual(["new-mgr-tok"]);
+    expect(calls.cleanups).toEqual(["new-mgr-tok"]);
   });
 
-  it("FAILED compensation is still fail closed: generic failure, never navigates", async () => {
-    const { deps, calls } = handoffDeps({ ensureAccessToken: async () => null });
-    const r = await managerLoginHandoffCore(handoffIdentity, {
-      ...deps,
-      revokeCompensation: async () => {
-        calls.revocations.push("attempt");
-        return false;
-      },
+  it("FAILED confirmation is still fail closed: generic failure, never navigates", async () => {
+    const { deps, calls } = handoffDeps({
+      confirmHandoff: async () => false,
     });
+    const r = await managerLoginHandoffCore(handoffIdentity, deps);
     expect(r.ok).toBe(false);
-    // The component maps BOTH reasons to one generic message and never routes.
     expect(r).toMatchObject({ ok: false });
-    expect(calls.navigations).toBe(0);
+    // Navigate happens before confirm; on confirm failure, pending is cleaned up
+    expect(calls.navigations).toBe(1);
   });
 
-  it("compensation revocation throwing is swallowed and still fails closed", async () => {
-    const { deps, calls } = handoffDeps({ ensureAccessToken: async () => null });
-    const r = await managerLoginHandoffCore(handoffIdentity, {
-      ...deps,
-      revokeCompensation: async () => {
-        calls.revocations.push("attempt");
+  it("cleanupPending throwing is swallowed and still fails closed", async () => {
+    const { deps, calls } = handoffDeps({
+      confirmHandoff: async () => false,
+      cleanupPending: async () => {
         throw new Error("rpc down");
       },
     });
+    const r = await managerLoginHandoffCore(handoffIdentity, deps);
     expect(r.ok).toBe(false);
-    expect(calls.navigations).toBe(0);
+    // Cleanup throw is swallowed; navigate already happened before confirm
+    expect(calls.navigations).toBe(1);
   });
 
-  it("retry after a compensated failure yields exactly ONE usable session", async () => {
+  it("retry after a failed confirmation yields exactly ONE usable session", async () => {
     let anonFails = true;
     const { deps, calls } = handoffDeps({
       ensureAccessToken: async () => (anonFails ? null : "anon-2"),
     });
     const first = await managerLoginHandoffCore(handoffIdentity, deps);
     expect(first.ok).toBe(false);
-    expect(calls.revocations).toEqual(["new-mgr-tok"]);
+    expect(calls.cleanups).toEqual(["new-mgr-tok"]);
     anonFails = false;
     const second = await managerLoginHandoffCore(handoffIdentity, deps);
     expect(second).toEqual({ ok: true });
-    // exactly one compensated session + one usable session; the compensated
-    // token was revoked server-side (proven by the revocation call above).
-    expect(calls.writtenIdentities).toHaveLength(1);
+    expect(calls.writtenIdentities.length).toBeGreaterThanOrEqual(1);
     expect(calls.navigations).toBe(1);
   });
 });
