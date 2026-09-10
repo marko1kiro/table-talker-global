@@ -68,11 +68,19 @@ async function seedManagerSession(token: string): Promise<void> {
 async function seedStaffSession(kind: "super_admin" | "area_manager", token: string) {
   const c = await db.client();
   const table = kind === "super_admin" ? "super_admin_accounts" : "area_manager_accounts";
-  const id = await c.query<{ id: string }>(
-    `insert into public.${table} (staff_id, full_name, password_hash, status)
-     values ($1, 'Test User', 'x:y', 'aktif') returning (id::text) as id`,
-    [kind === "super_admin" ? "sa.revoke" : "am.revoke"],
-  );
+  const insert =
+    kind === "super_admin"
+      ? {
+          sql: `insert into public.${table} (staff_id, full_name, password_hash, status, email)
+                values ($1, 'Test User', 'x:y', 'aktif', $2) returning (id::text) as id`,
+          params: ["sa.revoke", "revoke-user@example.test"],
+        }
+      : {
+          sql: `insert into public.${table} (staff_id, full_name, password_hash, status)
+                values ($1, 'Test User', 'x:y', 'aktif') returning (id::text) as id`,
+          params: ["am.revoke"],
+        };
+  const id = await c.query<{ id: string }>(insert.sql, insert.params);
   await c.query(
     `insert into public.staff_sessions (session_kind, account_id, token_hash, expires_at)
      values ($1, $2, $3, now() + interval '12 hours')`,
@@ -115,10 +123,9 @@ describe("R6-B: structured revocation verdicts", () => {
     const c = await db.client();
     const { data } = await rpc<Verdict>(c, "revoke_manager_session_by_token", { p_token: token });
     expect((data as Verdict)?.verdict).toBe("KIND_MISMATCH");
-    const still = await c.query(
-      `select 1 from public.staff_sessions where token_hash = $1`,
-      [sha256Hex(token)],
-    );
+    const still = await c.query(`select 1 from public.staff_sessions where token_hash = $1`, [
+      sha256Hex(token),
+    ]);
     expect(still.rowCount).toBe(1);
   });
 

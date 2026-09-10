@@ -121,11 +121,15 @@ export const logoutManagerSession = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
     const client = getServiceClient();
     if (!client) return { ok: false };
-    const { error } = await client.rpc("revoke_manager_session_by_token", {
+    // R6-B: structured verdict. Only REVOKED (row died now) and the
+    // tombstone-proven ALREADY_INACTIVE count as logged out. KIND_MISMATCH
+    // and UNKNOWN_TOKEN fail closed.
+    const { data: verdict, error } = await client.rpc("revoke_manager_session_by_token", {
       p_token: data.managerToken,
     });
     if (error) return { ok: false };
-    return { ok: true };
+    const v = (verdict as { verdict?: string } | null)?.verdict;
+    return { ok: v === "REVOKED" || v === "ALREADY_INACTIVE" };
   });
 
 // --- change own password (while logged in) ----------------------------------

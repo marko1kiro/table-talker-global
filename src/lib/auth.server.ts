@@ -112,27 +112,51 @@ export async function readCookieStaffTokens(): Promise<{
 export type RevokeSessionByTokenOpts = { requireRevoked?: boolean };
 
 /**
+ * R6-B: the revocation RPC returns a STRUCTURED verdict, never a boolean that
+ * conflates distinct outcomes:
+ *   REVOKED           — the row existed (live) and is now deleted
+ *   ALREADY_INACTIVE  — authoritatively proven by the hashed tombstone: the
+ *                       token was really issued and revoked earlier
+ *   KIND_MISMATCH     — the token belongs to a DIFFERENT namespace
+ *   UNKNOWN_TOKEN     — never issued (junk); never counts as inactive
+ * Transport errors and malformed payloads always throw. Callers fail closed.
+ */
+export type RevokeVerdict = "REVOKED" | "ALREADY_INACTIVE" | "KIND_MISMATCH" | "UNKNOWN_TOKEN";
+
+const REVOKE_VERDICTS: readonly RevokeVerdict[] = [
+  "REVOKED",
+  "ALREADY_INACTIVE",
+  "KIND_MISMATCH",
+  "UNKNOWN_TOKEN",
+];
+
+function parseRevokeVerdict(data: unknown): RevokeVerdict {
+  const verdict = (data as { verdict?: unknown } | null)?.verdict;
+  if (typeof verdict === "string" && REVOKE_VERDICTS.includes(verdict as RevokeVerdict)) {
+    return verdict as RevokeVerdict;
+  }
+  throw new Error("REVOKE_MALFORMED");
+}
+
+/**
  * Revokes exactly ONE staff session by its raw bearer token (the token acts
  * as its own revocation proof, like a logout endpoint). Scoped to a single
  * row — never all devices. Throws on transport failure, malformed response,
- * or an unexplained false in mandatory mode so callers can fail closed
- * instead of leaving two usable credentials.
+ * kind mismatch, or unknown token; throws REVOKE_NOT_REVOKED in mandatory
+ * mode unless the row was provably live and revoked NOW.
  */
 export async function revokeStaffSessionByToken(
   kind: "super_admin" | "area_manager",
   token: string,
   opts: RevokeSessionByTokenOpts = {},
 ): Promise<void> {
-  const { getServiceClient } = await import("./remote-audio.server");
-  const client = getServiceClient();
-  if (!client) throw new Error("UNAVAILABLE");
-  const { data, error } = await client.rpc("revoke_staff_session_by_token", {
-    p_kind: kind,
-    p_token: token,
-  });
-  if (error) throw new Error("REVOKE_FAILED");
-  if (data !== true && data !== false) throw new Error("REVOKE_MALFORMED");
-  if (data === false && opts.requireRevoked) throw new Error("REVOKE_NOT_REVOKED");
+  const verdict = await revokeStaffSessionVerdict(kind, token);
+  if (verdict === "ALREADY_INACTIVE" && opts.requireRevoked) {
+    throw new Error("REVOKE_NOT_REVOKED");
+  }
+  if (verdict !== "REVOKED" && verdict !== "ALREADY_INACTIVE") {
+    throw new Error(verdict);
+  }
 }
 
 /** Same as revokeStaffSessionByToken for the manager bearer namespace. */
@@ -140,52 +164,33 @@ export async function revokeManagerSessionByToken(
   token: string,
   opts: RevokeSessionByTokenOpts = {},
 ): Promise<void> {
-  const { getServiceClient } = await import("./remote-audio.server");
-  const client = getServiceClient();
-  if (!client) throw new Error("UNAVAILABLE");
-  const { data, error } = await client.rpc("revoke_manager_session_by_token", {
-    p_token: token,
-  });
-  if (error) throw new Error("REVOKE_FAILED");
-  if (data !== true && data !== false) throw new Error("REVOKE_MALFORMED");
-  if (data === false && opts.requireRevoked) throw new Error("REVOKE_NOT_REVOKED");
+  const verdict = await revokeManagerSessionVerdict(token);
+  if (verdict === "ALREADY_INACTIVE" && opts.requireRevoked) {
+    throw new Error("REVOKE_NOT_REVOKED");
+  }
+  if (verdict !== "REVOKED" && verdict !== "ALREADY_INACTIVE") {
+    throw new Error(verdict);
+  }
 }
 
-/**
- * R5-B: atomic "revoke if live" — one RPC determines liveness AND revokes
- * in a single DB transaction. The RPC returns:
- *   true  = session was live and is now revoked (REVOKED)
- *   false = session was already inactive or not found (ALREADY_INACTIVE)
- *
- * On transport/RPC error the RPC itself throws, which propagates here as a
- * thrown error — never a silent skip. This eliminates the fail-open
- * probe-then-revoke pattern: unknown/error verdicts ALWAYS propagate as
- * exceptions so callers fail closed.
- *
- * For mandatory role switches: caller MUST await this and treat thrown
- * errors as switch-failed. For idempotent logout: same semantics — an
- * RPC error means "cannot confirm logout" and must not silently succeed.
- */
-export async function revokeStaffSessionByTokenIfLive(
+async function revokeStaffSessionVerdict(
   kind: "super_admin" | "area_manager",
   token: string,
-): Promise<void> {
+): Promise<RevokeVerdict> {
   const { getServiceClient } = await import("./remote-audio.server");
   const client = getServiceClient();
   if (!client) throw new Error("UNAVAILABLE");
-  // Single atomic RPC: the DB hashes the token, checks liveness, and
+  // Single atomic RPC: the DB hashes the token, decides the verdict, and
   // deletes in one transaction. No race between probe and revoke.
   const { data, error } = await client.rpc("revoke_staff_session_by_token", {
     p_kind: kind,
     p_token: token,
   });
   if (error) throw new Error("REVOKE_FAILED");
-  if (data !== true && data !== false) throw new Error("REVOKE_MALFORMED");
-  // false = already inactive — acceptable for both idempotent logout
-  // and mandatory switch (session was already gone).
+  return parseRevokeVerdict(data);
 }
 
-export async function revokeManagerSessionByTokenIfLive(token: string): Promise<void> {
+async function revokeManagerSessionVerdict(token: string): Promise<RevokeVerdict> {
   const { getServiceClient } = await import("./remote-audio.server");
   const client = getServiceClient();
   if (!client) throw new Error("UNAVAILABLE");
@@ -193,8 +198,31 @@ export async function revokeManagerSessionByTokenIfLive(token: string): Promise<
     p_token: token,
   });
   if (error) throw new Error("REVOKE_FAILED");
-  if (data !== true && data !== false) throw new Error("REVOKE_MALFORMED");
-  // false = already inactive.
+  return parseRevokeVerdict(data);
+}
+
+/**
+ * R6-B: atomic "revoke if live" — one RPC determines the verdict and revokes
+ * in a single DB transaction. Mandatory role switches may proceed on REVOKED
+ * (the row died now) or ALREADY_INACTIVE (the hashed tombstone proves the
+ * token was issued and revoked earlier). KIND_MISMATCH and UNKNOWN_TOKEN
+ * always throw — a switch must never continue on an unexplained no-op.
+ */
+export async function revokeStaffSessionByTokenIfLive(
+  kind: "super_admin" | "area_manager",
+  token: string,
+): Promise<void> {
+  const verdict = await revokeStaffSessionVerdict(kind, token);
+  if (verdict !== "REVOKED" && verdict !== "ALREADY_INACTIVE") {
+    throw new Error(verdict);
+  }
+}
+
+export async function revokeManagerSessionByTokenIfLive(token: string): Promise<void> {
+  const verdict = await revokeManagerSessionVerdict(token);
+  if (verdict !== "REVOKED" && verdict !== "ALREADY_INACTIVE") {
+    throw new Error(verdict);
+  }
 }
 
 export async function requireDashboard() {

@@ -1742,11 +1742,13 @@ describe("R3-A: single-session revocation by raw token", () => {
       await rpcOk<string | null>(c, "get_staff_session", { p_kind: "super_admin", p_token: t1 }),
     ).toBe(sa1Id);
     expect(
-      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
-        p_kind: "super_admin",
-        p_token: t1,
-      }),
-    ).toBe(true);
+      (
+        await rpcOk<{ verdict: string }>(c, "revoke_staff_session_by_token", {
+          p_kind: "super_admin",
+          p_token: t1,
+        })
+      ).verdict,
+    ).toBe("REVOKED");
     expect(
       await rpcOk<string | null>(c, "get_staff_session", { p_kind: "super_admin", p_token: t1 }),
     ).toBeNull();
@@ -1754,13 +1756,15 @@ describe("R3-A: single-session revocation by raw token", () => {
     expect(
       await rpcOk<string | null>(c, "get_staff_session", { p_kind: "super_admin", p_token: t2 }),
     ).toBe(sa1Id);
-    // Idempotent: a second revoke reports false, not an error.
+    // Idempotent: a second revoke reports the tombstone-proven verdict.
     expect(
-      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
-        p_kind: "super_admin",
-        p_token: t1,
-      }),
-    ).toBe(false);
+      (
+        await rpcOk<{ verdict: string }>(c, "revoke_staff_session_by_token", {
+          p_kind: "super_admin",
+          p_token: t1,
+        })
+      ).verdict,
+    ).toBe("ALREADY_INACTIVE");
     await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
       p_kind: "super_admin",
       p_token: t2,
@@ -1774,26 +1778,32 @@ describe("R3-A: single-session revocation by raw token", () => {
       p_account_id: am1Id,
     });
     expect(
-      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
-        p_kind: "super_admin",
-        p_token: t,
-      }),
-    ).toBe(false);
+      (
+        await rpcOk<{ verdict: string }>(c, "revoke_staff_session_by_token", {
+          p_kind: "super_admin",
+          p_token: t,
+        })
+      ).verdict,
+    ).toBe("KIND_MISMATCH");
     expect(
       await rpcOk<string | null>(c, "get_staff_session", { p_kind: "area_manager", p_token: t }),
     ).toBe(am1Id);
     expect(
-      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
-        p_kind: "area_manager",
-        p_token: "junk-token",
-      }),
-    ).toBe(false);
+      (
+        await rpcOk<{ verdict: string }>(c, "revoke_staff_session_by_token", {
+          p_kind: "area_manager",
+          p_token: "junk-token",
+        })
+      ).verdict,
+    ).toBe("UNKNOWN_TOKEN");
     expect(
-      await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
-        p_kind: "area_manager",
-        p_token: t,
-      }),
-    ).toBe(true);
+      (
+        await rpcOk<{ verdict: string }>(c, "revoke_staff_session_by_token", {
+          p_kind: "area_manager",
+          p_token: t,
+        })
+      ).verdict,
+    ).toBe("REVOKED");
     expect(
       await rpcOk<string | null>(c, "get_staff_session", { p_kind: "area_manager", p_token: t }),
     ).toBeNull();
@@ -1805,12 +1815,19 @@ describe("R3-A: single-session revocation by raw token", () => {
     expect(await rpcOk<string | null>(c, "get_manager_id_by_token", { p_token: t })).toBe(
       managerId,
     );
-    expect(await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: t })).toBe(true);
+    expect(
+      (await rpcOk<{ verdict: string }>(c, "revoke_manager_session_by_token", { p_token: t }))
+        .verdict,
+    ).toBe("REVOKED");
     expect(await rpcOk<string | null>(c, "get_manager_id_by_token", { p_token: t })).toBeNull();
-    expect(await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: t })).toBe(false);
-    expect(await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: "junk" })).toBe(
-      false,
-    );
+    expect(
+      (await rpcOk<{ verdict: string }>(c, "revoke_manager_session_by_token", { p_token: t }))
+        .verdict,
+    ).toBe("ALREADY_INACTIVE");
+    expect(
+      (await rpcOk<{ verdict: string }>(c, "revoke_manager_session_by_token", { p_token: "junk" }))
+        .verdict,
+    ).toBe("UNKNOWN_TOKEN");
   });
 
   test("role-switch primitive: old AM cookie + old manager token die, new session stays live", async () => {

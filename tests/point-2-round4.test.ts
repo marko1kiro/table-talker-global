@@ -180,7 +180,7 @@ describe("R4-A: manager login handoff never leaves an active orphan session", ()
 // --------------------------------------------------------------------------
 
 type RpcRes = { data: unknown; error: { message: string } | null };
-let rpcResponse: RpcRes = { data: true, error: null };
+let rpcResponse: RpcRes = { data: { verdict: "REVOKED" }, error: null };
 let rpcCalls: Array<{ fn: string; params: Record<string, unknown> }> = [];
 
 vi.mock("../src/lib/remote-audio.server", () => ({
@@ -196,7 +196,7 @@ import { revokeManagerSessionByToken, revokeStaffSessionByToken } from "../src/l
 
 describe("R4-B: revoke helpers validate the RPC return value", () => {
   afterEach(() => {
-    rpcResponse = { data: true, error: null };
+    rpcResponse = { data: { verdict: "REVOKED" }, error: null };
     rpcCalls = [];
   });
 
@@ -212,13 +212,13 @@ describe("R4-B: revoke helpers validate the RPC return value", () => {
   });
 
   it("{data:false,error:null} = already inactive: OK for idempotent logout/cleanup", async () => {
-    rpcResponse = { data: false, error: null };
+    rpcResponse = { data: { verdict: "ALREADY_INACTIVE" }, error: null };
     await expect(revokeManagerSessionByToken("t")).resolves.toBeUndefined();
     await expect(revokeStaffSessionByToken("super_admin", "t")).resolves.toBeUndefined();
   });
 
   it("false on a KNOWN-LIVE session (mandatory switch revocation) THROWS fail closed", async () => {
-    rpcResponse = { data: false, error: null };
+    rpcResponse = { data: { verdict: "ALREADY_INACTIVE" }, error: null };
     await expect(revokeManagerSessionByToken("t", { requireRevoked: true })).rejects.toThrow(
       "REVOKE_NOT_REVOKED",
     );
@@ -227,9 +227,10 @@ describe("R4-B: revoke helpers validate the RPC return value", () => {
     ).rejects.toThrow("REVOKE_NOT_REVOKED");
   });
 
-  it("false from a kind/role mismatch never counts as success in mandatory mode", async () => {
-    // revoke_manager_session_by_token(p_token=<staff token>) matches nothing -> false
-    rpcResponse = { data: false, error: null };
+  it("kind/role mismatch verdict never counts as success in mandatory mode", async () => {
+    // An ALREADY_INACTIVE-looking answer is still not a live-row revocation:
+    // requireRevoked mode insists the row died NOW.
+    rpcResponse = { data: { verdict: "ALREADY_INACTIVE" }, error: null };
     await expect(
       revokeManagerSessionByToken("staff-kind-token", { requireRevoked: true }),
     ).rejects.toThrow("REVOKE_NOT_REVOKED");
