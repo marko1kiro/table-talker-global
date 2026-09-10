@@ -171,6 +171,47 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
     expect(n).toBe(1);
   });
 
+  test("confirm retry WITH the same reservation id stays true (lost-response idempotency)", async () => {
+    const c = await db.client();
+    // Mint a REAL rate-limit reservation: the production handoff always
+    // confirms with one, and the first confirm consumes it — the retry must
+    // still return true via the confirmed tombstone, never false.
+    const reservationId = (
+      await rpc<{ reservation_id: string }>(c, "reserve_owner_login_attempt", {
+        p_client_bucket_hash: sha256Hex("retry-client"),
+        p_ip_bucket_hash: sha256Hex("retry-ip"),
+        p_attempt_key: "confirm-retry-idempotency-aaaa",
+      })
+    ).data as unknown as string;
+
+    const token = (
+      await rpc<string>(c, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+      })
+    ).data as string;
+
+    const first = await rpc<boolean>(c, "confirm_manager_session", {
+      p_token: token,
+      p_reservation_id: reservationId,
+    });
+    expect(first.data).toBe(true);
+
+    const retry = await rpc<boolean>(c, "confirm_manager_session", {
+      p_token: token,
+      p_reservation_id: reservationId,
+    });
+    expect(retry.data).toBe(true);
+    expect(await activeSessionCount()).toBe(1);
+
+    // The retry must not have re-decided or flipped the reservation outcome.
+    const outcome = await c.query(
+      `select consumed_at is not null as decided, outcome
+       from public.owner_login_rate_limit_reservations where id = $1`,
+      [reservationId],
+    );
+    expect(outcome.rows[0]).toMatchObject({ decided: true, outcome: "succeeded" });
+  });
+
   test("token born active cannot be confirmed into the handshake", async () => {
     const c = await db.client();
     const token = rawToken();
