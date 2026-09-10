@@ -78,7 +78,8 @@ export async function managerLoginHandoffCore(
   for (let attempt = 0; attempt < 2 && !confirmed; attempt += 1) {
     try {
       confirmed =
-        (await deps.confirmHandoff(identity.managerToken, identity.rateLimitReservationId)) === true;
+        (await deps.confirmHandoff(identity.managerToken, identity.rateLimitReservationId)) ===
+        true;
     } catch {
       confirmed = false;
     }

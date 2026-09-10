@@ -30,7 +30,7 @@ function deps(overrides: Partial<Parameters<typeof managerLoginHandoffCore>[1]> 
 describe("R7-A manager handoff", () => {
   it("retries same token and reservation after lost confirm response", async () => {
     const confirmHandoff = vi
-      .fn<Parameters<NonNullable<Parameters<typeof managerLoginHandoffCore>[1]["confirmHandoff"]>>, ReturnType<NonNullable<Parameters<typeof managerLoginHandoffCore>[1]["confirmHandoff"]>>>()
+      .fn(async (_managerToken: string, _reservationId: string) => true)
       .mockRejectedValueOnce(new Error("response lost"))
       .mockResolvedValueOnce(true);
     const result = await managerLoginHandoffCore(identity, deps({ confirmHandoff }));
@@ -46,7 +46,12 @@ describe("R7-A manager handoff", () => {
     });
     const result = await managerLoginHandoffCore(
       identity,
-      deps({ getStorage: vi.fn(() => { throw new Error("storage unavailable"); }), cleanupPending }),
+      deps({
+        getStorage: vi.fn(() => {
+          throw new Error("storage unavailable");
+        }),
+        cleanupPending,
+      }),
     );
     expect(result).toEqual({ ok: false, reason: "cleanup_failed" });
     expect(cleanupPending).toHaveBeenCalledWith("manager-token", "reservation-1");
