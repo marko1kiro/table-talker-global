@@ -15,6 +15,9 @@ const identity = {
   restaurantDisplayName: "Resto Satu",
   restaurantCode: "R1",
   managerToken: "pending-mgr-tok",
+  // R6-C: the reservation finalized by confirm/cleanup (stand-in uuid here —
+  // this suite tests the handoff orchestration, not the limiter).
+  rateLimitReservationId: "0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a",
 };
 
 function workingStorage(): StorageLike {

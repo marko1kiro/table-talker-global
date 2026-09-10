@@ -3,12 +3,15 @@
 // cores with injected deps — real logic, no regex-over-source.
 import { describe, expect, it } from "vitest";
 import { superAdminLoginCore } from "../src/lib/auth";
-import { loginStaffCore } from "../src/lib/staff-login.server";
+import { loginStaffCore, type StaffLoginDeps } from "../src/lib/staff-login.server";
 import { StaffEmailConfigError, staffAppOrigin } from "../src/lib/staff-email.server";
 
 type RpcRes = { data: unknown; error: { message: string } | null };
 const ok = (data: unknown): RpcRes => ({ data, error: null });
 const err = (message: string): RpcRes => ({ data: null, error: { message } });
+
+// R6-C: the reservation the real route wires into every staff login.
+const RESV = "0d0d0d0d-0d0d-4d0d-8d0d-0d0d0d0d0d0d";
 
 const managerCred = {
   id: "m1",
@@ -34,7 +37,7 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
   function amDeps(overrides: {
     rpc?: (fn: string) => RpcRes;
     updateSession?: (u: unknown) => Promise<void>;
-    report?: (v: boolean) => Promise<unknown>;
+    report?: StaffLoginDeps["report"];
     verify?: (password: string, stored: string) => Promise<boolean>;
   }) {
     const reports: boolean[] = [];
@@ -56,9 +59,10 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
           overrides.report ??
           (async (v: boolean) => {
             reports.push(v);
-            // R4-C: an authoritative completion returns true.
-            return true;
+            // R4-C: an authoritative completion returns a success verdict.
+            return v ? "SUCCEEDED" : "FAILED";
           }),
+        rateLimitReservationId: RESV,
         updateSession: overrides.updateSession ?? (async () => undefined),
       },
     };
@@ -72,7 +76,7 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
       },
       report: async (v) => {
         order.push(`report:${v}`);
-        return v;
+        return v ? "SUCCEEDED" : "FAILED";
       },
     });
     const r = await loginStaffCore("am.satu", "pw", deps);
@@ -80,7 +84,7 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
     expect(order).toEqual(["cookie", "report:true"]);
   });
 
-  it("cookie write failure: session revoked, NO report (failure before completion)", async () => {
+  it("cookie write failure: session revoked and the durable failure outcome is banked (R6-C)", async () => {
     const revoked: string[] = [];
     const { reports, deps } = amDeps({
       updateSession: async () => {
@@ -95,9 +99,9 @@ describe("R3-C: AM login accounting reflects a USABLE session", () => {
     };
     const r = await loginStaffCore("am.satu", "pw", withRevoke);
     expect(r.ok).toBe(false);
-    // R5-C: cookie write failure happened BEFORE completion was attempted.
-    // No rate-limit report is emitted — the reservation expires via TTL.
-    expect(reports).toEqual([]);
+    // R6-C: the cookie-write failure banks a durable FAILURE outcome so a
+    // late success reporter can never contradict the DB.
+    expect(reports).toEqual([false]);
     expect(revoked).toEqual(["area_manager:amtok"]);
   });
 
@@ -170,7 +174,7 @@ describe("R3-A: role switches revoke the PREVIOUS server sessions", () => {
               ? ((minted = true), ok("amtok"))
               : ok(null),
       verify: async () => true,
-      report: async () => true,
+      report: async () => "SUCCEEDED",
       updateSession: async () => undefined,
       cookieStaffTokens: async () => ({ superAdminToken: "old-sa", areaManagerToken: null }),
       revokeStaffSessionByToken: async (kind, token) => {
@@ -209,6 +213,7 @@ describe("R3-A: role switches revoke the PREVIOUS server sessions", () => {
       verify: async () => true,
       report: async (v) => {
         reports.push(v);
+        return "FAILED";
       },
       cookieStaffTokens: async () => ({ superAdminToken: "old-sa", areaManagerToken: null }),
       revokeStaffSessionByToken: async () => {
@@ -230,7 +235,7 @@ describe("R3-A: role switches revoke the PREVIOUS server sessions", () => {
             ? ok("mtok")
             : err("x"),
       verify: async () => true,
-      report: async () => true,
+      report: async () => "SUCCEEDED",
       updateSession: async () => undefined,
       cookieStaffTokens: async () => ({ superAdminToken: "old-sa", areaManagerToken: "old-am" }),
       revokeStaffSessionByToken: async (kind, token) => {
@@ -243,10 +248,11 @@ describe("R3-A: role switches revoke the PREVIOUS server sessions", () => {
       managerTokenToRevoke: "old-mgr",
       clearSession: async () => undefined,
     });
-    // old-revocation failed -> the switch fails closed AND the freshly minted
-    // manager session is revoked, so exactly ZERO credentials remain usable.
+    // old-revocation failed -> the switch fails closed. The freshly minted
+    // PENDING session (R6-A) is never delivered to the browser: it is unusable
+    // by construction and dies via its 60s TTL — no revocation needed for it.
     expect(r.ok).toBe(false);
-    expect(revoked).toEqual(["manager:old-mgr", "manager:mtok"]);
+    expect(revoked).toEqual(["manager:old-mgr"]);
   });
 
   it("Super Admin individual login revokes the old AM/manager credentials before minting", async () => {

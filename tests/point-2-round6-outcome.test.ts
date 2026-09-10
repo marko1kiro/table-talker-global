@@ -8,6 +8,9 @@
 import { describe, expect, test } from "vitest";
 import { loginStaffCore, type StaffLoginDeps } from "../src/lib/staff-login.server";
 
+// Test reservation identity for the wired core (never hits the real limiter).
+const RESV = "0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f";
+
 function managerDeps(reportCalls: boolean[]) {
   const rpcCalls: string[] = [];
   const deps: StaffLoginDeps = {
@@ -34,8 +37,9 @@ function managerDeps(reportCalls: boolean[]) {
     },
     report: async (valid) => {
       reportCalls.push(valid);
-      return true;
+      return "SUCCEEDED";
     },
+    rateLimitReservationId: RESV,
     verify: async () => true,
     managerExtras: async () => ({ password_changed_at: "set" }),
   };
@@ -91,8 +95,9 @@ describe("R6-C: AM login records durable outcomes", () => {
       },
       report: async (valid) => {
         reports.push(valid);
-        return true;
+        return "SUCCEEDED";
       },
+      rateLimitReservationId: RESV,
       verify: async () => true,
       updateSession: async () => {
         throw new Error("cookie write exploded");

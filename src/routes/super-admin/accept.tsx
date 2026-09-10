@@ -49,6 +49,7 @@ function AcceptInvitePage() {
           token: token.trim(),
           password,
           clientKey: getOwnerLoginClientKey(),
+          attemptKey: crypto.randomUUID(),
         },
       });
       if (!result.ok) {

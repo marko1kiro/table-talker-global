@@ -10,8 +10,7 @@
 // confirm): every test below fails.
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import type { Client } from "pg";
-import { createTestDb, rpc, scryptHash, stopAll, type TestDb } from "./harness";
-import { sha256Hex } from "node:crypto";
+import { createTestDb, rpc, scryptHash, sha256Hex, stopAll, type TestDb } from "./harness";
 
 const R1 = "11111111-1111-4111-8111-111111111111";
 const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
@@ -51,7 +50,7 @@ afterEach(async () => {
 });
 
 async function reserve(c: Client, attemptKey?: string): Promise<string | null> {
-  const { data, error } = await rpc<{ reservation_id: string }[]>(
+  const { data, error } = await rpc<string>(
     c,
     "reserve_owner_login_attempt",
     attemptKey === undefined
@@ -59,7 +58,8 @@ async function reserve(c: Client, attemptKey?: string): Promise<string | null> {
       : { p_client_bucket_hash: CLIENT_HASH, p_ip_bucket_hash: IP_HASH, p_attempt_key: attemptKey },
   );
   if (error) return null;
-  return data?.[0]?.reservation_id ?? null;
+  // The single-column table function flattens to a scalar uuid via rpc().
+  return typeof data === "string" && data ? data : null;
 }
 
 async function complete(
@@ -157,7 +157,10 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
   test("expired reservation with a used key cannot be re-reserved", async () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-expired-aaaaaa");
-    await c.query(`update public.owner_login_rate_limit_reservations set expires_at = now() - interval '1 second' where id = $1`, [id]);
+    await c.query(
+      `update public.owner_login_rate_limit_reservations set expires_at = now() - interval '1 second' where id = $1`,
+      [id],
+    );
     const reuse = await reserve(c, "attempt-key-expired-aaaaaa");
     expect(reuse).toBeNull();
   });
@@ -176,10 +179,9 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
     });
     expect(confirmed.data).toBe(true);
 
-    const session = await c.query(
-      `select 1 from public.manager_sessions where token_hash = $1`,
-      [sha256Hex(token)],
-    );
+    const session = await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [
+      sha256Hex(token),
+    ]);
     expect(session.rowCount).toBe(1);
     const row = await c.query(
       `select outcome from public.owner_login_rate_limit_reservations where id = $1`,
@@ -201,10 +203,9 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
       p_reservation_id: id,
     });
     expect(confirmed.data).toBe(false);
-    const session = await c.query(
-      `select 1 from public.manager_sessions where token_hash = $1`,
-      [sha256Hex(token)],
-    );
+    const session = await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [
+      sha256Hex(token),
+    ]);
     expect(session.rowCount).toBe(0);
   });
 
@@ -218,10 +219,9 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
       p_reservation_id: "00000000-0000-4000-8000-000000000000",
     });
     expect(confirmed.data).toBe(false);
-    const session = await c.query(
-      `select 1 from public.manager_sessions where token_hash = $1`,
-      [sha256Hex(token)],
-    );
+    const session = await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [
+      sha256Hex(token),
+    ]);
     expect(session.rowCount).toBe(0);
   });
 });

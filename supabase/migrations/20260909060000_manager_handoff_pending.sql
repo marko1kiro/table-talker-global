@@ -76,9 +76,15 @@ grant execute on function public.create_manager_session_pending(uuid) to service
 
 -- 5. Atomically promote pending->active (exactly once), newest-wins per
 --    manager (older usable sessions of the SAME manager are revoked — never
---    another account's). Idempotent via the confirmed_at tombstone + the
---    live active row, so a lost response + retry returns the same verdict.
-create or replace function public.confirm_manager_session(p_token text)
+--    another account's). When a rate-limit reservation id is supplied, the
+--    login attempt's durable outcome is finalized IN THE SAME transaction
+--    (R6-C): activation and accounting commit or roll back together.
+--    Idempotent via the confirmed_at tombstone + the live active row, so a
+--    lost response + retry returns the same verdict without duplicating.
+create or replace function public.confirm_manager_session(
+  p_token text,
+  p_reservation_id uuid default null
+)
 returns boolean
 language plpgsql
 security definer
@@ -87,7 +93,21 @@ as $$
 declare
   v_hash text := encode(extensions.digest(p_token, 'sha256'), 'hex');
   v_pending public.manager_pending_sessions%rowtype;
+  v_consumable boolean;
 begin
+  -- Cheap pre-check: an already-decided reservation must not activate
+  -- anything new. (The authoritative decision is re-checked under the row
+  -- lock after activation, inside its own savepoint.)
+  if p_reservation_id is not null then
+    select consumed_at is null and expires_at > now()
+    into v_consumable
+    from public.owner_login_rate_limit_reservations
+    where id = p_reservation_id;
+    if not coalesce(v_consumable, false) then
+      return false;
+    end if;
+  end if;
+
   select * into v_pending from public.manager_pending_sessions
   where token_hash = v_hash and confirmed_at is null
   for update;
@@ -102,13 +122,13 @@ begin
     set confirmed_at = now()
     where id = v_pending.id and confirmed_at is null;
     if not found then
-      -- A concurrent racer confirmed it first; fall through to the
-      -- tombstone/idempotency check below.
+      -- A concurrent racer confirmed this pending row first; fall through
+      -- to the tombstone idempotency check below.
       null;
     else
       begin
-        -- Newest-wins within THIS manager only; unique index backstops the
-        -- race. On violation nothing of this confirm is committed.
+        -- Newest-wins within THIS manager only; the unique index backstops
+        -- races. On violation NOTHING of this confirm is committed.
         delete from public.manager_sessions
         where manager_id = v_pending.manager_id;
         insert into public.manager_sessions
@@ -119,26 +139,40 @@ begin
       exception when unique_violation then
         return false; -- another confirm of a DIFFERENT pending won the slot
       end;
-      return true;
     end if;
   end if;
 
-  -- Idempotent retry: the row was already confirmed AND the resulting active
-  -- session is still live -> same verdict as the first call.
-  if exists (
+  -- At this point the token's session is active (winner path) or this is a
+  -- retry for an already-confirmed token (tombstone path) or nothing matched.
+  -- Idempotency REQUIRES a confirmed pending tombstone: a token that was
+  -- never minted as pending (born active) must not be confirmable — the
+  -- handshake is the only route into the active set.
+  if not exists (
     select 1 from public.manager_pending_sessions
     where token_hash = v_hash and confirmed_at is not null
-  ) and exists (
-    select 1 from public.manager_sessions where token_hash = v_hash
   ) then
-    return true;
+    return false;
+  end if;
+  if not exists (select 1 from public.manager_sessions where token_hash = v_hash) then
+    return false;
   end if;
 
-  return false;
+  -- R6-C: finalize the durable rate-limit outcome in the SAME transaction.
+  -- apply_owner_login_rate_limit takes the reservation row FOR UPDATE itself;
+  -- if the reservation is not consumable the RAISE propagates out of this
+  -- function and rolls the activation back with it — activation and outcome
+  -- can never diverge.
+  if p_reservation_id is not null then
+    if not public.apply_owner_login_rate_limit(p_reservation_id, true) then
+      raise exception 'RESERVATION_NOT_CONSUMABLE' using errcode = 'R0001';
+    end if;
+  end if;
+
+  return true;
 end;
 $$;
-revoke all on function public.confirm_manager_session(text) from public, anon, authenticated;
-grant execute on function public.confirm_manager_session(text) to service_role;
+revoke all on function public.confirm_manager_session(text, uuid) from public, anon, authenticated;
+grant execute on function public.confirm_manager_session(text, uuid) to service_role;
 
 -- 6. Best-effort cleanup of an UNCONFIRMED pending row (failure paths).
 --    Confirmed tombstones are kept so retries stay idempotent; they expire.

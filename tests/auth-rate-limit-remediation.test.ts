@@ -137,7 +137,10 @@ it("keeps owner attempts inside service-only reservation RPCs", () => {
   expect(migration).not.toContain("else blocked_until end,\n    where");
   const adapter = readFileSync("src/lib/owner-login-rate-limit.server.ts", "utf8");
   expect(adapter).toMatch(/reserveOwnerLoginAttempt[\s\S]*?catch\s*\{\s*return null;/);
-  expect(adapter).toMatch(/completeOwnerLoginAttempt[\s\S]*?catch\s*\{\s*return false;/);
+  // R6-C: completion failures fail closed with a verdict, never a thrown error.
+  expect(adapter).toMatch(
+    /completeOwnerLoginAttempt[\s\S]*?catch\s*\{\s*return "UNKNOWN_RESERVATION";/,
+  );
   expect(migration).toContain("security definer");
   expect(migration).toContain(
     "grant execute on function public.reserve_owner_login_attempt(text, text) to service_role",

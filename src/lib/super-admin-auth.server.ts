@@ -181,6 +181,9 @@ export const acceptInviteInputSchema = z.object({
   token: z.string().min(16).max(200),
   password: z.string(),
   clientKey: z.string().min(16).max(200),
+  // R6-C: idempotency key for the logical attempt (server-bound to the
+  // reservation). Optional here; a missing key gets a server-generated one.
+  attemptKey: z.string().min(16).max(200).optional(),
 });
 
 /** Public: accepts an invite / bootstrap verification, atomically. */
@@ -195,7 +198,10 @@ export const acceptSuperAdminInvite = createServerFn({ method: "POST" })
     if (!client) return { ok: false, code: "UNAVAILABLE" };
     const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
       await import("./owner-login-rate-limit.server");
-    const reservationId = await reserveOwnerLoginAttempt(data.clientKey);
+    const reservationId = await reserveOwnerLoginAttempt(
+      data.clientKey,
+      data.attemptKey ?? crypto.randomUUID(),
+    );
     if (!reservationId) return { ok: false, code: "RATE_LIMITED" };
     const passwordHash = await hashManagerPassword(data.password);
     const res = await client.rpc("accept_super_admin_invite", {
@@ -432,7 +438,12 @@ export const changeSuperAdminPassword = createServerFn({ method: "POST" })
 
 // --- recovery --------------------------------------------------------------
 
-export const recoveryRequestInputSchema = z.object({ email: z.string() });
+export const recoveryRequestInputSchema = z.object({
+  email: z.string(),
+  // R6-C: idempotency key for the logical attempt (optional; server binds a
+  // generated one when absent).
+  attemptKey: z.string().min(16).max(200).optional(),
+});
 
 export async function requestSuperAdminRecoveryCore(
   email: string,
@@ -508,7 +519,10 @@ export const requestSuperAdminRecovery = createServerFn({ method: "POST" })
     const email = normalizeEmail(data.email);
     const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
       await import("./owner-login-rate-limit.server");
-    const reservationId = await reserveOwnerLoginAttempt(`recovery:${email}`);
+    const reservationId = await reserveOwnerLoginAttempt(
+      `recovery:${email}`,
+      data.attemptKey ?? crypto.randomUUID(),
+    );
     if (!reservationId) return { ok: true };
     let delivered = false;
     try {
@@ -540,6 +554,9 @@ export const recoveryConsumeInputSchema = z.object({
   token: z.string().min(16).max(200),
   password: z.string(),
   clientKey: z.string().min(16).max(200),
+  // R6-C: idempotency key for the logical attempt (optional; server binds a
+  // generated one when absent).
+  attemptKey: z.string().min(16).max(200).optional(),
 });
 
 export const consumeSuperAdminRecovery = createServerFn({ method: "POST" })
@@ -553,7 +570,10 @@ export const consumeSuperAdminRecovery = createServerFn({ method: "POST" })
     if (!client) return { ok: false, code: "UNAVAILABLE" };
     const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
       await import("./owner-login-rate-limit.server");
-    const reservationId = await reserveOwnerLoginAttempt(data.clientKey);
+    const reservationId = await reserveOwnerLoginAttempt(
+      data.clientKey,
+      data.attemptKey ?? crypto.randomUUID(),
+    );
     if (!reservationId) return { ok: false, code: "RATE_LIMITED" };
     const { data: sa } = await client
       .from("super_admin_accounts")

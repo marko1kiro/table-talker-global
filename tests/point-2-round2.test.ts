@@ -280,7 +280,8 @@ describe("staff login clears other roles in a shared browser (review A4)", () =>
         return { data: null, error: { message: "no am" } };
       },
       verify: async () => true,
-      report: async () => true,
+      report: async () => "SUCCEEDED",
+      rateLimitReservationId: "0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b",
       clearSession: async () => {
         cleared += 1;
       },
@@ -306,7 +307,7 @@ describe("staff login clears other roles in a shared browser (review A4)", () =>
         return ok(null);
       },
       verify: async () => true,
-      report: async () => true,
+      report: async () => "SUCCEEDED",
       updateSession: async (u) => {
         update = u as Record<string, unknown>;
       },

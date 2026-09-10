@@ -59,6 +59,12 @@ function rawToken(): string {
   return randomBytes(32).toString("hex");
 }
 
+// R6-C: the handoff identity carries the rate-limit reservation finalized by
+// confirm/cleanup. This DB test exercises the pending lifecycle without the
+// limiter, so a well-formed throwaway uuid stands in (unknown reservation ->
+// cleanup banks a no-op UNKNOWN_RESERVATION).
+const DUMMY_RESERVATION_ID = "00000000-0000-4000-8000-00000000dead";
+
 /** Wired supabase-shaped rpc caller over the real disposable DB. */
 function dbRpc(c: Client) {
   return async (
@@ -228,6 +234,7 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
         restaurantDisplayName: result.restaurantDisplayName,
         restaurantCode: result.restaurantCode,
         managerToken: result.managerToken,
+        rateLimitReservationId: DUMMY_RESERVATION_ID,
       },
       {
         ensureAccessToken: async () => "anon-access-token",

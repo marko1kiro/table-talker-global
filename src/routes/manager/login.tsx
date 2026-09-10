@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { ArrowLeft, Eye, EyeOff, Hash, Loader2, Lock } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
@@ -33,6 +33,10 @@ function StaffLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // R6-C: one idempotency key per logical attempt. Kept until a DEFINITIVE
+  // response arrives, so a retry after a lost response re-reserves the SAME
+  // rate-limit reservation instead of double-counting.
+  const attemptKeyRef = useRef<string>("");
 
   const canSubmit = staffId.trim().length > 0 && password.length > 0;
 
@@ -41,26 +45,32 @@ function StaffLoginPage() {
     if (!canSubmit) return;
     setBusy(true);
     setError("");
+    if (!attemptKeyRef.current) attemptKeyRef.current = crypto.randomUUID();
+    const attemptKey = attemptKeyRef.current;
     try {
       const result = await loginStaff({
         data: {
           staffId: staffId.trim(),
           password,
           clientKey: getOwnerLoginClientKey(),
+          attemptKey,
           // R3-A: revoke the previous manager session held by this browser.
           managerToken: readManagerIdentity(browserManagerStorage())?.managerToken,
         },
       });
+      // Definitive response: the attempt is over — the next submit is a new
+      // logical attempt with a fresh key.
+      attemptKeyRef.current = "";
       if (!result.ok) {
         setError(result.message);
         return;
       }
       if (result.role === "manager") {
-        // R4-A: the server already minted the session — every handoff failure
-        // (anon token, identity write, navigation) must revoke it server-side
-        // before the final failure is shown. sessionStorage deletion is NOT
-        // revocation; the compensation endpoint is. No navigation happens on
-        // any failure path.
+        // R6-A/R6-C: the server minted a PENDING session and handed us the
+        // rate-limit reservation. Every handoff failure (anon token, identity
+        // write, navigation, confirm) cleans the pending session up AND banks
+        // the durable failure outcome. No navigation happens on any failure
+        // path; the raw token never appears in any message, URL, or log.
         const handoff = await managerLoginHandoffCore(
           {
             idManager: result.idManager,
@@ -69,6 +79,7 @@ function StaffLoginPage() {
             restaurantDisplayName: result.restaurantDisplayName,
             restaurantCode: result.restaurantCode,
             managerToken: result.managerToken,
+            rateLimitReservationId: result.rateLimitReservationId,
           },
           {
             ensureAccessToken: () => ensureAnonAccessToken(getSupabaseBrowserClient()),
@@ -80,18 +91,20 @@ function StaffLoginPage() {
               }
             },
             navigate: () => navigate({ to: "/manager" }),
-            confirmHandoff: async (managerToken) => {
-              const r = await confirmManagerHandoff({ data: { managerToken } });
+            confirmHandoff: async (managerToken, rateLimitReservationId) => {
+              const r = await confirmManagerHandoff({
+                data: { managerToken, rateLimitReservationId },
+              });
               return r?.ok === true;
             },
-            cleanupPending: async (managerToken) => {
-              await cleanupManagerPendingSession({ data: { managerToken } });
+            cleanupPending: async (managerToken, rateLimitReservationId) => {
+              await cleanupManagerPendingSession({
+                data: { managerToken, rateLimitReservationId },
+              });
             },
           },
         );
         if (!handoff.ok) {
-          // Generic failure for both handoff and compensation failure — the
-          // raw token never appears in any message, URL, or log.
           setError("Gagal memulai sesi. Coba lagi.");
           return;
         }
@@ -102,6 +115,7 @@ function StaffLoginPage() {
       removeManagerIdentity(browserManagerStorage());
       void navigate({ to: "/am" });
     } catch {
+      attemptKeyRef.current = "";
       setError("Login gagal.");
     } finally {
       setBusy(false);

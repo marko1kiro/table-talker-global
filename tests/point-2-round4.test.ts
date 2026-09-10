@@ -19,6 +19,9 @@ const handoffIdentity = {
   restaurantDisplayName: "Resto Satu",
   restaurantCode: "R1",
   managerToken: "new-mgr-tok",
+  // R6-C: the reservation finalized by confirm/cleanup (stand-in uuid here —
+  // this suite tests the handoff orchestration, not the limiter).
+  rateLimitReservationId: "0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a",
 };
 
 function workingStorage(): StorageLike {
@@ -270,8 +273,12 @@ const managerCred = {
   restaurant_code: "R1",
 };
 
+// R6-C: the reservation the real route wires into every staff login.
+const RESV = "0c0c0c0c-0c0c-4c0c-8c0c-0c0c0c0c0c0c";
+
 type LoginOverrides = {
-  report?: (valid: boolean) => Promise<unknown>;
+  report?: StaffLoginDeps["report"];
+  rateLimitReservationId?: StaffLoginDeps["rateLimitReservationId"];
   revokeManagerSessionByToken?: StaffLoginDeps["revokeManagerSessionByToken"];
   clearSession?: StaffLoginDeps["clearSession"];
   updateSession?: StaffLoginDeps["updateSession"];
@@ -289,8 +296,9 @@ function managerLoginDeps(overrides: LoginOverrides = {}) {
     verify: async () => true,
     report: async (v) => {
       state.reports.push(v);
-      return true;
+      return v ? "SUCCEEDED" : "FAILED";
     },
+    rateLimitReservationId: RESV,
     updateSession: async () => undefined,
     clearSession: async () => {
       state.cookieCleared += 1;
@@ -303,62 +311,34 @@ function managerLoginDeps(overrides: LoginOverrides = {}) {
   return { deps, state };
 }
 
-describe("R4-C: staff login reports success only when completion is authoritative", () => {
-  it("manager success: reporter returns true -> ok, EXACTLY ONE report", async () => {
+describe("R4-C/R6-C: staff login outcome is durable and exactly-once", () => {
+  it("manager success: outcome DEFERRED to confirm — no report, reservation id returned", async () => {
     const { deps, state } = managerLoginDeps();
     const r = await loginStaffCore("mgr", "pw", deps);
     expect(r.ok).toBe(true);
-    expect(state.reports).toEqual([true]);
+    if (!r.ok || r.role !== "manager") return;
+    expect(state.reports).toEqual([]); // the browser confirm finalizes the outcome
+    expect(r.rateLimitReservationId).toBe(RESV);
   });
 
-  it("manager: reporter returns FALSE -> fail closed, new session revoked, no usable session", async () => {
-    const { deps, state } = managerLoginDeps({
-      report: async (v) => {
-        state.reports.push(v);
-        return false;
-      },
-    });
+  it("manager without a reservation id: fail closed (no usable session)", async () => {
+    const { deps, state } = managerLoginDeps({ rateLimitReservationId: null });
     const r = await loginStaffCore("mgr", "pw", deps);
     expect(r.ok).toBe(false);
-    expect(state.reports).toEqual([true]); // exactly one durable outcome attempt
-    expect(state.revocations).toEqual(["manager:new-mgr-tok"]);
-    expect(state.cookieCleared).toBeGreaterThanOrEqual(1);
+    expect(state.reports).toEqual([]);
   });
 
-  it("manager: reporter THROWS -> same fail-closed compensation", async () => {
+  it("manager: old-revocation failure banks exactly one durable report(false)", async () => {
     const { deps, state } = managerLoginDeps({
-      report: async (v) => {
-        state.reports.push(v);
-        throw new Error("limiter down");
-      },
-    });
-    const r = await loginStaffCore("mgr", "pw", deps);
-    expect(r.ok).toBe(false);
-    expect(state.reports).toEqual([true]);
-    expect(state.revocations).toEqual(["manager:new-mgr-tok"]);
-  });
-
-  it("manager: reporter MALFORMED response (undefined) -> fail closed", async () => {
-    const { deps, state } = managerLoginDeps({
-      report: async (v) => {
-        state.reports.push(v);
-        return undefined;
-      },
-    });
-    const r = await loginStaffCore("mgr", "pw", deps);
-    expect(r.ok).toBe(false);
-    expect(state.revocations).toEqual(["manager:new-mgr-tok"]);
-  });
-
-  it("manager: compensation revocation failing STILL returns generic failure (no orphan, no throw)", async () => {
-    const { deps } = managerLoginDeps({
-      report: async () => false,
-      revokeManagerSessionByToken: async () => {
+      revokeManagerSessionByToken: async (token) => {
+        state.revocations.push(`manager:${token}`);
         throw new Error("revoke rpc down");
       },
     });
-    const r = await loginStaffCore("mgr", "pw", deps);
+    const r = await loginStaffCore("mgr", "pw", deps, { managerTokenToRevoke: "old-mgr" });
     expect(r.ok).toBe(false);
+    expect(state.reports).toEqual([false]);
+    expect(state.revocations).toEqual(["manager:old-mgr"]);
   });
 
   it("AM success: reporter returns FALSE -> staff session revoked + cookie cleared + failure", async () => {
@@ -387,7 +367,7 @@ describe("R4-C: staff login reports success only when completion is authoritativ
       verify: async () => true,
       report: async (v) => {
         state.reports.push(v);
-        return false;
+        return "FAILED";
       },
       updateSession: async () => undefined,
       clearSession: async () => {
@@ -399,7 +379,9 @@ describe("R4-C: staff login reports success only when completion is authoritativ
     };
     const r = await loginStaffCore("am.satu", "pw", deps);
     expect(r.ok).toBe(false);
-    expect(state.reports).toEqual([true]);
+    // R6-C: the refused success probe is followed by the durable failure
+    // bank — one final outcome per reservation, impossible to flip later.
+    expect(state.reports).toEqual([true, false]);
     expect(state.staffRevocations).toEqual(["area_manager:am-tok"]);
     expect(state.cookieCleared).toBeGreaterThanOrEqual(1);
   });
@@ -423,7 +405,7 @@ describe("R4-C: staff login reports success only when completion is authoritativ
               ? { data: "am-tok", error: null }
               : { data: null, error: { message: "x" } },
       verify: async () => true,
-      report: async (v) => v,
+      report: async (v) => (v ? "SUCCEEDED" : "FAILED"),
       updateSession: async () => {
         throw new Error("cookie write failed");
       },

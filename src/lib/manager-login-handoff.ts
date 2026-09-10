@@ -12,6 +12,8 @@ export type ManagerHandoffIdentity = {
   restaurantDisplayName: string;
   restaurantCode: string;
   managerToken: string;
+  /** R6-C: the rate-limit reservation finalized by confirm/cleanup. */
+  rateLimitReservationId: string;
 };
 
 export type ManagerHandoffDeps = {
@@ -20,10 +22,13 @@ export type ManagerHandoffDeps = {
   writeIdentity: (storage: StorageLike | null, identity: ManagerIdentity) => ManagerIdentity | null;
   setReminderFlag: () => void;
   navigate: () => Promise<void> | void;
-  /** R5-A: atomically promote pending→active. true = session now active. */
-  confirmHandoff: (managerToken: string) => Promise<boolean>;
-  /** R5-A: delete the pending session (best-effort cleanup on failure). */
-  cleanupPending: (managerToken: string) => Promise<void>;
+  /**
+   * R5-A + R6-C: atomically promote pending→active AND bank the rate-limit
+   * success in one DB transaction. true = session now active and outcome final.
+   */
+  confirmHandoff: (managerToken: string, rateLimitReservationId: string) => Promise<boolean>;
+  /** R5-A + R6-C: delete the pending session + bank the failure outcome. */
+  cleanupPending: (managerToken: string, rateLimitReservationId: string) => Promise<void>;
 };
 
 export type ManagerHandoffResult = { ok: true } | { ok: false; reason: "handoff_failed" };
@@ -34,7 +39,7 @@ export async function managerLoginHandoffCore(
 ): Promise<ManagerHandoffResult> {
   const cleanup = async (): Promise<ManagerHandoffResult> => {
     try {
-      await deps.cleanupPending(identity.managerToken);
+      await deps.cleanupPending(identity.managerToken, identity.rateLimitReservationId);
     } catch {
       // cleanup is best-effort; pending session expires via TTL regardless
     }
@@ -63,7 +68,8 @@ export async function managerLoginHandoffCore(
   // the pending session is cleaned up — the browser never had a usable session.
   let confirmed = false;
   try {
-    confirmed = (await deps.confirmHandoff(identity.managerToken)) === true;
+    confirmed =
+      (await deps.confirmHandoff(identity.managerToken, identity.rateLimitReservationId)) === true;
   } catch {
     confirmed = false;
   }

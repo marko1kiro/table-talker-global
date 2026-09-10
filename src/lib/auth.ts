@@ -63,8 +63,12 @@ async function withLoginRateLimit<T>(
     await import("./owner-login-rate-limit.server");
   const reservationId = await reserveOwnerLoginAttempt(clientKey);
   if (!reservationId) return onFailure();
+  const report = async (valid: boolean) => {
+    const verdict = await completeOwnerLoginAttempt(reservationId, valid);
+    return verdict === "SUCCEEDED" || verdict === "ALREADY_SUCCEEDED";
+  };
   try {
-    return await action((valid) => completeOwnerLoginAttempt(reservationId, valid));
+    return await action(report);
   } catch {
     return onFailure();
   }

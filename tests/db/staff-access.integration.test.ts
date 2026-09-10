@@ -2285,19 +2285,21 @@ describe("R4-C: rate-limit completion is durable and one-outcome per attempt", (
       p_ip_bucket_hash: ipHash,
     });
     expect(rid).toBeTruthy();
+    // R6-C: completion returns a structured verdict, exactly once per reservation.
     expect(
-      await rpcOk<boolean>(c, "complete_owner_login_attempt", {
+      await rpcOk<string>(c, "complete_owner_login_attempt", {
         p_reservation_id: rid,
         p_success: true,
       }),
-    ).toBe(true);
-    // One durable outcome: a second completion of the SAME reservation is false.
+    ).toBe("SUCCEEDED");
+    // One durable outcome: a second completion of the SAME reservation cannot
+    // flip the decided outcome.
     expect(
-      await rpcOk<boolean>(c, "complete_owner_login_attempt", {
+      await rpcOk<string>(c, "complete_owner_login_attempt", {
         p_reservation_id: rid,
         p_success: false,
       }),
-    ).toBe(false);
+    ).toBe("ALREADY_SUCCEEDED");
     const consumed = await oneText(
       c,
       `select (consumed_at is not null)::text as n from public.owner_login_rate_limit_reservations where id = $1`,
@@ -2319,11 +2321,11 @@ describe("R4-C: rate-limit completion is durable and one-outcome per attempt", (
       p_ip_bucket_hash: ipHash,
     });
     expect(
-      await rpcOk<boolean>(c, "complete_owner_login_attempt", {
+      await rpcOk<string>(c, "complete_owner_login_attempt", {
         p_reservation_id: rid,
         p_success: false,
       }),
-    ).toBe(true);
+    ).toBe("FAILED");
     const failures = await scalar(
       c,
       `select failures from public.owner_login_rate_limit_buckets where bucket_hash = $1`,

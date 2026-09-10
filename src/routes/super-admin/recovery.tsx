@@ -69,6 +69,7 @@ export function RecoveryPageInner({ search }: { search: { staff_id?: string; tok
           token: token.trim(),
           password,
           clientKey: getOwnerLoginClientKey(),
+          attemptKey: crypto.randomUUID(),
         },
       });
       if (!result.ok) {

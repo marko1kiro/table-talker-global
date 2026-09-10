@@ -1,9 +1,16 @@
-// ROUND 5 R5-C: bounded durable rate-limit with exactly-once outcome.
-// confirmDurableSuccess MUST have a bounded timeout. The reporter must
-// never be called more than once per attempt. A failed completion must
-// never leave an active session.
-import { describe, expect, it, vi } from "vitest";
+// ROUND 5 R5-C (updated by R6-C): durable, exactly-once rate-limit outcomes.
+// R6-C replaced the manager-path server-side completion: the manager login
+// mints a PENDING session, returns the reservation id, and the browser's
+// confirm call finalizes the outcome atomically with session activation.
+// The AM path finalizes server-side through a verdict-based completion —
+// only SUCCEEDED / ALREADY_SUCCEEDED stand; anything else banks a durable
+// failure that a late reporter cannot contradict (DB compare-and-set,
+// proven against real Postgres in tests/db/round6-rate-limit-outcome.test.ts).
+import { describe, expect, it } from "vitest";
 import { loginStaffCore, type StaffLoginDeps } from "../src/lib/staff-login.server";
+
+// Test reservation identity for the wired core (never hits the real limiter).
+const RESV = "0e0e0e0e-0e0e-4e0e-8e0e-0e0e0e0e0e0e";
 
 const managerCred = {
   id: "m1",
@@ -31,8 +38,9 @@ function baseDeps(overrides: Partial<StaffLoginDeps> = {}) {
     verify: async () => true,
     report: async (v) => {
       state.reports.push(v);
-      return true;
+      return v ? "SUCCEEDED" : "FAILED";
     },
+    rateLimitReservationId: RESV,
     updateSession: async () => undefined,
     clearSession: async () => {
       state.cookieCleared += 1;
@@ -45,93 +53,38 @@ function baseDeps(overrides: Partial<StaffLoginDeps> = {}) {
   return { deps, state };
 }
 
-describe("R5-C: exactly-once reporter + bounded timeout", () => {
-  it("normal success: EXACTLY ONE report(true)", async () => {
+describe("R5-C/R6-C: manager login defers the outcome to the browser confirm", () => {
+  it("manager success: NO server-side report; the reservation id is returned", async () => {
     const { deps, state } = baseDeps();
     const r = await loginStaffCore("mgr", "pw", deps);
     expect(r.ok).toBe(true);
-    expect(state.reports).toEqual([true]);
+    if (!r.ok || r.role !== "manager") return;
+    expect(state.reports).toEqual([]); // outcome finalized by confirm, not here
+    expect(r.rateLimitReservationId).toBe(RESV);
   });
 
-  it("reporter returns false: session revoked, cookie cleared, one report", async () => {
-    const { deps, state } = baseDeps({
-      report: async (v) => {
-        state.reports.push(v);
-        return false;
-      },
-    });
+  it("manager without a reservation id: fail closed, nothing reported", async () => {
+    const { deps, state } = baseDeps({ rateLimitReservationId: null });
     const r = await loginStaffCore("mgr", "pw", deps);
     expect(r.ok).toBe(false);
-    expect(state.reports).toEqual([true]);
-    expect(state.revocations).toEqual(["manager:new-mgr-tok"]);
+    expect(state.reports).toEqual([]);
   });
 
-  it("reporter throws: same fail-closed, one report attempt", async () => {
+  it("old-credential revocation failure: exactly one durable report(false)", async () => {
     const { deps, state } = baseDeps({
-      report: async (v) => {
-        state.reports.push(v);
-        throw new Error("limiter down");
+      revokeManagerSessionByToken: async (token) => {
+        state.revocations.push(`manager:${token}`);
+        throw new Error("revoke rpc down");
       },
     });
-    const r = await loginStaffCore("mgr", "pw", deps);
+    const r = await loginStaffCore("mgr", "pw", deps, { managerTokenToRevoke: "old-mgr" });
     expect(r.ok).toBe(false);
-    expect(state.reports).toEqual([true]);
-    expect(state.revocations).toEqual(["manager:new-mgr-tok"]);
+    expect(state.reports).toEqual([false]);
   });
-
-  it("reporter returns undefined (malformed): fail closed, one report", async () => {
-    const { deps, state } = baseDeps({
-      report: async (v) => {
-        state.reports.push(v);
-        return undefined;
-      },
-    });
-    const r = await loginStaffCore("mgr", "pw", deps);
-    expect(r.ok).toBe(false);
-    expect(state.reports).toEqual([true]);
-    expect(state.revocations).toEqual(["manager:new-mgr-tok"]);
-  });
-
-  it("reporter never called twice (exactly once per attempt)", async () => {
-    let reportCount = 0;
-    const { deps, state } = baseDeps({
-      report: async (v) => {
-        reportCount++;
-        state.reports.push(v);
-        return true;
-      },
-    });
-    await loginStaffCore("mgr", "pw", deps);
-    expect(reportCount).toBe(1);
-  });
-
-  it("reporter timeout: bounded (does not hang forever), fail closed", async () => {
-    const { deps, state } = baseDeps({
-      report: async (v) => {
-        state.reports.push(v);
-        // Simulate a hung reporter — never resolves
-        return new Promise<never>(() => {});
-      },
-    });
-    // confirmDurableSuccess has a 10s timeout. The login must complete
-    // within that timeout (fail-closed), not hang forever.
-    const start = Date.now();
-    const r = await loginStaffCore("mgr", "pw", deps);
-    const elapsed = Date.now() - start;
-    expect(r.ok).toBe(false);
-    // Must have completed within 15s (10s timeout + 5s margin)
-    expect(elapsed).toBeLessThan(15_000);
-    // Session was revoked (fail-closed on timeout)
-    expect(state.revocations).toEqual(["manager:new-mgr-tok"]);
-  }, 20_000);
 
   it("wrong password: no report(true), one report(false)", async () => {
     const { deps, state } = baseDeps({
       verify: async () => false,
-      report: async (v) => {
-        state.reports.push(v);
-        return true;
-      },
     });
     const r = await loginStaffCore("mgr", "wrong", deps);
     expect(r.ok).toBe(false);
@@ -153,42 +106,9 @@ describe("R5-C: exactly-once reporter + bounded timeout", () => {
     expect(r.ok).toBe(false);
     expect(state.reports).toEqual([false]);
   });
-
-  it("revocation failure during compensation: still returns generic failure", async () => {
-    const { deps, state } = baseDeps({
-      report: async (v) => {
-        state.reports.push(v);
-        return false;
-      },
-      revokeManagerSessionByToken: async () => {
-        throw new Error("revoke rpc down");
-      },
-    });
-    const r = await loginStaffCore("mgr", "pw", deps);
-    expect(r.ok).toBe(false);
-    // Even though revocation failed, the login is still failed (no orphan)
-  });
-
-  it("duplicate completion is idempotent: second report(true) ignored", async () => {
-    let reportCount = 0;
-    const { deps, state } = baseDeps({
-      report: async (v) => {
-        reportCount++;
-        state.reports.push(v);
-        return true;
-      },
-    });
-    // Call loginStaffCore twice — should not produce two successes
-    const r1 = await loginStaffCore("mgr", "pw", deps);
-    const r2 = await loginStaffCore("mgr", "pw", deps);
-    expect(r1.ok).toBe(true);
-    expect(r2.ok).toBe(true);
-    // Each attempt gets exactly one report
-    expect(reportCount).toBe(2);
-  });
 });
 
-describe("R5-C: AM login exactly-once outcome", () => {
+describe("R5-C/R6-C: AM login exactly-once verdict-based outcome", () => {
   const amCred = {
     id: "am-1",
     staff_id: "am.satu",
@@ -198,7 +118,7 @@ describe("R5-C: AM login exactly-once outcome", () => {
     password_changed_at: null,
   };
 
-  it("AM success: one report(true)", async () => {
+  function amDeps(overrides: Partial<StaffLoginDeps> = {}) {
     const state = { reports: [] as unknown[], staffRevocations: [] as string[] };
     const deps: StaffLoginDeps = {
       rpc: async (fn) =>
@@ -212,81 +132,58 @@ describe("R5-C: AM login exactly-once outcome", () => {
       verify: async () => true,
       report: async (v) => {
         state.reports.push(v);
-        return true;
+        return v ? "SUCCEEDED" : "FAILED";
       },
       updateSession: async () => undefined,
-      clearSession: async () => undefined,
       revokeStaffSessionByToken: async (kind, token) => {
         state.staffRevocations.push(`${kind}:${token}`);
       },
+      ...overrides,
     };
+    return { deps, state };
+  }
+
+  it("AM success: one authoritative report(true)", async () => {
+    const { deps, state } = amDeps();
     const r = await loginStaffCore("am.satu", "pw", deps);
     expect(r.ok).toBe(true);
     expect(state.reports).toEqual([true]);
   });
 
-  it("AM reporter false: session revoked, cookie cleared, one report", async () => {
-    const state = {
-      reports: [] as unknown[],
-      staffRevocations: [] as string[],
-      cookieCleared: 0,
-    };
-    const deps: StaffLoginDeps = {
-      rpc: async (fn) =>
-        fn === "get_manager_credential"
-          ? { data: null, error: { message: "no manager" } }
-          : fn === "get_area_manager_credential"
-            ? { data: amCred, error: null }
-            : fn === "create_staff_session"
-              ? { data: "am-tok", error: null }
-              : { data: null, error: { message: "x" } },
-      verify: async () => true,
+  it("AM completion refuses success (FAILED verdict): durable failure banked, session revoked, cookie cleared", async () => {
+    const { deps, state } = amDeps({
       report: async (v) => {
         state.reports.push(v);
-        return false;
+        return "FAILED";
       },
       updateSession: async () => undefined,
-      clearSession: async () => {
-        state.cookieCleared += 1;
-      },
-      revokeStaffSessionByToken: async (kind, token) => {
-        state.staffRevocations.push(`${kind}:${token}`);
-      },
-    };
+      clearSession: async () => undefined,
+    });
     const r = await loginStaffCore("am.satu", "pw", deps);
     expect(r.ok).toBe(false);
-    expect(state.reports).toEqual([true]);
+    // report(true) was refused by the limiter, so the durable failure is
+    // banked via report(false) — the CAS makes a late success unable to
+    // contradict it. Exactly ONE final outcome exists per reservation.
+    expect(state.reports).toEqual([true, false]);
     expect(state.staffRevocations).toEqual(["area_manager:am-tok"]);
-    expect(state.cookieCleared).toBeGreaterThanOrEqual(1);
   });
 
-  it("AM cookie write failure: session revoked, no orphan, one report", async () => {
-    const state = { reports: [] as unknown[], staffRevocations: [] as string[] };
-    const deps: StaffLoginDeps = {
-      rpc: async (fn) =>
-        fn === "get_manager_credential"
-          ? { data: null, error: { message: "no manager" } }
-          : fn === "get_area_manager_credential"
-            ? { data: amCred, error: null }
-            : fn === "create_staff_session"
-              ? { data: "am-tok", error: null }
-              : { data: null, error: { message: "x" } },
-      verify: async () => true,
+  it("AM cookie write failure: session revoked, durable failure outcome banked", async () => {
+    const { deps, state } = amDeps({
       report: async (v) => {
         state.reports.push(v);
-        return true;
+        return "FAILED";
       },
+      rateLimitReservationId: RESV,
       updateSession: async () => {
         throw new Error("cookie write failed");
       },
-      revokeStaffSessionByToken: async (kind, token) => {
-        state.staffRevocations.push(`${kind}:${token}`);
-      },
-    };
+    });
     const r = await loginStaffCore("am.satu", "pw", deps);
     expect(r.ok).toBe(false);
     expect(state.staffRevocations).toEqual(["area_manager:am-tok"]);
-    // Cookie write failed → report was NOT called (failure happened before completion)
-    expect(state.reports).toEqual([]);
+    // R6-C: the failure outcome is banked (not left to expire) so a late
+    // success reporter can never contradict the DB.
+    expect(state.reports).toEqual([false]);
   });
 });

@@ -172,6 +172,7 @@ describe("staff login: rate-limit accounting is exact (B12)", () => {
       verify: async () => false,
       report: async (v) => {
         reported = v;
+        return "FAILED";
       },
     });
     expect(r.ok).toBe(false);
@@ -182,12 +183,14 @@ describe("staff login: rate-limit accounting is exact (B12)", () => {
     const r = await loginStaffCore("mgr", "pw", {
       rpc: async (fn) => {
         if (fn === "get_manager_credential") return { data: okManagerCred, error: null };
-        if (fn === "create_manager_session") return { data: null, error: { message: "boom" } };
+        if (fn === "create_manager_session_pending")
+          return { data: null, error: { message: "boom" } };
         return { data: null, error: null };
       },
       verify: async () => true,
       report: async (v) => {
         reported = v;
+        return "FAILED";
       },
     });
     expect(r.ok).toBe(false);
@@ -203,6 +206,7 @@ describe("staff login: rate-limit accounting is exact (B12)", () => {
       verify: async () => true,
       report: async (v) => {
         reported = v;
+        return "FAILED";
       },
     });
     expect(r.ok).toBe(false);
