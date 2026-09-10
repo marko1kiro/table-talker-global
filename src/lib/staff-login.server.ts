@@ -186,6 +186,23 @@ async function revokePreviousCredentials(
   }
 }
 
+async function compensatePendingManagerLogin(
+  deps: StaffLoginDeps,
+  managerToken: string,
+): Promise<void> {
+  if (deps.rateLimitReservationId) {
+    try {
+      await deps.rpc("cleanup_pending_manager_session", {
+        p_token: managerToken,
+        p_reservation_id: deps.rateLimitReservationId,
+      });
+    } catch {
+      // The pending token is not usable and remains bounded by its short TTL.
+    }
+  }
+  await safeReport(deps.report, false);
+}
+
 export async function loginStaffCore(
   rawStaffId: string,
   password: string,
@@ -197,8 +214,10 @@ export async function loginStaffCore(
   // 1) Manager namespace first (existing bearer-token dashboard model).
   //    loginManagerCore mints the session internally, so its ok flag already
   //    means "usable session established".
-  const managerResult = deps.rateLimitReservationId
-    ? await loginManagerCore(
+  let managerResult: Awaited<ReturnType<typeof loginManagerCore>> | null = null;
+  if (deps.rateLimitReservationId) {
+    try {
+      managerResult = await loginManagerCore(
         {
           idManager: staffId,
           password,
@@ -209,8 +228,12 @@ export async function loginStaffCore(
           rateLimitReservationId: deps.rateLimitReservationId,
           verify: deps.verify ?? verifyManagerPassword,
         },
-      )
-    : null;
+      );
+    } catch {
+      await safeReport(deps.report, false);
+      return { ok: false, message: GENERIC };
+    }
+  }
   if (managerResult?.ok) {
     // R3-A: a manager takeover must revoke the PREVIOUS server sessions of
     // this browser context. On revocation failure the login fails closed:
@@ -228,7 +251,13 @@ export async function loginStaffCore(
       return { ok: false, message: GENERIC };
     }
     // Review A4: wipe the shared cookie AFTER the server-side revocations.
-    await deps.clearSession?.().catch(() => undefined);
+    // A synchronous throw is still a handoff failure and must be compensated.
+    try {
+      await deps.clearSession?.();
+    } catch {
+      await compensatePendingManagerLogin(deps, managerResult.managerToken);
+      return { ok: false, message: GENERIC };
+    }
     // R6-C: the PENDING session is returned to the browser. The durable
     // rate-limit outcome is NOT finalized here — the browser's confirm call
     // activates the session AND banks the success in one DB transaction, so
@@ -236,9 +265,15 @@ export async function loginStaffCore(
     if (!deps.rateLimitReservationId) {
       return { ok: false, message: GENERIC };
     }
-    const extras = deps.managerExtras
-      ? await deps.managerExtras(staffId)
-      : { password_changed_at: "set" };
+    let extras: { password_changed_at: string | null } | null;
+    try {
+      extras = deps.managerExtras
+        ? await deps.managerExtras(staffId)
+        : { password_changed_at: "set" };
+    } catch {
+      await compensatePendingManagerLogin(deps, managerResult.managerToken);
+      return { ok: false, message: GENERIC };
+    }
     const mustRemindPassword = !extras || extras.password_changed_at === null;
     return {
       ok: true,
@@ -255,9 +290,16 @@ export async function loginStaffCore(
   }
 
   // 2) Area Manager namespace (cookie session backed by staff_sessions).
-  const { data: cred, error: amError } = await deps.rpc("get_area_manager_credential", {
-    p_staff_id: staffId,
-  });
+  let credentialResponse: Awaited<ReturnType<RpcCaller>>;
+  try {
+    credentialResponse = await deps.rpc("get_area_manager_credential", {
+      p_staff_id: staffId,
+    });
+  } catch {
+    await safeReport(deps.report, false);
+    return { ok: false, message: GENERIC };
+  }
+  const { data: cred, error: amError } = credentialResponse;
   const am = cred as {
     id: string;
     password_hash: string | null;
@@ -285,10 +327,17 @@ export async function loginStaffCore(
     await safeReport(deps.report, false);
     return { ok: false, message: GENERIC };
   }
-  const { data: token, error: sessionError } = await deps.rpc("create_staff_session", {
-    p_kind: "area_manager",
-    p_account_id: am.id,
-  });
+  let sessionResponse: Awaited<ReturnType<RpcCaller>>;
+  try {
+    sessionResponse = await deps.rpc("create_staff_session", {
+      p_kind: "area_manager",
+      p_account_id: am.id,
+    });
+  } catch {
+    await safeReport(deps.report, false);
+    return { ok: false, message: GENERIC };
+  }
+  const { data: token, error: sessionError } = sessionResponse;
   if (sessionError || typeof token !== "string" || !token) {
     // Password was right but no session exists — never count this as success.
     await safeReport(deps.report, false);

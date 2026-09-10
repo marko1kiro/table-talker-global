@@ -19,7 +19,10 @@ const IP_HASH = "d".repeat(64);
 
 let db: TestDb;
 
-async function reserve(c: Client, attemptKey: string): Promise<{ id?: string; error: string | null }> {
+async function reserve(
+  c: Client,
+  attemptKey: string,
+): Promise<{ id?: string; error: string | null }> {
   const result = await rpcRows<{ reservation_id: string }>(c, "reserve_owner_login_attempt", {
     p_client_bucket_hash: CLIENT_HASH,
     p_ip_bucket_hash: IP_HASH,
@@ -164,10 +167,10 @@ describe("R8: reservation-bound manager handoff is authoritative and exactly-onc
     );
 
     await expect(
-      c.query(`update public.manager_pending_sessions set reservation_id = $1 where token_hash = $2`, [
-        secondReservation.id,
-        sha256Hex(token),
-      ]),
+      c.query(
+        `update public.manager_pending_sessions set reservation_id = $1 where token_hash = $2`,
+        [secondReservation.id, sha256Hex(token)],
+      ),
     ).rejects.toThrow(/IMMUTABLE_RESERVATION_BINDING/);
   });
 });
