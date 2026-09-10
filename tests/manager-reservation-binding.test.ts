@@ -21,7 +21,7 @@ describe("R7-C manager reservation binding", () => {
             error: null,
           };
         }
-        return { data: "pending-token", error: null };
+        return { data: true, error: null };
       },
       verify: async () => true,
     };
@@ -33,7 +33,11 @@ describe("R7-C manager reservation binding", () => {
     await loginManagerCore(input, deps);
     expect(calls).toContainEqual([
       "create_manager_session_pending",
-      { p_manager_id: "m1", p_reservation_id: "11111111-1111-4111-8111-111111111111" },
+      {
+        p_manager_id: "m1",
+        p_reservation_id: "11111111-1111-4111-8111-111111111111",
+        p_token: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
     ]);
   });
 });

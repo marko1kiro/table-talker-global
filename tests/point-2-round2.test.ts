@@ -276,7 +276,7 @@ describe("staff login clears other roles in a shared browser (review A4)", () =>
     const r = await loginStaffCore("mgr", "pw", {
       rpc: async (fn) => {
         if (fn === "get_manager_credential") return ok(managerCred);
-        if (fn === "create_manager_session_pending") return ok("mtok");
+        if (fn === "create_manager_session_pending") return ok(true);
         return { data: null, error: { message: "no am" } };
       },
       verify: async () => true,
