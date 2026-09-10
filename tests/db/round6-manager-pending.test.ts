@@ -63,7 +63,30 @@ function rawToken(): string {
 // confirm/cleanup. This DB test exercises the pending lifecycle without the
 // limiter, so a well-formed throwaway uuid stands in (unknown reservation ->
 // cleanup banks a no-op UNKNOWN_RESERVATION).
-const DUMMY_RESERVATION_ID = "00000000-0000-4000-8000-00000000dead";
+async function reserveFor(c: Client, key: string): Promise<string> {
+  const result = await rpcRows<{ reservation_id: string }>(c, "reserve_owner_login_attempt", {
+    p_client_bucket_hash: sha256Hex(`${key}:client`),
+    p_ip_bucket_hash: sha256Hex(`${key}:ip`),
+    p_attempt_key: key,
+  });
+  const id = result.rows[0]?.reservation_id;
+  if (!id && !result.error && key.length < 16) return reserveFor(c, `${key}-attempt-key`);
+  if (!id) throw new Error(`reservation failed: ${result.error ?? JSON.stringify(result.rows)}`);
+  return id;
+}
+
+async function mintPending(
+  c: Client,
+  key: string,
+): Promise<{ token: string; reservationId: string }> {
+  const reservationId = await reserveFor(c, key);
+  const result = await rpc<string>(c, "create_manager_session_pending", {
+    p_manager_id: MANAGER_ID,
+    p_reservation_id: reservationId,
+  });
+  if (!result.data) throw new Error(`mint failed: ${result.error ?? "unknown"}`);
+  return { token: result.data, reservationId };
+}
 
 /** Wired supabase-shaped rpc caller over the real disposable DB. */
 function dbRpc(c: Client) {
@@ -85,11 +108,7 @@ async function activeSessionCount(): Promise<number> {
 describe("R6-A: pending sessions are invisible to every manager-token consumer", () => {
   test("pending token is not resolvable by get_manager_id_by_token", async () => {
     const c = await db.client();
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-      })
-    ).data as string;
+    const { token } = await mintPending(c, "pending-invisible-aaaa");
     expect(token).toBeTruthy();
     const resolved = await rpc(c, "get_manager_id_by_token", { p_token: token });
     expect(resolved.data).toBeNull();
@@ -97,11 +116,7 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
 
   test("pending token yields no dashboard snapshot, stats, thread, instructions, crew, realtime bind", async () => {
     const c = await db.client();
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-      })
-    ).data as string;
+    const { token } = await mintPending(c, "pending-invisible-aaaa");
 
     const snapshot = await rpc(c, "get_manager_snapshot", { p_manager_token: token });
     expect(snapshot.data).toBeNull();
@@ -152,16 +167,18 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
 
   test("confirm activates exactly once; retry idempotent; exactly one active row", async () => {
     const c = await db.client();
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-      })
-    ).data as string;
+    const { token, reservationId } = await mintPending(c, "confirm-once");
 
-    const first = await rpc<boolean>(c, "confirm_manager_session", { p_token: token });
+    const first = await rpc<boolean>(c, "confirm_manager_session", {
+      p_token: token,
+      p_reservation_id: reservationId,
+    });
     expect(first.data).toBe(true);
 
-    const retry = await rpc<boolean>(c, "confirm_manager_session", { p_token: token });
+    const retry = await rpc<boolean>(c, "confirm_manager_session", {
+      p_token: token,
+      p_reservation_id: reservationId,
+    });
     expect(retry.data).toBe(true);
 
     const resolved = await rpc(c, "get_manager_id_by_token", { p_token: token });
@@ -176,17 +193,11 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
     // Mint a REAL rate-limit reservation: the production handoff always
     // confirms with one, and the first confirm consumes it — the retry must
     // still return true via the confirmed tombstone, never false.
-    const reservationId = (
-      await rpc<{ reservation_id: string }>(c, "reserve_owner_login_attempt", {
-        p_client_bucket_hash: sha256Hex("retry-client"),
-        p_ip_bucket_hash: sha256Hex("retry-ip"),
-        p_attempt_key: "confirm-retry-idempotency-aaaa",
-      })
-    ).data as unknown as string;
-
+    const reservationId = await reserveFor(c, "confirm-retry-idempotency");
     const token = (
       await rpc<string>(c, "create_manager_session_pending", {
         p_manager_id: MANAGER_ID,
+        p_reservation_id: reservationId,
       })
     ).data as string;
 
@@ -220,7 +231,10 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
        values ($1, $2, $3, now() + interval '12 hours')`,
       [MANAGER_ID, R1, sha256Hex(token)],
     );
-    const confirmed = await rpc<boolean>(c, "confirm_manager_session", { p_token: token });
+    const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
+      p_token: token,
+      p_reservation_id: "00000000-0000-4000-8000-00000000dead",
+    });
     expect(confirmed.data).toBe(false);
     await c.query(`delete from public.manager_sessions where token_hash = $1`, [sha256Hex(token)]);
   });
@@ -228,15 +242,23 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
   test("concurrent confirm creates exactly one active session", async () => {
     const c1 = await connect(db.connectionString);
     const c2 = await connect(db.connectionString);
+    const reservationId = await reserveFor(c1, "concurrent-confirm");
     const token = (
       await rpc<string>(c1, "create_manager_session_pending", {
         p_manager_id: MANAGER_ID,
+        p_reservation_id: reservationId,
       })
     ).data as string;
 
     const [a, b] = await Promise.all([
-      rpc<boolean>(c1, "confirm_manager_session", { p_token: token }),
-      rpc<boolean>(c2, "confirm_manager_session", { p_token: token }),
+      rpc<boolean>(c1, "confirm_manager_session", {
+        p_token: token,
+        p_reservation_id: reservationId,
+      }),
+      rpc<boolean>(c2, "confirm_manager_session", {
+        p_token: token,
+        p_reservation_id: reservationId,
+      }),
     ]);
     expect([a.data, b.data]).toContain(true);
     const n = await activeSessionCount();
@@ -247,8 +269,9 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
 
   test("end-to-end: login mints pending; snapshot denied until confirm; handoff failure leaves zero active sessions", async () => {
     const c = await db.client();
+    const firstReservationId = await reserveFor(c, "login-handoff-first");
     const result = await loginManagerCore(
-      { idManager: MANAGER_USER, password: MANAGER_PW },
+      { idManager: MANAGER_USER, password: MANAGER_PW, rateLimitReservationId: firstReservationId },
       { rpc: dbRpc(c), verify: verifyManagerPassword },
     );
     expect(result.ok).toBe(true);
@@ -275,7 +298,7 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
         restaurantDisplayName: result.restaurantDisplayName,
         restaurantCode: result.restaurantCode,
         managerToken: result.managerToken,
-        rateLimitReservationId: DUMMY_RESERVATION_ID,
+        rateLimitReservationId: firstReservationId,
       },
       {
         ensureAccessToken: async () => "anon-access-token",
@@ -300,18 +323,25 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
     // A cleaned-up pending token can never be confirmed afterwards.
     const dead = await rpc<boolean>(c, "confirm_manager_session", {
       p_token: result.managerToken,
+      p_reservation_id: firstReservationId,
     });
     expect(dead.data).toBe(false);
 
     // Successful path: a fresh login + confirm makes the snapshot available.
+    const secondReservationId = await reserveFor(c, "login-handoff-second");
     const again = await loginManagerCore(
-      { idManager: MANAGER_USER, password: MANAGER_PW },
+      {
+        idManager: MANAGER_USER,
+        password: MANAGER_PW,
+        rateLimitReservationId: secondReservationId,
+      },
       { rpc: dbRpc(c), verify: verifyManagerPassword },
     );
     expect(again.ok).toBe(true);
     if (!again.ok) return;
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
       p_token: again.managerToken,
+      p_reservation_id: secondReservationId,
     });
     expect(confirmed.data).toBe(true);
     const after = await rpc(c, "get_manager_snapshot", { p_manager_token: again.managerToken });

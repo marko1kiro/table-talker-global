@@ -8,11 +8,14 @@ alter table public.manager_pending_sessions
 alter table public.manager_pending_sessions
   add constraint manager_pending_sessions_reservation_id_fkey
   foreign key (reservation_id)
-  references public.owner_login_rate_limit_reservations(id);
+  references public.owner_login_rate_limit_reservations(id)
+  on delete cascade;
+
+delete from public.manager_pending_sessions where reservation_id is null;
+alter table public.manager_pending_sessions alter column reservation_id set not null;
 
 create unique index if not exists manager_pending_sessions_reservation_id_idx
-  on public.manager_pending_sessions (reservation_id)
-  where reservation_id is not null;
+  on public.manager_pending_sessions (reservation_id);
 
 create or replace function public.create_manager_session_pending(
   p_manager_id uuid,
@@ -29,6 +32,12 @@ declare
 begin
   delete from public.manager_pending_sessions where expires_at < now();
   if p_reservation_id is null then raise exception 'RESERVATION_REQUIRED'; end if;
+  if exists (
+    select 1 from public.manager_pending_sessions
+    where reservation_id = p_reservation_id and expires_at > now()
+  ) then
+    raise exception 'RESERVATION_ALREADY_BOUND';
+  end if;
   if not exists (
     select 1 from public.owner_login_rate_limit_reservations
     where id = p_reservation_id and consumed_at is null and expires_at > now()
@@ -67,16 +76,41 @@ declare
   v_hash text := encode(extensions.digest(p_token, 'sha256'), 'hex');
   v_pending public.manager_pending_sessions%rowtype;
 begin
+  if exists (
+    select 1 from public.manager_pending_sessions
+    where token_hash = v_hash and confirmed_at is not null
+      and reservation_id <> p_reservation_id
+  ) then
+    return false;
+  end if;
+  if exists (
+    select 1 from public.manager_pending_sessions
+    where token_hash = v_hash and confirmed_at is not null
+      and reservation_id = p_reservation_id
+  ) and exists (
+    select 1 from public.manager_sessions where token_hash = v_hash
+  ) then
+    return true;
+  end if;
+
   select * into v_pending from public.manager_pending_sessions
   where token_hash = v_hash and confirmed_at is null
   for update;
-  if v_pending.id is null or v_pending.reservation_id is null
-     or v_pending.reservation_id <> p_reservation_id
+  if v_pending.id is null or v_pending.reservation_id <> p_reservation_id
      or v_pending.expires_at <= now() then return false; end if;
+  if not exists (
+    select 1 from public.owner_login_rate_limit_reservations
+    where id = v_pending.reservation_id and consumed_at is null and expires_at > now()
+  ) then return false; end if;
+
   update public.manager_pending_sessions set confirmed_at = now() where id = v_pending.id;
-  delete from public.manager_sessions where manager_id = v_pending.manager_id;
-  insert into public.manager_sessions (manager_id, restaurant_id, token_hash, expires_at)
-  values (v_pending.manager_id, v_pending.restaurant_id, v_pending.token_hash, now() + interval '12 hours');
+  begin
+    delete from public.manager_sessions where manager_id = v_pending.manager_id;
+    insert into public.manager_sessions (manager_id, restaurant_id, token_hash, expires_at)
+    values (v_pending.manager_id, v_pending.restaurant_id, v_pending.token_hash, now() + interval '12 hours');
+  exception when unique_violation then
+    return false;
+  end;
   if not public.apply_owner_login_rate_limit(v_pending.reservation_id, true) then
     raise exception 'RESERVATION_NOT_CONSUMABLE' using errcode = 'R0001';
   end if;

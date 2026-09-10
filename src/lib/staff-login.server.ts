@@ -203,18 +203,20 @@ export async function loginStaffCore(
   // 1) Manager namespace first (existing bearer-token dashboard model).
   //    loginManagerCore mints the session internally, so its ok flag already
   //    means "usable session established".
-  const managerResult = await loginManagerCore(
-    {
-      idManager: staffId,
-      password,
-      rateLimitReservationId: deps.rateLimitReservationId ?? undefined,
-    },
-    {
-      rpc: deps.rpc,
-      rateLimitReservationId: deps.rateLimitReservationId ?? undefined,
-      verify: deps.verify ?? verifyManagerPassword,
-    },
-  ).catch(() => null);
+  const managerResult = deps.rateLimitReservationId
+    ? await loginManagerCore(
+        {
+          idManager: staffId,
+          password,
+          rateLimitReservationId: deps.rateLimitReservationId,
+        },
+        {
+          rpc: deps.rpc,
+          rateLimitReservationId: deps.rateLimitReservationId,
+          verify: deps.verify ?? verifyManagerPassword,
+        },
+      )
+    : null;
   if (managerResult?.ok) {
     // R3-A: a manager takeover must revoke the PREVIOUS server sessions of
     // this browser context. On revocation failure the login fails closed:

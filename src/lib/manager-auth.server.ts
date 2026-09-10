@@ -54,7 +54,7 @@ async function defaultCreateSession(
 ): Promise<{ token: string; expiresAt: string } | null> {
   const { data, error } = await rpc("create_manager_session_pending", {
     p_manager_id: managerId,
-    ...(rateLimitReservationId ? { p_reservation_id: rateLimitReservationId } : {}),
+    p_reservation_id: rateLimitReservationId,
   });
   if (error || typeof data !== "string" || !data) return null;
   return { token: data, expiresAt: "" };
@@ -86,9 +86,12 @@ export async function loginManagerCore(
   if (c.status !== "aktif") {
     return { ok: false, code: "DISABLED", message: "Akun manager ini sudah dinonaktifkan." };
   }
+  if (!deps.createSession && !data.rateLimitReservationId) {
+    return { ok: false, code: "UNAVAILABLE", message: GENERIC };
+  }
   const session = deps.createSession
     ? await deps.createSession(c.id)
-    : await defaultCreateSession(deps.rpc, c.id, data.rateLimitReservationId);
+    : await defaultCreateSession(deps.rpc, c.id, data.rateLimitReservationId as string);
   if (!session) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
   return {
     ok: true,

@@ -248,10 +248,21 @@ export async function rpcOk<T = unknown>(
  * confirm handshake. Tests that need a live bearer must go through this, never
  * through the dropped legacy create_manager_session RPC. */
 export async function mintActiveManagerSession(client: Client, managerId: string): Promise<string> {
+  const key = `harness-${Date.now()}-${Math.random()}`;
+  const reservationId = await rpcOk<string>(client, "reserve_owner_login_attempt", {
+    p_client_bucket_hash: sha256Hex(`${key}:client`),
+    p_ip_bucket_hash: sha256Hex(`${key}:ip`),
+    p_attempt_key: key,
+  });
+  if (!reservationId) throw new Error("reservation failed in test harness");
   const token = await rpcOk<string>(client, "create_manager_session_pending", {
     p_manager_id: managerId,
+    p_reservation_id: reservationId,
   });
-  const confirmed = await rpcOk<boolean>(client, "confirm_manager_session", { p_token: token });
+  const confirmed = await rpcOk<boolean>(client, "confirm_manager_session", {
+    p_token: token,
+    p_reservation_id: reservationId,
+  });
   if (confirmed !== true) throw new Error("confirm_manager_session failed in test harness");
   return token;
 }
