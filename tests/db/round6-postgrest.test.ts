@@ -23,6 +23,9 @@ const RUN = process.env.CI === "true" || process.env.POSTGREST_EVIDENCE === "1";
 const R1 = "11111111-1111-4111-8111-111111111111";
 const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
 const AM_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2";
+// sub must be a uuid: the supabase shim casts request.jwt.claim.sub::uuid
+// (auth.uid()) and every real Supabase JWT carries a uuid sub.
+const SERVICE_SUB = "99999999-9999-4999-8999-999999999999";
 
 const seedLegacy: LegacySeed = async (c) => {
   await c.query(
@@ -38,8 +41,13 @@ const seedLegacy: LegacySeed = async (c) => {
 };
 
 // area_manager_accounts is CREATED by the Poin 2 chain (09010000) — it must
-// be seeded AFTER the full chain, not in the pre-Poin-2 legacy hook.
+// be seeded AFTER the full chain, not in the pre-Poin-2 legacy hook. The
+// auth.users row backs the JWT sub (manager_sessions.auth_user_id defaults
+// to auth.uid() with an FK to auth.users — exactly like production).
 const seedPost: LegacySeed = async (c) => {
+  await c.query(`insert into auth.users (id, email) values ($1, 'service@r6-evidence.test')`, [
+    SERVICE_SUB,
+  ]);
   await c.query(
     `insert into public.area_manager_accounts (id, staff_id, full_name, password_hash, status, password_changed_at)
      values ($1, 'am.satu', 'AM Satu', 'oldsalt:oldhash', 'aktif', now())`,
@@ -87,10 +95,6 @@ async function rpcPost(
   }
   return { status: res.status, json, text };
 }
-
-// sub must be a uuid: the supabase shim casts request.jwt.claim.sub::uuid
-// (auth.uid()) and every real Supabase JWT carries a uuid sub.
-const SERVICE_SUB = "99999999-9999-4999-8999-999999999999";
 
 const service = () => pgrst.jwt({ role: "service_role", sub: SERVICE_SUB });
 
