@@ -21,7 +21,14 @@ describe("loginManagerCore", () => {
       verify: fakeVerify,
       createSession: async () => ({ token: "t", expiresAt: "e" }),
     };
-    const r = await loginManagerCore({ idManager: "ghost", password: "rahasia123" }, deps);
+    const r = await loginManagerCore(
+      {
+        idManager: "ghost",
+        password: "rahasia123",
+        rateLimitReservationId: "11111111-1111-4111-8111-111111111111",
+      },
+      deps,
+    );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("INVALID_CREDENTIALS");
   });
@@ -31,7 +38,14 @@ describe("loginManagerCore", () => {
       verify: fakeVerify,
       createSession: async () => ({ token: "t", expiresAt: "e" }),
     };
-    const r = await loginManagerCore({ idManager: "budi", password: "nope" }, deps);
+    const r = await loginManagerCore(
+      {
+        idManager: "budi",
+        password: "nope",
+        rateLimitReservationId: "11111111-1111-4111-8111-111111111111",
+      },
+      deps,
+    );
     expect(!r.ok && r.code).toBe("INVALID_CREDENTIALS");
   });
   it("fails for a nonaktif account", async () => {
@@ -40,7 +54,14 @@ describe("loginManagerCore", () => {
       verify: fakeVerify,
       createSession: async () => ({ token: "t", expiresAt: "e" }),
     };
-    const r = await loginManagerCore({ idManager: "budi", password: "rahasia123" }, deps);
+    const r = await loginManagerCore(
+      {
+        idManager: "budi",
+        password: "rahasia123",
+        rateLimitReservationId: "11111111-1111-4111-8111-111111111111",
+      },
+      deps,
+    );
     expect(!r.ok && r.code).toBe("DISABLED");
   });
   it("returns the identity + token on success", async () => {
@@ -49,7 +70,14 @@ describe("loginManagerCore", () => {
       verify: fakeVerify,
       createSession: async () => ({ token: "tok123", expiresAt: "2026-09-04T20:00:00Z" }),
     };
-    const r = await loginManagerCore({ idManager: "budi", password: "rahasia123" }, deps);
+    const r = await loginManagerCore(
+      {
+        idManager: "budi",
+        password: "rahasia123",
+        rateLimitReservationId: "11111111-1111-4111-8111-111111111111",
+      },
+      deps,
+    );
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.managerToken).toBe("tok123");

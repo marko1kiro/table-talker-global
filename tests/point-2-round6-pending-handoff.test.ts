@@ -30,7 +30,14 @@ describe("R6-A: manager login mints pending, never active", () => {
       verify: async () => true,
     };
 
-    const result = await loginManagerCore({ idManager: "budi.santoso", password: "pw" }, deps);
+    const result = await loginManagerCore(
+      {
+        idManager: "budi.santoso",
+        password: "pw",
+        rateLimitReservationId: "11111111-1111-4111-8111-111111111111",
+      },
+      deps,
+    );
     expect(result.ok).toBe(true);
     expect(calls).toContain("create_manager_session_pending");
     expect(calls).not.toContain("create_manager_session");
