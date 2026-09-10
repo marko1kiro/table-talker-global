@@ -23,9 +23,9 @@ describe("R8 production handoff adapters", () => {
 
   it("reports cleanup failure instead of hiding an RPC transport error", async () => {
     const rpc = vi.fn().mockRejectedValue(new Error("cleanup unavailable"));
-    await expect(
-      cleanupManagerPendingSessionCore({ rpc }, data, vi.fn()),
-    ).rejects.toThrow("cleanup unavailable");
+    await expect(cleanupManagerPendingSessionCore({ rpc }, data, vi.fn())).rejects.toThrow(
+      "cleanup unavailable",
+    );
   });
 
   it("reports cleanup failure when durable failure accounting is unavailable", async () => {

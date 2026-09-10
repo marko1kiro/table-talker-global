@@ -106,6 +106,23 @@ describe("R8: reservation-bound manager handoff is authoritative and exactly-onc
     }
   });
 
+  test("a consumed attempt key reconciles to the same reservation after response loss", async () => {
+    const c = await db.client();
+    const attemptKey = "r8-consumed-attempt-reconciliation";
+    const first = await reserve(c, attemptKey);
+    expect(first).toMatchObject({ error: null });
+    expect(first.id).toBeTruthy();
+
+    const completed = await rpc<string>(c, "complete_owner_login_attempt", {
+      p_reservation_id: first.id,
+      p_success: true,
+    });
+    expect(completed).toMatchObject({ data: "SUCCEEDED", error: null });
+
+    const retry = await reserve(c, attemptKey);
+    expect(retry).toEqual({ id: first.id, error: null });
+  });
+
   test("pending mint is idempotent for the same reservation and deterministic bearer", async () => {
     const c = await db.client();
     const reservation = await reserve(c, "r8-idempotent-pending-mint");
