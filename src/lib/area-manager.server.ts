@@ -507,13 +507,15 @@ export const updateOwnAmProfile = createServerFn({ method: "POST" })
 
 export const amLogout = createServerFn({ method: "POST" }).handler(async () => {
   // R3-A: revoke the AM bearer session BEFORE clearing the cookie; failure
-  // keeps the cookie (fail closed) and surfaces as a failed logout.
+  // keeps the cookie (fail closed) and surfaces as a failed logout. The
+  // token is client-surrendered: UNKNOWN_TOKEN (purged elsewhere without a
+  // tombstone) proves it is already unusable, so cleanup passes tolerance.
   const { getAuthSession, revokeStaffSessionByToken, clearAuthSession } =
     await import("./auth.server");
   const session = await getAuthSession();
   const token = session.data.areaManagerSessionToken;
   if (token) {
-    await revokeStaffSessionByToken("area_manager", token);
+    await revokeStaffSessionByToken("area_manager", token, { tolerateUnknown: true });
   }
   await clearAuthSession();
   return { ok: true };

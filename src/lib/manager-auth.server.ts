@@ -121,15 +121,18 @@ export const logoutManagerSession = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
     const client = getServiceClient();
     if (!client) return { ok: false };
-    // R6-B: structured verdict. Only REVOKED (row died now) and the
-    // tombstone-proven ALREADY_INACTIVE count as logged out. KIND_MISMATCH
-    // and UNKNOWN_TOKEN fail closed.
+    // R6-B: structured verdict. REVOKED (row died now) and the
+    // tombstone-proven ALREADY_INACTIVE count as logged out. UNKNOWN_TOKEN
+    // also counts: the token is client-surrendered and provably not live
+    // (purged elsewhere without a tombstone — newest-wins supersede,
+    // account-wide revoke, cutover delete), so refusing would brick logout
+    // for that browser forever. KIND_MISMATCH still fails closed.
     const { data: verdict, error } = await client.rpc("revoke_manager_session_by_token", {
       p_token: data.managerToken,
     });
     if (error) return { ok: false };
     const v = (verdict as { verdict?: string } | null)?.verdict;
-    return { ok: v === "REVOKED" || v === "ALREADY_INACTIVE" };
+    return { ok: v === "REVOKED" || v === "ALREADY_INACTIVE" || v === "UNKNOWN_TOKEN" };
   });
 
 // --- change own password (while logged in) ----------------------------------

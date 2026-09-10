@@ -98,29 +98,31 @@ export async function readCookieStaffTokens(): Promise<{
 }
 
 /**
- * R5-B: the RPC verdict is part of the contract. true = the row was deleted
- * (provably revoked). false = nothing matched — for IDEMPOTENT logout/cleanup
- * that proves the token is already unusable, but for a MANDATORY switch
- * revocation of a known-live session it is an unexplained no-op and MUST fail
- * closed. Malformed payloads and transport errors are never silent successes.
- *
- * R5-B hardening: the probe-then-revoke pattern (IfLive) is ELIMINATED.
- * Every caller uses a single RPC that atomically determines liveness and
- * revokes in one DB transaction. Unknown/error verdicts ALWAYS throw —
- * they are never treated as "inactive" (no fail-open).
- */
-export type RevokeSessionByTokenOpts = { requireRevoked?: boolean };
-
-/**
  * R6-B: the revocation RPC returns a STRUCTURED verdict, never a boolean that
  * conflates distinct outcomes:
  *   REVOKED           — the row existed (live) and is now deleted
  *   ALREADY_INACTIVE  — authoritatively proven by the hashed tombstone: the
  *                       token was really issued and revoked earlier
  *   KIND_MISMATCH     — the token belongs to a DIFFERENT namespace
- *   UNKNOWN_TOKEN     — never issued (junk); never counts as inactive
+ *   UNKNOWN_TOKEN     — no live row and no tombstone: the token is provably
+ *                       NOT usable (junk, or purged without a tombstone by a
+ *                       bulk revoke / newest-wins supersede / cutover delete)
  * Transport errors and malformed payloads always throw. Callers fail closed.
+ *
+ * Default semantics are STRICT: every verdict other than REVOKED /
+ * ALREADY_INACTIVE throws (a mandatory revocation of a known-live session
+ * must never continue on an unexplained no-op). Cleanup of CLIENT-SURRENDERED
+ * tokens (cookie bearers, the previous manager sessionStorage token, the
+ * caller's own logout token) may pass { tolerateUnknown: true }: an
+ * UNKNOWN_TOKEN proves the surrendered token cannot authenticate anything, so
+ * treating it as already-dead is safe and prevents a purged-elsewhere token
+ * from bricking logout or the next login for that browser.
  */
+export type RevokeSessionByTokenOpts = {
+  requireRevoked?: boolean;
+  tolerateUnknown?: boolean;
+};
+
 export type RevokeVerdict = "REVOKED" | "ALREADY_INACTIVE" | "KIND_MISMATCH" | "UNKNOWN_TOKEN";
 
 const REVOKE_VERDICTS: readonly RevokeVerdict[] = [
@@ -143,7 +145,8 @@ function parseRevokeVerdict(data: unknown): RevokeVerdict {
  * as its own revocation proof, like a logout endpoint). Scoped to a single
  * row — never all devices. Throws on transport failure, malformed response,
  * kind mismatch, or unknown token; throws REVOKE_NOT_REVOKED in mandatory
- * mode unless the row was provably live and revoked NOW.
+ * mode unless the row was provably live and revoked NOW. Cleanup callers of
+ * client-surrendered tokens may pass tolerateUnknown (see above).
  */
 export async function revokeStaffSessionByToken(
   kind: "super_admin" | "area_manager",
@@ -151,6 +154,7 @@ export async function revokeStaffSessionByToken(
   opts: RevokeSessionByTokenOpts = {},
 ): Promise<void> {
   const verdict = await revokeStaffSessionVerdict(kind, token);
+  if (verdict === "UNKNOWN_TOKEN" && opts.tolerateUnknown) return;
   if (verdict === "ALREADY_INACTIVE" && opts.requireRevoked) {
     throw new Error("REVOKE_NOT_REVOKED");
   }
@@ -165,6 +169,7 @@ export async function revokeManagerSessionByToken(
   opts: RevokeSessionByTokenOpts = {},
 ): Promise<void> {
   const verdict = await revokeManagerSessionVerdict(token);
+  if (verdict === "UNKNOWN_TOKEN" && opts.tolerateUnknown) return;
   if (verdict === "ALREADY_INACTIVE" && opts.requireRevoked) {
     throw new Error("REVOKE_NOT_REVOKED");
   }
@@ -205,21 +210,29 @@ async function revokeManagerSessionVerdict(token: string): Promise<RevokeVerdict
  * R6-B: atomic "revoke if live" — one RPC determines the verdict and revokes
  * in a single DB transaction. Mandatory role switches may proceed on REVOKED
  * (the row died now) or ALREADY_INACTIVE (the hashed tombstone proves the
- * token was issued and revoked earlier). KIND_MISMATCH and UNKNOWN_TOKEN
- * always throw — a switch must never continue on an unexplained no-op.
+ * token was issued and revoked earlier). KIND_MISMATCH always throws; with
+ * { tolerateUnknown: true } UNKNOWN_TOKEN also passes (cleanup of a
+ * client-surrendered token that was purged elsewhere without a tombstone) —
+ * otherwise it throws: a switch must never continue on an unexplained no-op.
  */
 export async function revokeStaffSessionByTokenIfLive(
   kind: "super_admin" | "area_manager",
   token: string,
+  opts: RevokeSessionByTokenOpts = {},
 ): Promise<void> {
   const verdict = await revokeStaffSessionVerdict(kind, token);
+  if (verdict === "UNKNOWN_TOKEN" && opts.tolerateUnknown) return;
   if (verdict !== "REVOKED" && verdict !== "ALREADY_INACTIVE") {
     throw new Error(verdict);
   }
 }
 
-export async function revokeManagerSessionByTokenIfLive(token: string): Promise<void> {
+export async function revokeManagerSessionByTokenIfLive(
+  token: string,
+  opts: RevokeSessionByTokenOpts = {},
+): Promise<void> {
   const verdict = await revokeManagerSessionVerdict(token);
+  if (verdict === "UNKNOWN_TOKEN" && opts.tolerateUnknown) return;
   if (verdict !== "REVOKED" && verdict !== "ALREADY_INACTIVE") {
     throw new Error(verdict);
   }

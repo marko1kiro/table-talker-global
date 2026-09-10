@@ -81,6 +81,12 @@ grant execute on function public.create_manager_session_pending(uuid) to service
 --    (R6-C): activation and accounting commit or roll back together.
 --    Idempotent via the confirmed_at tombstone + the live active row, so a
 --    lost response + retry returns the same verdict without duplicating.
+--    The completed-confirm check runs FIRST: a retry carries the same
+--    reservation id, but the first confirm already consumed it — the
+--    tombstone + live row prove completion, so the retry returns true without
+--    touching the reservation (its outcome was banked by the original
+--    confirm). Only a confirm that ACTIVATES anything may consume/finalize
+--    a reservation.
 create or replace function public.confirm_manager_session(
   p_token text,
   p_reservation_id uuid default null
@@ -94,7 +100,20 @@ declare
   v_hash text := encode(extensions.digest(p_token, 'sha256'), 'hex');
   v_pending public.manager_pending_sessions%rowtype;
   v_consumable boolean;
+  v_activated boolean := false;
 begin
+  -- Idempotent replay: this token's handoff already completed (confirmed
+  -- tombstone + live active row). Return the same true verdict; never
+  -- re-decide a reservation here.
+  if exists (
+    select 1 from public.manager_pending_sessions
+    where token_hash = v_hash and confirmed_at is not null
+  ) and exists (
+    select 1 from public.manager_sessions where token_hash = v_hash
+  ) then
+    return true;
+  end if;
+
   -- Cheap pre-check: an already-decided reservation must not activate
   -- anything new. (The authoritative decision is re-checked under the row
   -- lock after activation, inside its own savepoint.)
@@ -139,6 +158,7 @@ begin
       exception when unique_violation then
         return false; -- another confirm of a DIFFERENT pending won the slot
       end;
+      v_activated := true;
     end if;
   end if;
 
@@ -157,12 +177,14 @@ begin
     return false;
   end if;
 
-  -- R6-C: finalize the durable rate-limit outcome in the SAME transaction.
-  -- apply_owner_login_rate_limit takes the reservation row FOR UPDATE itself;
-  -- if the reservation is not consumable the RAISE propagates out of this
-  -- function and rolls the activation back with it — activation and outcome
-  -- can never diverge.
-  if p_reservation_id is not null then
+  -- R6-C: finalize the durable rate-limit outcome in the SAME transaction,
+  -- but ONLY when THIS call performed the activation. A replay/racer that
+  -- found the completed handshake above returns true without re-deciding the
+  -- reservation. apply_owner_login_rate_limit takes the reservation row FOR
+  -- UPDATE itself; if the reservation is not consumable the RAISE propagates
+  -- out of this function and rolls the activation back with it — activation
+  -- and outcome can never diverge.
+  if p_reservation_id is not null and v_activated then
     if not public.apply_owner_login_rate_limit(p_reservation_id, true) then
       raise exception 'RESERVATION_NOT_CONSUMABLE' using errcode = 'R0001';
     end if;

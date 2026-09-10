@@ -4,11 +4,11 @@
 // on an embedded Postgres. Baseline a239081 fails these: pending rows live in
 // manager_sessions (usable) and the login path mints active sessions.
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
-import { randomBytes } from "node:crypto";
 import type { Client } from "pg";
 import {
   connect,
   createTestDb,
+  rawHexToken,
   rpc,
   rpcNamed,
   rpcRows,
@@ -56,7 +56,7 @@ afterEach(async () => {
 });
 
 function rawToken(): string {
-  return randomBytes(32).toString("hex");
+  return rawHexToken();
 }
 
 // R6-C: the handoff identity carries the rate-limit reservation finalized by

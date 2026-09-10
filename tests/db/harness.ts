@@ -97,7 +97,7 @@ async function adminClient(connectionString?: string): Promise<Client> {
 
 export async function createTestDb(
   name: string,
-  opts?: { seedLegacy?: LegacySeed },
+  opts?: { seedLegacy?: LegacySeed; seedPost?: LegacySeed },
 ): Promise<TestDb> {
   const external = process.env.TEST_DATABASE_URL;
   if (!external) await getEmbedded();
@@ -127,6 +127,12 @@ export async function createTestDb(
     if (file === SEED_AFTER && opts?.seedLegacy) {
       await opts.seedLegacy(client);
     }
+  }
+  // Seed data for tables CREATED by the migration chain itself (the legacy
+  // hook above runs before Poin 2 — anything touching Poin 2 tables must go
+  // here, after the full chain exists).
+  if (opts?.seedPost) {
+    await opts.seedPost(client);
   }
 
   return {
@@ -168,6 +174,11 @@ export function sha256Hex(value: string): string {
 
 export function generateToken(): string {
   return randomBytes(32).toString("base64url");
+}
+
+/** Raw 32-byte hex token — the format the production session mints use. */
+export function rawHexToken(): string {
+  return randomBytes(32).toString("hex");
 }
 
 /** Calls a public RPC with named-arg ordering preserved. */

@@ -41,6 +41,8 @@ const ASSETS: Record<string, { file: string; sha256: string; exe: string }> = {
 export type PostgrestHandle = {
   url: string;
   jwt: (claims: Record<string, unknown>) => string;
+  /** JWT signed with a DIFFERENT secret — must be rejected (401). */
+  forgeJwt: (claims: Record<string, unknown>) => string;
   stop: () => Promise<void>;
 };
 
@@ -122,29 +124,35 @@ export async function startPostgrestHarness(connectionString: string): Promise<P
   const child = spawn(exe, [configPath], { stdio: "ignore" });
   const url = `http://127.0.0.1:${port}`;
   let ready = false;
-  for (let i = 0; i < 60; i++) {
-    if (child.exitCode !== null) {
-      throw new Error(`postgrest exited early with code ${child.exitCode}`);
-    }
-    try {
-      const res = await fetch(`${url}/`);
-      if (res.ok) {
-        ready = true;
-        break;
+  try {
+    for (let i = 0; i < 60; i++) {
+      if (child.exitCode !== null) {
+        throw new Error(`postgrest exited early with code ${child.exitCode}`);
       }
-    } catch {
-      // not ready yet
+      try {
+        const res = await fetch(`${url}/`);
+        if (res.ok) {
+          ready = true;
+          break;
+        }
+      } catch {
+        // not ready yet
+      }
+      await new Promise((r) => setTimeout(r, 500));
     }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  if (!ready) {
-    child.kill();
-    throw new Error("postgrest did not become ready within 30s");
+    if (!ready) {
+      child.kill();
+      throw new Error("postgrest did not become ready within 30s");
+    }
+  } catch (error) {
+    fs.rmSync(configPath, { force: true });
+    throw error;
   }
 
   return {
     url,
     jwt: (claims) => signJwt(secret, claims),
+    forgeJwt: (claims) => signJwt(randomBytes(32).toString("hex"), claims),
     stop: async () => {
       child.kill();
       fs.rmSync(configPath, { force: true });

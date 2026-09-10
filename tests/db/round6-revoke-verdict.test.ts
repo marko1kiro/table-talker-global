@@ -5,12 +5,13 @@
 // junk tokens and kind-mismatched tokens are refused.
 // Baseline (boolean RPC): every assertion below fails.
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
-import { randomBytes } from "node:crypto";
 import type { Client } from "pg";
 import {
   connect,
   createTestDb,
   generateToken,
+  mintActiveManagerSession,
+  rawHexToken,
   rpc,
   scryptHash,
   sha256Hex,
@@ -53,7 +54,7 @@ afterEach(async () => {
 });
 
 function rawToken(): string {
-  return randomBytes(32).toString("hex");
+  return rawHexToken();
 }
 
 async function seedManagerSession(token: string): Promise<void> {
@@ -115,6 +116,20 @@ describe("R6-B: structured revocation verdicts", () => {
       p_token: rawToken(),
     });
     expect((junk.data as Verdict)?.verdict).toBe("UNKNOWN_TOKEN");
+  });
+
+  test("newest-wins supersede leaves no tombstone: dead token is UNKNOWN_TOKEN (why cleanup tolerates it)", async () => {
+    const c = await db.client();
+    const oldToken = await mintActiveManagerSession(c, MANAGER_ID);
+    // Second handshake deletes the first manager_sessions row WITHOUT a
+    // tombstone (09060000 newest-wins). The surrendered old token must then
+    // read as UNKNOWN_TOKEN — provably not live, hence the cleanup tolerance
+    // in revokeManagerSessionByTokenIfLive({ tolerateUnknown }).
+    await mintActiveManagerSession(c, MANAGER_ID);
+    const { data } = await rpc<Verdict>(c, "revoke_manager_session_by_token", {
+      p_token: oldToken,
+    });
+    expect((data as Verdict)?.verdict).toBe("UNKNOWN_TOKEN");
   });
 
   test("staff token passed to manager revoke -> KIND_MISMATCH, staff row untouched", async () => {

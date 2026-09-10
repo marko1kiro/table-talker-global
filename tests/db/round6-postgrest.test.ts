@@ -35,6 +35,11 @@ const seedLegacy: LegacySeed = async (c) => {
      values ($1, 'budi.santoso', 'Budi Santoso', $2, 'oldsalt:oldhash', 'aktif')`,
     [MANAGER_ID, R1],
   );
+};
+
+// area_manager_accounts is CREATED by the Poin 2 chain (09010000) — it must
+// be seeded AFTER the full chain, not in the pre-Poin-2 legacy hook.
+const seedPost: LegacySeed = async (c) => {
   await c.query(
     `insert into public.area_manager_accounts (id, staff_id, full_name, password_hash, status, password_changed_at)
      values ($1, 'am.satu', 'AM Satu', 'oldsalt:oldhash', 'aktif', now())`,
@@ -48,7 +53,7 @@ let dbClient: Awaited<ReturnType<TestDb["client"]>>;
 
 beforeAll(async () => {
   if (!RUN) return;
-  db = await createTestDb("lime_r6_postgrest", { seedLegacy });
+  db = await createTestDb("lime_r6_postgrest", { seedLegacy, seedPost });
   dbClient = await db.client();
   pgrst = await startPostgrestHarness(db.connectionString);
 }, 600_000);
@@ -88,6 +93,15 @@ const service = () => pgrst.jwt({ role: "service_role", sub: "r6-evidence" });
 describe.skipIf(!RUN)("R6-E: PostgREST HTTP evidence (digest-pinned, required in CI)", () => {
   it("anon: no JWT -> 401 permission denied", async () => {
     const r = await rpcPost("get_manager_credential", { p_id_manager: "budi.santoso" });
+    expect(r.status).toBe(401);
+  });
+
+  it("forged signature (wrong secret) -> 401, never 200", async () => {
+    const r = await rpcPost(
+      "get_manager_credential",
+      { p_id_manager: "budi.santoso" },
+      pgrst.forgeJwt({ role: "service_role" }),
+    );
     expect(r.status).toBe(401);
   });
 
@@ -225,11 +239,13 @@ describe.skipIf(!RUN)("R6-E: PostgREST HTTP evidence (digest-pinned, required in
       );
       expect(c.json).toBe("FAILED");
     }
+    // PostgREST serializes a RETURNS TABLE RPC as an ARRAY — an empty result
+    // is [], never null.
     const blocked = await rpcPost(
       "reserve_owner_login_attempt",
       { ...hashes, p_attempt_key: "http-attempt-fresh-aaaa" },
       service(),
     );
-    expect(blocked.json).toBeNull();
+    expect(blocked.json).toEqual([]);
   });
 });

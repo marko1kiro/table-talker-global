@@ -14,7 +14,6 @@ import {
   clearAuthSession,
   readCookieStaffTokens,
   revokeStaffSessionByTokenIfLive,
-  revokeManagerSessionByToken,
   revokeManagerSessionByTokenIfLive,
   type TableTalkerSession,
 } from "./auth.server";
@@ -101,12 +100,17 @@ export type StaffLoginDeps = {
     superAdminToken: string | null;
     areaManagerToken: string | null;
   }>;
-  /** R3-A: server-side revocation of one staff/manager bearer session. */
+  /** R3-A: server-side revocation of one staff/manager bearer session.
+   * Cleanup call sites pass tolerateUnknown for client-surrendered tokens. */
   revokeStaffSessionByToken?: (
     kind: "super_admin" | "area_manager",
     token: string,
+    opts?: { tolerateUnknown?: boolean },
   ) => Promise<void>;
-  revokeManagerSessionByToken?: (token: string) => Promise<void>;
+  revokeManagerSessionByToken?: (
+    token: string,
+    opts?: { tolerateUnknown?: boolean },
+  ) => Promise<void>;
   /** R3-A alternative placement (see LoginStaffOpts). */
   managerTokenToRevoke?: string | null;
   managerExtras?: (staffId: string) => Promise<{ password_changed_at: string | null } | null>;
@@ -161,20 +165,29 @@ async function finalizeAreaManagerCompletion(deps: StaffLoginDeps): Promise<bool
  * R3-A: revokes every OLD credential carried by this browser context
  * (cookie staff bearers + the surrendered manager token). Throws on failure
  * so the caller can fail closed instead of leaving two usable credentials.
+ * These tokens are CLIENT-SURRENDERED: an UNKNOWN_TOKEN verdict proves the
+ * token was already purged elsewhere (newest-wins supersede, account-wide
+ * revoke, cutover delete — none of which leave tombstones), so it cannot
+ * authenticate anything and cleanup must NOT brick this login.
  */
 async function revokePreviousCredentials(
   deps: StaffLoginDeps,
   opts: LoginStaffOpts,
 ): Promise<void> {
+  const tolerateUnknown = { tolerateUnknown: true } as const;
   const cookie = deps.cookieStaffTokens ? await deps.cookieStaffTokens() : null;
   if (cookie?.superAdminToken) {
-    await deps.revokeStaffSessionByToken?.("super_admin", cookie.superAdminToken);
+    await deps.revokeStaffSessionByToken?.("super_admin", cookie.superAdminToken, tolerateUnknown);
   }
   if (cookie?.areaManagerToken) {
-    await deps.revokeStaffSessionByToken?.("area_manager", cookie.areaManagerToken);
+    await deps.revokeStaffSessionByToken?.(
+      "area_manager",
+      cookie.areaManagerToken,
+      tolerateUnknown,
+    );
   }
   if (opts.managerTokenToRevoke) {
-    await deps.revokeManagerSessionByToken?.(opts.managerTokenToRevoke);
+    await deps.revokeManagerSessionByToken?.(opts.managerTokenToRevoke, tolerateUnknown);
   }
 }
 
@@ -205,7 +218,10 @@ export async function loginStaffCore(
     // rate-limit outcome is recorded as a failure (R6-C).
     try {
       if (managerTokenToRevoke) {
-        await deps.revokeManagerSessionByToken?.(managerTokenToRevoke);
+        // Surrendered sessionStorage token: dead (purged elsewhere) is fine.
+        await deps.revokeManagerSessionByToken?.(managerTokenToRevoke, {
+          tolerateUnknown: true,
+        });
       }
       await revokePreviousCredentials(deps, { managerTokenToRevoke: null });
     } catch {
@@ -344,44 +360,45 @@ export const loginStaff = createServerFn({ method: "POST" })
         cookieStaffTokens: readCookieStaffTokens,
         revokeStaffSessionByToken: revokeStaffSessionByTokenIfLive,
         revokeManagerSessionByToken: revokeManagerSessionByTokenIfLive,
-        managerExtras: async (staffId) => {
-          const { data: extra, error } = await client
-            .from("manager_accounts")
-            .select("id, password_changed_at")
-            .eq("id_manager", staffId)
-            .single();
-          if (error || !extra) return { password_changed_at: null };
-          return extra as { password_changed_at: string | null };
-        },
+        managerExtras: (staffId) => managerPasswordChangedAt(client, staffId),
       },
       { managerTokenToRevoke: data.managerToken ?? null },
     );
   });
 
-// R4-A: browser handoff compensation. The server has already minted the
-// manager session when the browser starts its handoff (anon token, identity
-// write, navigation); any failure there must end the session server-side.
-// Idempotent logout semantics: a false verdict proves the token is already
-// unusable, so only errors fail the compensation. The raw token is its own
-// revocation proof (same trust model as the logout endpoint) and travels only
-// in this POST body.
-export const revokeManagerLoginCompensationInput = z.object({
-  managerToken: z.string().min(1).max(200),
-});
-
-export const revokeManagerLoginCompensation = createServerFn({ method: "POST" })
-  .validator(revokeManagerLoginCompensationInput)
-  .handler(async ({ data }): Promise<{ ok: boolean }> => {
-    try {
-      // Idempotent cleanup semantics (R4-B): false proves the token is
-      // already unusable; only transport/malformed errors fail the call.
-      // No liveness probe here — a probe failure must not read as "done".
-      await revokeManagerSessionByToken(data.managerToken);
-      return { ok: true };
-    } catch {
-      return { ok: false };
-    }
-  });
+/**
+ * Reads password_changed_at for a manager account. Legacy rows may carry
+ * mixed-case ids ("AgusKasir") while callers pass the normalized lowercase
+ * id, so the lookup is case-insensitive (ilike) with LIKE-wildcards escaped
+ * — a missed row would falsely trigger the "change your password" reminder.
+ */
+export async function managerPasswordChangedAt(
+  client: {
+    from: (table: string) => {
+      select: (columns: string) => {
+        ilike: (
+          column: string,
+          pattern: string,
+        ) => {
+          single: () => PromiseLike<{ data: unknown; error: unknown }>;
+        };
+      };
+    };
+  },
+  staffId: string,
+): Promise<{ password_changed_at: string | null } | null> {
+  const { data: extra, error } = await client
+    .from("manager_accounts")
+    .select("id, password_changed_at")
+    // PostgREST ilike: backslash escapes % and _ so the id matches literally.
+    .ilike(
+      "id_manager",
+      staffId.replace(/[\\%_]/g, (m) => `\\${m}`),
+    )
+    .single();
+  if (error || !extra || typeof extra !== "object") return null;
+  return extra as { password_changed_at: string | null };
+}
 
 // R5-A + R6-C: pending→active handshake with durable outcome finalization.
 // confirmManagerHandoff activates the pending session AND banks the rate-limit

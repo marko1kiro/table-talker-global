@@ -35,7 +35,9 @@ function StaffLoginPage() {
   const [busy, setBusy] = useState(false);
   // R6-C: one idempotency key per logical attempt. Kept until a DEFINITIVE
   // response arrives, so a retry after a lost response re-reserves the SAME
-  // rate-limit reservation instead of double-counting.
+  // rate-limit reservation instead of double-counting. A thrown (transport)
+  // failure keeps the key — the reservation outcome is unknown and the retry
+  // must reuse it; only a definitive response (handled below) retires it.
   const attemptKeyRef = useRef<string>("");
 
   const canSubmit = staffId.trim().length > 0 && password.length > 0;
@@ -68,9 +70,10 @@ function StaffLoginPage() {
       if (result.role === "manager") {
         // R6-A/R6-C: the server minted a PENDING session and handed us the
         // rate-limit reservation. Every handoff failure (anon token, identity
-        // write, navigation, confirm) cleans the pending session up AND banks
-        // the durable failure outcome. No navigation happens on any failure
-        // path; the raw token never appears in any message, URL, or log.
+        // write, confirm) cleans the pending session up AND banks the durable
+        // failure outcome. A navigation that already happened is followed by
+        // cleanup inside the handoff core; the raw token never appears in any
+        // message, URL, or log.
         const handoff = await managerLoginHandoffCore(
           {
             idManager: result.idManager,
@@ -115,7 +118,8 @@ function StaffLoginPage() {
       removeManagerIdentity(browserManagerStorage());
       void navigate({ to: "/am" });
     } catch {
-      attemptKeyRef.current = "";
+      // Lost response: keep attemptKeyRef so the retry re-reserves the SAME
+      // reservation (a new key here would double-count the attempt).
       setError("Login gagal.");
     } finally {
       setBusy(false);

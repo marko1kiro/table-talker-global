@@ -618,11 +618,6 @@ export async function getCurrentSuperAdminAccount(): Promise<{
   return row ? { id: row.id, staffId: row.staff_id, fullName: row.full_name } : null;
 }
 
-export const logoutSuperAdmin = createServerFn({ method: "POST" }).handler(async () => {
-  await clearAuthSession();
-  return { ok: true };
-});
-
 export const getSuperAdminProfile = createServerFn({ method: "GET" }).handler(async () => {
   const account = await getCurrentSuperAdminAccount();
   if (!account) return { individual: false as const };

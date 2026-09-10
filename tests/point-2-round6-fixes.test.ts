@@ -27,6 +27,10 @@ vi.mock("../src/lib/remote-audio.server", () => ({
   getServiceClient: () => state.client,
 }));
 
+vi.mock("@tanstack/react-start/server", () => ({
+  getRequest: () => ({ headers: new Headers() }),
+}));
+
 function rpcClient(handler: (fn: string, params: Record<string, unknown>) => unknown) {
   return { rpc: async (fn: string, params: Record<string, unknown>) => handler(fn, params) };
 }
@@ -48,9 +52,9 @@ describe("surrendered-token cleanup: UNKNOWN_TOKEN tolerance is opt-in", () => {
   it("default stays fail-closed: UNKNOWN_TOKEN throws (junk never counts as inactive)", async () => {
     state.client = rpcClient(junk);
     await expect(revokeManagerSessionByTokenIfLive("tok")).rejects.toThrow("UNKNOWN_TOKEN");
-    await expect(
-      revokeStaffSessionByTokenIfLive("area_manager", "tok"),
-    ).rejects.toThrow("UNKNOWN_TOKEN");
+    await expect(revokeStaffSessionByTokenIfLive("area_manager", "tok")).rejects.toThrow(
+      "UNKNOWN_TOKEN",
+    );
     await expect(revokeManagerSessionByToken("tok")).rejects.toThrow("UNKNOWN_TOKEN");
     await expect(revokeStaffSessionByToken("area_manager", "tok")).rejects.toThrow("UNKNOWN_TOKEN");
   });
@@ -171,7 +175,7 @@ describe("managerExtras: case-insensitive legacy id lookup", () => {
       stubClient({ id: "m1", password_changed_at: null }, capture),
       "aguskasir",
     );
-    expect(result).toBeNull(); // password_changed_at null -> remind
+    expect(result).toEqual({ id: "m1", password_changed_at: null }); // null -> remind
     expect(capture.pattern).toBe("aguskasir");
   });
 
@@ -189,6 +193,6 @@ describe("managerExtras: case-insensitive legacy id lookup", () => {
       stubClient({ id: "m1", password_changed_at: "2026-01-01T00:00:00Z" }),
       "agus.kasir",
     );
-    expect(result).toBe("2026-01-01T00:00:00Z");
+    expect(result).toEqual({ id: "m1", password_changed_at: "2026-01-01T00:00:00Z" });
   });
 });

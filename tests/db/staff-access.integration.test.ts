@@ -1765,7 +1765,7 @@ describe("R3-A: single-session revocation by raw token", () => {
         })
       ).verdict,
     ).toBe("ALREADY_INACTIVE");
-    await rpcOk<boolean>(c, "revoke_staff_session_by_token", {
+    await rpcOk<{ verdict: string }>(c, "revoke_staff_session_by_token", {
       p_kind: "super_admin",
       p_token: t2,
     });

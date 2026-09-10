@@ -357,11 +357,14 @@ export const logout = createServerFn({ method: "POST" }).handler(async () => {
     await import("./auth.server");
   // R3-A: revoke the CURRENT server session BEFORE clearing the cookie. On
   // revocation failure the cookie stays (fail closed) — the caller reports a
-  // failed logout instead of silently leaving a live bearer behind.
+  // failed logout instead of silently leaving a live bearer behind. The
+  // token is client-surrendered: UNKNOWN_TOKEN (purged elsewhere without a
+  // tombstone) proves it is already unusable, so cleanup passes tolerance —
+  // a dead token must not brick logout or the next login for this browser.
   const session = await getAuthSession();
   const token = session.data.superAdminSessionToken;
   if (token) {
-    await revokeStaffSessionByToken("super_admin", token);
+    await revokeStaffSessionByToken("super_admin", token, { tolerateUnknown: true });
   }
   await clearAuthSession();
   return { ok: true };

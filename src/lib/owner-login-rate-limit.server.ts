@@ -6,63 +6,6 @@ import { getServiceClient } from "./remote-audio.server";
 
 type Reservation = { reservation_id: string };
 
-export type OwnerLoginRateLimitBucket = {
-  sequence: number;
-  lastSuccessSequence: number;
-  failures: number;
-  windowStartedAt: number;
-  blockedUntil: number | null;
-};
-
-export function canCompleteOwnerLoginReservation(
-  reservation: { consumedAt: number | null; expiresAt: number },
-  now: number,
-) {
-  return reservation.consumedAt === null && reservation.expiresAt > now;
-}
-
-export function reserveOwnerLoginSequences(
-  client: OwnerLoginRateLimitBucket,
-  ip: OwnerLoginRateLimitBucket,
-) {
-  return {
-    client: { ...client, sequence: client.sequence + 1 },
-    ip: { ...ip, sequence: ip.sequence + 1 },
-    clientSequence: client.sequence + 1,
-    ipSequence: ip.sequence + 1,
-  };
-}
-
-export function applyOwnerLoginAttempt(
-  bucket: OwnerLoginRateLimitBucket,
-  reservationSequence: number,
-  success: boolean,
-  now: number,
-): OwnerLoginRateLimitBucket {
-  if (success) {
-    const watermarked = {
-      ...bucket,
-      lastSuccessSequence: Math.max(bucket.lastSuccessSequence, reservationSequence),
-    };
-    if (bucket.sequence !== reservationSequence) return watermarked;
-    return {
-      ...watermarked,
-      failures: 0,
-      windowStartedAt: now,
-      blockedUntil: null,
-    };
-  }
-  if (reservationSequence <= bucket.lastSuccessSequence) return bucket;
-  const inWindow = bucket.windowStartedAt > now - 15 * 60 * 1_000;
-  const failures = inWindow ? bucket.failures + 1 : 1;
-  return {
-    ...bucket,
-    failures,
-    windowStartedAt: inWindow ? bucket.windowStartedAt : now,
-    blockedUntil: failures >= 5 ? now + 15 * 60 * 1_000 : bucket.blockedUntil,
-  };
-}
-
 export function hashOwnerLoginRateLimitBucket(value: string, secret = getAuthSecret()) {
   return createHmac("sha256", secret).update(value).digest("hex");
 }
