@@ -52,7 +52,9 @@ drop function if exists public.create_manager_session_pending(uuid);
 revoke all on function public.create_manager_session_pending(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.create_manager_session_pending(uuid, uuid) to service_role;
 
-create or replace function public.confirm_manager_session(
+drop function if exists public.confirm_manager_session(text, uuid);
+
+create function public.confirm_manager_session(
   p_token text,
   p_reservation_id uuid
 )
