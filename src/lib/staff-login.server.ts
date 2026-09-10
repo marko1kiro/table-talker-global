@@ -194,7 +194,6 @@ export async function loginStaffCore(
 ): Promise<LoginStaffResult> {
   const staffId = normalizeStaffId(rawStaffId);
   const managerTokenToRevoke = opts.managerTokenToRevoke ?? deps.managerTokenToRevoke ?? null;
-
   // 1) Manager namespace first (existing bearer-token dashboard model).
   //    loginManagerCore mints the session internally, so its ok flag already
   //    means "usable session established".

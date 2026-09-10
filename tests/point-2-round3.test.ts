@@ -237,6 +237,7 @@ describe("R3-A: role switches revoke the PREVIOUS server sessions", () => {
       verify: async () => true,
       report: async () => "SUCCEEDED",
       updateSession: async () => undefined,
+      rateLimitReservationId: RESV,
       cookieStaffTokens: async () => ({ superAdminToken: "old-sa", areaManagerToken: "old-am" }),
       revokeStaffSessionByToken: async (kind, token) => {
         revoked.push(`${kind}:${token}`);

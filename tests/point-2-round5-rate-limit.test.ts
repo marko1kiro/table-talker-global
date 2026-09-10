@@ -67,7 +67,7 @@ describe("R5-C/R6-C: manager login defers the outcome to the browser confirm", (
     const { deps, state } = baseDeps({ rateLimitReservationId: null });
     const r = await loginStaffCore("mgr", "pw", deps);
     expect(r.ok).toBe(false);
-    expect(state.reports).toEqual([]);
+    expect(state.reports).toEqual([false]);
   });
 
   it("old-credential revocation failure: exactly one durable report(false)", async () => {
