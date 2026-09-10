@@ -126,16 +126,31 @@ describe.skipIf(!RUN)("R6-E: PostgREST HTTP evidence (digest-pinned, required in
   });
 
   it("manager handshake over HTTP: pending -> confirm -> resolve -> revoke verdict", async () => {
+    const reserve = await rpcPost(
+      "reserve_owner_login_attempt",
+      {
+        p_client_bucket_hash: "a".repeat(64),
+        p_ip_bucket_hash: "b".repeat(64),
+        p_attempt_key: "postgrest-manager-handshake-aaaa",
+      },
+      service(),
+    );
+    const reservationId = (reserve.json as Array<{ reservation_id: string }>)[0]?.reservation_id;
+    expect(reservationId).toBeTruthy();
     const mint = await rpcPost(
       "create_manager_session_pending",
-      { p_manager_id: MANAGER_ID },
+      { p_manager_id: MANAGER_ID, p_reservation_id: reservationId },
       service(),
     );
     expect(mint.status).toBe(200);
     const token = mint.json as string;
     expect(typeof token).toBe("string");
 
-    const confirm = await rpcPost("confirm_manager_session", { p_token: token }, service());
+    const confirm = await rpcPost(
+      "confirm_manager_session",
+      { p_token: token, p_reservation_id: reservationId },
+      service(),
+    );
     expect(confirm.status).toBe(200);
     expect(confirm.json).toBe(true);
 
