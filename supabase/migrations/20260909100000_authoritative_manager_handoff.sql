@@ -32,19 +32,14 @@ begin
     perform pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtextextended(p_attempt_key, 915)
     );
+    -- A logical attempt keeps one durable identity even after completion.
+    -- Returning the same consumed reservation lets a caller reconcile a
+    -- committed operation whose response was lost without double-counting.
     select r.id into v_id
     from public.owner_login_rate_limit_reservations r
-    where r.attempt_key = p_attempt_key
-      and r.consumed_at is null
-      and r.expires_at > now();
+    where r.attempt_key = p_attempt_key;
     if v_id is not null then
       return query select v_id;
-      return;
-    end if;
-    if exists (
-      select 1 from public.owner_login_rate_limit_reservations
-      where attempt_key = p_attempt_key
-    ) then
       return;
     end if;
   end if;

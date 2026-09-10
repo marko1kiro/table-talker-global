@@ -60,10 +60,10 @@ function StaffLoginPage() {
           managerToken: readManagerIdentity(browserManagerStorage())?.managerToken,
         },
       });
-      // Definitive response: the attempt is over — the next submit is a new
-      // logical attempt with a fresh key.
-      attemptKeyRef.current = "";
       if (!result.ok) {
+        // A resolved failure is terminal. Transport loss throws and keeps the
+        // key in the catch path below for authoritative reconciliation.
+        attemptKeyRef.current = "";
         setError(result.message);
         return;
       }
@@ -109,13 +109,18 @@ function StaffLoginPage() {
           },
         );
         if (!handoff.ok) {
+          // cleanup_failed is uncertain: preserve the logical attempt key so a
+          // retry can recover the same consumed reservation and bearer.
+          if (handoff.reason === "handoff_failed") attemptKeyRef.current = "";
           setError("Gagal memulai sesi. Coba lagi.");
           return;
         }
+        attemptKeyRef.current = "";
         return;
       }
       // Area Manager: cookie session sudah dibuat server-side; redirect by role.
       // Review A4: satu role per browser — identitas manager lama dihapus.
+      attemptKeyRef.current = "";
       removeManagerIdentity(browserManagerStorage());
       void navigate({ to: "/am" });
     } catch {

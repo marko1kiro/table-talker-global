@@ -152,12 +152,12 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
     expect(second).toBe(first);
   });
 
-  test("attempt key is dead after a final outcome (no reuse)", async () => {
+  test("attempt key reconciles to the same reservation after a final outcome", async () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-bbbbbbbbbbbb");
     await complete(c, id as string, false);
-    const reuse = await reserve(c, "attempt-key-bbbbbbbbbbbb");
-    expect(reuse).toBeNull();
+    const retry = await reserve(c, "attempt-key-bbbbbbbbbbbb");
+    expect(retry).toBe(id);
   });
 
   test("fresh keys still pass the SAME bucket enforcement (rotation is not a bypass)", async () => {
@@ -173,15 +173,17 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
     expect(blockedNewKey).toBeNull();
   });
 
-  test("expired reservation with a used key cannot be re-reserved", async () => {
+  test("expired attempt identity remains stable but cannot be consumed again", async () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-expired-aaaaaa");
     await c.query(
       `update public.owner_login_rate_limit_reservations set expires_at = now() - interval '1 second' where id = $1`,
       [id],
     );
-    const reuse = await reserve(c, "attempt-key-expired-aaaaaa");
-    expect(reuse).toBeNull();
+    const retry = await reserve(c, "attempt-key-expired-aaaaaa");
+    expect(retry).toBe(id);
+    const completed = await complete(c, id as string, false);
+    expect(completed.data).toBe("EXPIRED");
   });
 
   test("confirm activates the pending session AND finalizes the outcome atomically", async () => {
