@@ -121,11 +121,7 @@ describe.skipIf(!RUN)("R6-E: PostgREST HTTP evidence (digest-pinned, required in
     expect(resolve.status).toBe(200);
     expect(resolve.json).toBe(MANAGER_ID);
 
-    const revoke = await rpcPost(
-      "revoke_manager_session_by_token",
-      { p_token: token },
-      service(),
-    );
+    const revoke = await rpcPost("revoke_manager_session_by_token", { p_token: token }, service());
     expect(revoke.status).toBe(200);
     expect(revoke.json).toEqual({ verdict: "REVOKED" });
 
