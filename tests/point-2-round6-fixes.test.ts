@@ -20,6 +20,7 @@ import {
   reserveOwnerLoginAttempt,
 } from "../src/lib/owner-login-rate-limit.server";
 import { managerPasswordChangedAt } from "../src/lib/staff-login.server";
+import { superAdminLoginCore, type SuperAdminLoginDeps } from "../src/lib/auth";
 
 const state = vi.hoisted(() => ({ client: undefined as unknown }));
 
@@ -156,6 +157,86 @@ describe("owner-limiter TS adapter verdict mapping", () => {
   });
 });
 
+describe("SA login surrendered-token cleanup passes tolerance", () => {
+  function saDeps(revokes: {
+    staff: Array<{ kind: string; token: string; opts: unknown }>;
+    manager: Array<{ token: string; opts: unknown }>;
+  }) {
+    return {
+      rpc: (async (fn: string) =>
+        fn === "bootstrap_super_admin_state"
+          ? { data: { open: true, active_count: 0 }, error: null }
+          : { data: null, error: null }) as SuperAdminLoginDeps["rpc"],
+      report: async () => true,
+      verify: async () => true,
+      updateSession: async () => undefined,
+      legacyPassword: "pw",
+      cookieStaffTokens: async () => ({
+        superAdminToken: "cookie-sa",
+        areaManagerToken: "cookie-am",
+      }),
+      revokeStaffSessionByToken: (async (
+        kind: string,
+        token: string,
+        opts: unknown,
+      ) => revokes.staff.push({ kind, token, opts })) as SuperAdminLoginDeps["revokeStaffSessionByToken"],
+      revokeManagerSessionByToken: (async (token: string, opts: unknown) =>
+        revokes.manager.push({ token, opts })) as SuperAdminLoginDeps["revokeManagerSessionByToken"],
+      managerTokenToRevoke: "surrendered-mgr",
+    } satisfies SuperAdminLoginDeps;
+  }
+
+  it("legacy SA login: every surrendered token revocation passes tolerateUnknown", async () => {
+    const revokes = { staff: [], manager: [] } as {
+      staff: Array<{ kind: string; token: string; opts: unknown }>;
+      manager: Array<{ token: string; opts: unknown }>;
+    };
+    const result = await superAdminLoginCore(
+      { mode: "legacy", password: "pw" },
+      saDeps(revokes),
+    );
+    expect(result).toEqual({ ok: true });
+    expect(revokes.staff).toEqual([
+      { kind: "super_admin", token: "cookie-sa", opts: { tolerateUnknown: true } },
+      { kind: "area_manager", token: "cookie-am", opts: { tolerateUnknown: true } },
+    ]);
+    expect(revokes.manager).toEqual([
+      { token: "surrendered-mgr", opts: { tolerateUnknown: true } },
+    ]);
+  });
+
+  it("individual SA login: surrendered revocations tolerate unknown; just-minted compensation stays strict", async () => {
+    const revokes = { staff: [], manager: [] } as unknown as {
+      staff: Array<{ kind: string; token: string; opts: unknown }>;
+      manager: Array<{ token: string; opts: unknown }>;
+    };
+    const deps = {
+      ...saDeps(revokes),
+      rpc: (async (fn: string, params: Record<string, unknown>) =>
+        fn === "get_super_admin_credential"
+          ? {
+              data: { id: "sa-1", password_hash: "x:y", status: "aktif" },
+              error: null,
+            }
+          : fn === "create_staff_session"
+            ? { data: "minted-sa-token", error: null }
+            : { data: null, error: null }) as SuperAdminLoginDeps["rpc"],
+      cookieStaffTokens: async () => ({ superAdminToken: null, areaManagerToken: "cookie-am" }),
+    } satisfies SuperAdminLoginDeps;
+    const result = await superAdminLoginCore(
+      { mode: "individual", staffId: "sa.budi", password: "pw" },
+      deps,
+    );
+    expect(result).toEqual({ ok: true });
+    expect(revokes.staff).toEqual([
+      { kind: "area_manager", token: "cookie-am", opts: { tolerateUnknown: true } },
+    ]);
+    expect(revokes.manager).toEqual([
+      { token: "surrendered-mgr", opts: { tolerateUnknown: true } },
+    ]);
+  });
+});
+
 describe("managerExtras: case-insensitive legacy id lookup", () => {
   function stubClient(row: Record<string, unknown> | null, capture: { pattern?: string } = {}) {
     const chain = {
@@ -186,6 +267,20 @@ describe("managerExtras: case-insensitive legacy id lookup", () => {
       "pe%d_kasir",
     );
     expect(capture.pattern).toBe("pe\\%d\\_kasir");
+  });
+
+  it("PostgREST glob metas (dot, star) are escaped too - real ids are dotted", async () => {
+    const capture: { pattern?: string } = {};
+    await managerPasswordChangedAt(
+      stubClient({ id: "m1", password_changed_at: "set" }, capture),
+      "budi.santoso",
+    );
+    expect(capture.pattern).toBe("budi\\.santoso");
+    await managerPasswordChangedAt(
+      stubClient({ id: "m1", password_changed_at: "set" }, capture),
+      "man*ger",
+    );
+    expect(capture.pattern).toBe("man\\*ger");
   });
 
   it("found row with password_changed_at set -> no reminder", async () => {
