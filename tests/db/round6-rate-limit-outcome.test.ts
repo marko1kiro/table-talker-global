@@ -167,10 +167,13 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
 
   test("confirm activates the pending session AND finalizes the outcome atomically", async () => {
     const c = await db.client();
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", { p_manager_id: MANAGER_ID })
-    ).data as string;
     const id = await reserve(c, "attempt-key-confirm-aaaaaaa");
+    const token = (
+      await rpc<string>(c, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+        p_reservation_id: id,
+      })
+    ).data as string;
     expect(id).toBeTruthy();
 
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
@@ -192,10 +195,14 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
 
   test("confirm refuses an already-consumed reservation and activates NOTHING", async () => {
     const c = await db.client();
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", { p_manager_id: MANAGER_ID })
-    ).data as string;
     const id = await reserve(c, "attempt-key-consumed-aaaaaa");
+    expect(id).toBeTruthy();
+    const token = (
+      await rpc<string>(c, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+        p_reservation_id: id,
+      })
+    ).data as string;
     await complete(c, id as string, false);
 
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
@@ -211,8 +218,12 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
 
   test("confirm with an unknown reservation activates nothing (fail closed)", async () => {
     const c = await db.client();
+    const id = await reserve(c, "attempt-key-mismatch-aaaaaa");
     const token = (
-      await rpc<string>(c, "create_manager_session_pending", { p_manager_id: MANAGER_ID })
+      await rpc<string>(c, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+        p_reservation_id: id,
+      })
     ).data as string;
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
       p_token: token,
