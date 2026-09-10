@@ -10,7 +10,15 @@
 // confirm): every test below fails.
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import type { Client } from "pg";
-import { createTestDb, rpc, scryptHash, sha256Hex, stopAll, type TestDb } from "./harness";
+import {
+  createTestDb,
+  rawHexToken,
+  rpc,
+  scryptHash,
+  sha256Hex,
+  stopAll,
+  type TestDb,
+} from "./harness";
 
 const R1 = "11111111-1111-4111-8111-111111111111";
 const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
@@ -71,6 +79,17 @@ async function complete(
     p_reservation_id: reservationId,
     p_success: success,
   });
+}
+
+async function mintPending(c: Client, reservationId: string): Promise<string> {
+  const token = rawHexToken();
+  const minted = await rpc<boolean>(c, "create_manager_session_pending", {
+    p_manager_id: MANAGER_ID,
+    p_reservation_id: reservationId,
+    p_token: token,
+  });
+  if (minted.data !== true) throw new Error(`pending mint failed: ${minted.error ?? "unknown"}`);
+  return token;
 }
 
 describe("R6-C: reservation state machine is durable and exactly-once", () => {
@@ -168,12 +187,7 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
   test("confirm activates the pending session AND finalizes the outcome atomically", async () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-confirm-aaaaaaa");
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-        p_reservation_id: id,
-      })
-    ).data as string;
+    const token = await mintPending(c, id as string);
     expect(id).toBeTruthy();
 
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
@@ -197,12 +211,7 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-consumed-aaaaaa");
     expect(id).toBeTruthy();
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-        p_reservation_id: id,
-      })
-    ).data as string;
+    const token = await mintPending(c, id as string);
     await complete(c, id as string, false);
 
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
@@ -219,12 +228,7 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
   test("confirm with an unknown reservation activates nothing (fail closed)", async () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-mismatch-aaaaaa");
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-        p_reservation_id: id,
-      })
-    ).data as string;
+    const token = await mintPending(c, id as string);
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
       p_token: token,
       p_reservation_id: "00000000-0000-4000-8000-000000000000",

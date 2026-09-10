@@ -1,5 +1,7 @@
+import { createHmac } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { getAuthSecret } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
 import { verifyManagerPassword } from "./manager-password.server";
 import type { RpcCaller } from "./role-session.server";
@@ -42,22 +44,33 @@ export type LoginManagerResult =
       message: string;
     };
 
-// create_manager_session_pending returns the plaintext bearer token as a
-// scalar string. R6-A: the login path mints a PENDING session (60s TTL,
-// unusable by every consumer until the browser confirms the handoff). The
-// legacy active-mint RPC create_manager_session was dropped — no caller may
-// establish a usable session server-side anymore.
+// The bearer is deterministic for one manager+reservation but unforgeable
+// without AUTH_SECRET. A lost server response can therefore be retried with
+// the exact same bearer while the database persists only its SHA-256 hash.
+export function deriveManagerSessionToken(
+  managerId: string,
+  rateLimitReservationId: string,
+  secret = getAuthSecret(),
+): string {
+  return createHmac("sha256", secret)
+    .update(`manager-session:${managerId}:${rateLimitReservationId}`)
+    .digest("hex");
+}
+
 async function defaultCreateSession(
   rpc: RpcCaller,
   managerId: string,
   rateLimitReservationId?: string,
 ): Promise<{ token: string; expiresAt: string } | null> {
+  if (!rateLimitReservationId) return null;
+  const token = deriveManagerSessionToken(managerId, rateLimitReservationId);
   const { data, error } = await rpc("create_manager_session_pending", {
     p_manager_id: managerId,
     p_reservation_id: rateLimitReservationId,
+    p_token: token,
   });
-  if (error || typeof data !== "string" || !data) return null;
-  return { token: data, expiresAt: "" };
+  if (error || data !== true) return null;
+  return { token, expiresAt: "" };
 }
 
 export async function loginManagerCore(

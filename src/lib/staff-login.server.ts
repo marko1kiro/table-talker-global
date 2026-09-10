@@ -412,21 +412,37 @@ export const confirmManagerHandoffInput = z.object({
   rateLimitReservationId: z.string().uuid(),
 });
 
+type HandoffRpcClient = {
+  rpc: (
+    fn: string,
+    params: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+
+type ManagerHandoffRequest = z.infer<typeof confirmManagerHandoffInput>;
+
+/**
+ * A thrown RPC call is a transport-loss signal, not an authoritative failure.
+ * It must cross the server-function boundary so the browser handoff retries the
+ * same token + reservation and reconciles a commit whose response was lost.
+ */
+export async function confirmManagerHandoffCore(
+  client: HandoffRpcClient,
+  data: ManagerHandoffRequest,
+): Promise<boolean> {
+  const { data: result, error } = await client.rpc("confirm_manager_session", {
+    p_token: data.managerToken,
+    p_reservation_id: data.rateLimitReservationId,
+  });
+  return !error && result === true;
+}
+
 export const confirmManagerHandoff = createServerFn({ method: "POST" })
   .validator(confirmManagerHandoffInput)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
     const client = getServiceClient();
     if (!client) return { ok: false };
-    try {
-      const { data: result, error } = await client.rpc("confirm_manager_session", {
-        p_token: data.managerToken,
-        p_reservation_id: data.rateLimitReservationId,
-      });
-      if (error) return { ok: false };
-      return { ok: result === true };
-    } catch {
-      return { ok: false };
-    }
+    return { ok: await confirmManagerHandoffCore(client, data) };
   });
 
 // R5-A + R6-C: failure-path cleanup. The unconfirmed pending session is
@@ -438,28 +454,39 @@ export const cleanupManagerPendingSessionInput = z.object({
   rateLimitReservationId: z.string().uuid().optional(),
 });
 
+type FailureCompleter = (
+  reservationId: string,
+  success: false,
+) => Promise<Awaited<ReturnType<StaffLoginDeps["report"]>>>;
+
+/** Cleanup is successful only when both pending deletion and durable failure
+ * accounting are authoritative. Transport, timeout, malformed, and unknown
+ * states are surfaced to the browser as cleanup_failed rather than swallowed. */
+export async function cleanupManagerPendingSessionCore(
+  client: HandoffRpcClient,
+  data: ManagerHandoffRequest,
+  complete: FailureCompleter,
+): Promise<boolean> {
+  const { data: cleaned, error } = await client.rpc("cleanup_pending_manager_session", {
+    p_token: data.managerToken,
+    p_reservation_id: data.rateLimitReservationId,
+  });
+  if (error || cleaned !== true) return false;
+  const verdict = await complete(data.rateLimitReservationId, false);
+  return verdict === "FAILED" || verdict === "ALREADY_FAILED";
+}
+
 export const cleanupManagerPendingSession = createServerFn({ method: "POST" })
   .validator(cleanupManagerPendingSessionInput)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
     const client = getServiceClient();
-    if (!client) return { ok: false };
-    let cleaned = false;
-    try {
-      const { error } = await client.rpc("cleanup_pending_manager_session", {
-        p_token: data.managerToken,
-      });
-      cleaned = !error;
-    } catch {
-      cleaned = false;
-    }
-    // Best-effort durable failure accounting; the pending TTL bounds the rest.
-    if (data.rateLimitReservationId) {
-      try {
-        const { completeOwnerLoginAttempt } = await import("./owner-login-rate-limit.server");
-        await completeOwnerLoginAttempt(data.rateLimitReservationId, false);
-      } catch {
-        // reservation expires unconsumed; bounded
-      }
-    }
-    return { ok: cleaned };
+    if (!client || !data.rateLimitReservationId) return { ok: false };
+    const { completeOwnerLoginAttempt } = await import("./owner-login-rate-limit.server");
+    return {
+      ok: await cleanupManagerPendingSessionCore(
+        client,
+        { ...data, rateLimitReservationId: data.rateLimitReservationId },
+        completeOwnerLoginAttempt,
+      ),
+    };
   });

@@ -101,9 +101,10 @@ function StaffLoginPage() {
               return r?.ok === true;
             },
             cleanupPending: async (managerToken, rateLimitReservationId) => {
-              await cleanupManagerPendingSession({
+              const r = await cleanupManagerPendingSession({
                 data: { managerToken, rateLimitReservationId },
               });
+              if (r?.ok !== true) throw new Error("manager handoff cleanup failed");
             },
           },
         );

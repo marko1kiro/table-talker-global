@@ -13,6 +13,7 @@
 // needs a VC++ runtime component this dev machine cannot load.
 // Realtime (WebSocket) evidence remains DB-level only — the embedded stack
 // has no Realtime server; reported honestly in the round report.
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { TestDb } from "./harness";
 import { createTestDb, stopAll, type LegacySeed } from "./harness";
@@ -137,14 +138,14 @@ describe.skipIf(!RUN)("R6-E: PostgREST HTTP evidence (digest-pinned, required in
     );
     const reservationId = (reserve.json as Array<{ reservation_id: string }>)[0]?.reservation_id;
     expect(reservationId).toBeTruthy();
+    const token = randomBytes(32).toString("hex");
     const mint = await rpcPost(
       "create_manager_session_pending",
-      { p_manager_id: MANAGER_ID, p_reservation_id: reservationId },
+      { p_manager_id: MANAGER_ID, p_reservation_id: reservationId, p_token: token },
       service(),
     );
     expect(mint.status).toBe(200);
-    const token = mint.json as string;
-    expect(typeof token).toBe("string");
+    expect(mint.json).toBe(true);
 
     const confirm = await rpcPost(
       "confirm_manager_session",
