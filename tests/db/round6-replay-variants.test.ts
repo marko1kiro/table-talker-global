@@ -13,7 +13,8 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createTestDb, rpc, stopAll, type Client, type LegacySeed, type TestDb } from "./harness";
+import type { Client } from "pg";
+import { createTestDb, rpc, stopAll, type LegacySeed, type TestDb } from "./harness";
 
 const POIN2_MIGRATIONS = [
   "20260909010000_staff_identity_schema.sql",
@@ -119,10 +120,7 @@ const VARIANT_C: Variant = {
 
 /** Legacy sessions must be seeded BEFORE the Poin 2 migrations run (the
  * SEED_AFTER hook runs pre-09010000) so the cutover sees them. */
-async function seedSessions(
-  c: Client,
-  sessions: Array<[string, string, number]>,
-): Promise<void> {
+async function seedSessions(c: Client, sessions: Array<[string, string, number]>): Promise<void> {
   for (const [managerId, restaurantId, hours] of sessions) {
     await c.query(
       `insert into public.manager_sessions (manager_id, restaurant_id, token_hash, expires_at)
@@ -160,7 +158,7 @@ async function assertCutoverEndState(c: Client) {
     `select column_name from information_schema.columns
      where table_schema = 'public' and table_name = 'owner_login_rate_limit_reservations'`,
   );
-  const names = cols.rows.map((r) => r.column_name as string);
+  const names = cols.rows.map((r: { column_name: string }) => r.column_name as string);
   expect(names).toContain("attempt_key");
   expect(names).toContain("outcome");
 }

@@ -1,0 +1,10 @@
+{
+    "20260909010000_staff_identity_schema.sql": "eee68a6ca6bfd169152fe50a7294b2d131c3cf3251bca79e12262dbc5f7d4787",
+    "20260909020000_staff_access_rpcs.sql": "b9212174dc06bdbbcf60ee5544c78a28407709c61ef4fefc842c746c52e5753e",
+    "20260909030000_backfill_staff_id_registry.sql": "d4fcbc7778deb8847e3ad7ba9d86c8fbb6321f351988f55713209a5287ac7feb",
+    "20260909040000_fix_realtime_bind_null_guard.sql": "c3057b37882c1c57e2dd2cd5583d088044fc8da7a45633085b13e4a16169827e",
+    "20260909050000_staff_session_revocation_rpcs.sql": "0da19c1be3aa29e5f47a83eaafd30816d20229397ff599034c7326836e54d1e6",
+    "20260909060000_manager_handoff_pending.sql": "b885c549e9babbbb571f082ddc79ce8162a689b7822b9b9db4787af688edb9ba",
+    "20260909070000_session_revocation_verdicts.sql": "fff83bb650756401c9e6fc4f7c0e050e211b24eca5da1f9ba6391aeed753156a",
+    "20260909080000_rate_limit_attempt_outcome.sql": "e8a9ad31121c412619b91768d2d609f1caea240fe5b8e8a889288148792671ce"
+}
