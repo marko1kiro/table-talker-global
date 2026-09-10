@@ -175,13 +175,12 @@ describe("SA login surrendered-token cleanup passes tolerance", () => {
         superAdminToken: "cookie-sa",
         areaManagerToken: "cookie-am",
       }),
-      revokeStaffSessionByToken: (async (
-        kind: string,
-        token: string,
-        opts: unknown,
-      ) => revokes.staff.push({ kind, token, opts })) as SuperAdminLoginDeps["revokeStaffSessionByToken"],
-      revokeManagerSessionByToken: (async (token: string, opts: unknown) =>
-        revokes.manager.push({ token, opts })) as SuperAdminLoginDeps["revokeManagerSessionByToken"],
+      revokeStaffSessionByToken: (async (kind: string, token: string, opts: unknown) => {
+        revokes.staff.push({ kind, token, opts });
+      }) as unknown as SuperAdminLoginDeps["revokeStaffSessionByToken"],
+      revokeManagerSessionByToken: (async (token: string, opts: unknown) => {
+        revokes.manager.push({ token, opts });
+      }) as SuperAdminLoginDeps["revokeManagerSessionByToken"],
       managerTokenToRevoke: "surrendered-mgr",
     } satisfies SuperAdminLoginDeps;
   }
@@ -191,10 +190,7 @@ describe("SA login surrendered-token cleanup passes tolerance", () => {
       staff: Array<{ kind: string; token: string; opts: unknown }>;
       manager: Array<{ token: string; opts: unknown }>;
     };
-    const result = await superAdminLoginCore(
-      { mode: "legacy", password: "pw" },
-      saDeps(revokes),
-    );
+    const result = await superAdminLoginCore({ mode: "legacy", password: "pw" }, saDeps(revokes));
     expect(result).toEqual({ ok: true });
     expect(revokes.staff).toEqual([
       { kind: "super_admin", token: "cookie-sa", opts: { tolerateUnknown: true } },

@@ -390,10 +390,12 @@ export async function managerPasswordChangedAt(
   const { data: extra, error } = await client
     .from("manager_accounts")
     .select("id, password_changed_at")
-    // PostgREST ilike: backslash escapes % and _ so the id matches literally.
+    // PostgREST ilike (v11+): backslash escapes the glob metas * and . as
+    // well as SQL LIKE's % and _, so the id matches literally. STAFF_ID_PATTERN
+    // allows only [a-z0-9._-], so these are all the metas an id can carry.
     .ilike(
       "id_manager",
-      staffId.replace(/[\\%_]/g, (m) => `\\${m}`),
+      staffId.replace(/[\\%_*.]/g, (m) => `\\${m}`),
     )
     .single();
   if (error || !extra || typeof extra !== "object") return null;

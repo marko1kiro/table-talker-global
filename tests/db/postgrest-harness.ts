@@ -66,13 +66,14 @@ function platformAsset() {
 
 async function ensureBinary(): Promise<string> {
   const asset = platformAsset();
-  const dir = path.join(os.tmpdir(), "postgrest-r6-evidence");
-  const exe = path.join(dir, asset.exe);
-  if (fs.existsSync(exe)) return exe;
-
+  // Fresh dir per PROCESS run: a pre-planted binary in a shared tmpdir can
+  // never be executed — the archive is digest-verified before extraction and
+  // the whole dir is removed by stop().
+  const dir = path.join(os.tmpdir(), `postgrest-r6-evidence-${process.pid}-${Date.now()}`);
   fs.mkdirSync(dir, { recursive: true });
+
   const archive = path.join(dir, asset.file);
-  if (!fs.existsSync(archive)) {
+  {
     const res = await fetch(`${BASE}/${asset.file}`);
     if (!res.ok || !res.body) {
       throw new Error(`download failed: ${res.status} for ${BASE}/${asset.file}`);
@@ -82,13 +83,14 @@ async function ensureBinary(): Promise<string> {
   }
   const actual = createHash("sha256").update(fs.readFileSync(archive)).digest("hex");
   if (actual !== asset.sha256) {
-    fs.rmSync(archive, { force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
     throw new Error(
       `PostgREST digest mismatch: expected ${asset.sha256}, got ${actual} — refusing to execute`,
     );
   }
   // bsdtar (Windows) extracts .zip; GNU tar (ubuntu) extracts .tar.xz.
   execFileSync("tar", ["-xf", archive, "-C", dir], { stdio: "pipe" });
+  const exe = path.join(dir, asset.exe);
   if (!fs.existsSync(exe)) throw new Error(`archive did not contain ${asset.exe}`);
   if (process.platform !== "win32") fs.chmodSync(exe, 0o755);
   return exe;
@@ -105,7 +107,7 @@ function signJwt(secret: string, claims: Record<string, unknown>): string {
  * until it serves requests. The connection string comes from createTestDb. */
 export async function startPostgrestHarness(connectionString: string): Promise<PostgrestHandle> {
   const exe = await ensureBinary();
-  const dir = path.join(os.tmpdir(), "postgrest-r6-evidence");
+  const dir = path.dirname(exe);
   const port = await freeTcpPort();
   const secret = randomBytes(32).toString("hex");
   const configPath = path.join(dir, `r6e-${Date.now()}-${port}.conf`);
@@ -118,17 +120,26 @@ export async function startPostgrestHarness(connectionString: string): Promise<P
       'db-anon-role = "anon"',
       `jwt-secret = "${secret}"`,
       `server-port = ${port}`,
-      'server-host = "127.0.0.1"',
+      "server-host = 127.0.0.1",
     ].join("\n"),
+    { mode: 0o600 },
   );
 
-  const child = spawn(exe, [configPath], { stdio: "ignore" });
+  // Capture stderr: a config-parse/startup failure surfaces verbatim instead
+  // of a bare "exited early with code 1".
+  let stderr = "";
+  const child = spawn(exe, [configPath], { stdio: ["ignore", "ignore", "pipe"] });
+  child.stderr?.on("data", (chunk: Buffer) => {
+    stderr = (stderr + chunk.toString()).slice(-4000);
+  });
   const url = `http://127.0.0.1:${port}`;
   let ready = false;
   try {
     for (let i = 0; i < 60; i++) {
       if (child.exitCode !== null) {
-        throw new Error(`postgrest exited early with code ${child.exitCode}`);
+        throw new Error(
+          `postgrest exited early with code ${child.exitCode}${stderr ? `: ${stderr.trim()}` : ""}`,
+        );
       }
       try {
         const res = await fetch(`${url}/`);
@@ -143,7 +154,9 @@ export async function startPostgrestHarness(connectionString: string): Promise<P
     }
     if (!ready) {
       child.kill();
-      throw new Error("postgrest did not become ready within 30s");
+      throw new Error(
+        `postgrest did not become ready within 30s${stderr ? `: ${stderr.trim()}` : ""}`,
+      );
     }
   } catch (error) {
     fs.rmSync(configPath, { force: true });
@@ -157,6 +170,7 @@ export async function startPostgrestHarness(connectionString: string): Promise<P
     stop: async () => {
       child.kill();
       fs.rmSync(configPath, { force: true });
+      fs.rmSync(path.dirname(configPath), { recursive: true, force: true });
     },
   };
 }

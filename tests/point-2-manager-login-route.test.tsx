@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // R4-A route-level runtime evidence: the ACTUAL /manager/login component runs
 // in jsdom, submits the real form, and every browser-handoff failure provably
-// calls the server cleanup (deleting the pending session) while no
-// navigation and no identity write happens. Success writes exactly one
-// usable identity and confirms the pending→active session.
+// calls the server cleanup (deleting the pending session). Confirm-failure
+// keeps the user on the form (cleanup + banked failure); a navigation only
+// happens on the happy path, and success writes exactly one usable identity
+// and confirms the pending→active session.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

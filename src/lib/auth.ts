@@ -98,12 +98,17 @@ export type SuperAdminLoginDeps = {
     superAdminToken: string | null;
     areaManagerToken: string | null;
   }>;
-  /** R3-A: server-side revocation of one staff/manager bearer session. */
+  /** R3-A: server-side revocation of one staff/manager bearer session.
+   * Cleanup call sites pass tolerateUnknown for client-surrendered tokens. */
   revokeStaffSessionByToken?: (
     kind: "super_admin" | "area_manager",
     token: string,
+    opts?: { tolerateUnknown?: boolean },
   ) => Promise<void>;
-  revokeManagerSessionByToken?: (token: string) => Promise<void>;
+  revokeManagerSessionByToken?: (
+    token: string,
+    opts?: { tolerateUnknown?: boolean },
+  ) => Promise<void>;
   /** R3-A: the OLD manager bearer token surrendered by this browser. */
   managerTokenToRevoke?: string | null;
   /** R4-C: wipes the shared cookie when a banked success must be undone. */
@@ -152,18 +157,31 @@ export async function superAdminLoginCore(
   /**
    * R3-A: revoke every OLD credential carried by this browser context before
    * the replacement session is minted. Throws on failure so the caller can
-   * fail closed instead of leaving two usable credentials.
+   * fail closed instead of leaving two usable credentials. These tokens are
+   * CLIENT-SURRENDERED (cookie bearers + the sessionStorage manager token):
+   * an UNKNOWN_TOKEN verdict proves the token was purged elsewhere without a
+   * tombstone and cannot authenticate anything, so cleanup passes tolerance
+   * instead of bricking this login for the cookie's remaining lifetime.
    */
   const revokePrevious = async () => {
+    const tolerateUnknown = { tolerateUnknown: true } as const;
     const cookie = deps.cookieStaffTokens ? await deps.cookieStaffTokens() : null;
     if (cookie?.superAdminToken) {
-      await deps.revokeStaffSessionByToken?.("super_admin", cookie.superAdminToken);
+      await deps.revokeStaffSessionByToken?.(
+        "super_admin",
+        cookie.superAdminToken,
+        tolerateUnknown,
+      );
     }
     if (cookie?.areaManagerToken) {
-      await deps.revokeStaffSessionByToken?.("area_manager", cookie.areaManagerToken);
+      await deps.revokeStaffSessionByToken?.(
+        "area_manager",
+        cookie.areaManagerToken,
+        tolerateUnknown,
+      );
     }
     if (deps.managerTokenToRevoke) {
-      await deps.revokeManagerSessionByToken?.(deps.managerTokenToRevoke);
+      await deps.revokeManagerSessionByToken?.(deps.managerTokenToRevoke, tolerateUnknown);
     }
   };
   try {
@@ -299,8 +317,9 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
     if (!client) return ownerLoginFailure();
     const revocationDeps = {
       cookieStaffTokens: readCookieStaffTokens,
-      // R4-B: dead old tokens are skipped, live ones revoked with mandatory
-      // semantics (see revokeStaffSessionByTokenIfLive).
+      // R4-B/R6 review fix: client-surrendered tokens tolerate UNKNOWN_TOKEN
+      // (purged elsewhere without a tombstone — provably dead); everything
+      // else fails closed (see revokeStaffSessionByTokenIfLive).
       revokeStaffSessionByToken: revokeStaffSessionByTokenIfLive,
       revokeManagerSessionByToken: revokeManagerSessionByTokenIfLive,
       managerTokenToRevoke: data.managerToken ?? null,
