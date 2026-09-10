@@ -31,7 +31,9 @@ export type ManagerHandoffDeps = {
   cleanupPending: (managerToken: string, rateLimitReservationId: string) => Promise<void>;
 };
 
-export type ManagerHandoffResult = { ok: true } | { ok: false; reason: "handoff_failed" };
+export type ManagerHandoffResult =
+  | { ok: true }
+  | { ok: false; reason: "handoff_failed" | "cleanup_failed" };
 
 export async function managerLoginHandoffCore(
   identity: ManagerHandoffIdentity,
@@ -40,10 +42,10 @@ export async function managerLoginHandoffCore(
   const cleanup = async (): Promise<ManagerHandoffResult> => {
     try {
       await deps.cleanupPending(identity.managerToken, identity.rateLimitReservationId);
+      return { ok: false, reason: "handoff_failed" };
     } catch {
-      // cleanup is best-effort; pending session expires via TTL regardless
+      return { ok: false, reason: "cleanup_failed" };
     }
-    return { ok: false, reason: "handoff_failed" };
   };
 
   const accessToken = await deps.ensureAccessToken().catch(() => null);
@@ -55,8 +57,14 @@ export async function managerLoginHandoffCore(
     // cosmetic; never blocks the handoff
   }
 
-  const written = deps.writeIdentity(deps.getStorage(), { ...identity, accessToken });
-  if (!written) return cleanup();
+  let storage: StorageLike | null;
+  try {
+    storage = deps.getStorage();
+    const written = deps.writeIdentity(storage, { ...identity, accessToken });
+    if (!written) return cleanup();
+  } catch {
+    return cleanup();
+  }
 
   try {
     await deps.navigate();
@@ -67,11 +75,13 @@ export async function managerLoginHandoffCore(
   // Confirm AFTER identity write + navigate succeed. If confirm fails,
   // the pending session is cleaned up — the browser never had a usable session.
   let confirmed = false;
-  try {
-    confirmed =
-      (await deps.confirmHandoff(identity.managerToken, identity.rateLimitReservationId)) === true;
-  } catch {
-    confirmed = false;
+  for (let attempt = 0; attempt < 2 && !confirmed; attempt += 1) {
+    try {
+      confirmed =
+        (await deps.confirmHandoff(identity.managerToken, identity.rateLimitReservationId)) === true;
+    } catch {
+      confirmed = false;
+    }
   }
   if (!confirmed) return cleanup();
 
