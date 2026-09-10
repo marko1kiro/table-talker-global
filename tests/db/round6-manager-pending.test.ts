@@ -1,0 +1,238 @@
+// R6-A RED: disposable-Postgres proof that the manager session lifecycle is
+// pending -> (browser handoff) -> confirm -> active, and that a pending token
+// is invisible to EVERY manager-token consumer. Runs the FULL migration chain
+// on an embedded Postgres. Baseline a239081 fails these: pending rows live in
+// manager_sessions (usable) and the login path mints active sessions.
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { randomBytes } from "node:crypto";
+import type { Client } from "pg";
+import {
+  connect,
+  createTestDb,
+  rpc,
+  rpcRows,
+  scryptHash,
+  sha256Hex,
+  stopAll,
+  type TestDb,
+} from "./harness";
+import { loginManagerCore } from "../../src/lib/manager-auth.server";
+import { managerLoginHandoffCore } from "../../src/lib/manager-login-handoff";
+import { verifyManagerPassword } from "../../src/lib/manager-password.server";
+
+const R1 = "11111111-1111-4111-8111-111111111111";
+const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+const MANAGER_USER = "budi.santoso";
+const MANAGER_PW = "correct horse battery staple";
+
+let db: TestDb;
+
+beforeAll(async () => {
+  db = await createTestDb("lime_r6_pending");
+  const c = await db.client();
+  await c.query(
+    `insert into public.restaurants (id, code, display_name, pin_hash, credential_rotated_at)
+     values ($1, 'RESTO-1', 'Resto Satu', encode(extensions.digest('pin', 'sha256'), 'hex'), now())`,
+    [R1],
+  );
+  await c.query(
+    `insert into public.manager_accounts (id, id_manager, full_name, restaurant_id, password_hash, status)
+     values ($1, $2, 'Budi Santoso', $3, $4, 'aktif')`,
+    [MANAGER_ID, MANAGER_USER, R1, await scryptHash(MANAGER_PW)],
+  );
+}, 600_000);
+
+afterAll(async () => {
+  await db?.close();
+  await stopAll();
+});
+
+function rawToken(): string {
+  return randomBytes(32).toString("hex");
+}
+
+/** Wired supabase-shaped rpc caller over the real disposable DB. */
+function dbRpc(c: Client) {
+  return async (
+    fn: string,
+    params: Record<string, unknown>,
+  ): Promise<{ data: unknown; error: { message: string } | null }> => {
+    const r = await rpc(c, fn, params);
+    return { data: r.data, error: r.error ? { message: r.error } : null };
+  };
+}
+
+async function activeSessionCount(): Promise<number> {
+  const c = await db.client();
+  const r = await c.query(`select count(*)::int as n from public.manager_sessions`);
+  return Number(r.rows[0]?.n ?? 0);
+}
+
+describe("R6-A: pending sessions are invisible to every manager-token consumer", () => {
+  test("pending token is not resolvable by get_manager_id_by_token", async () => {
+    const c = await db.client();
+    const token = (await rpc<string>(c, "create_manager_session_pending", {
+      p_manager_id: MANAGER_ID,
+    })).data as string;
+    expect(token).toBeTruthy();
+    const resolved = await rpc(c, "get_manager_id_by_token", { p_token: token });
+    expect(resolved.data).toBeNull();
+  });
+
+  test("pending token yields no dashboard snapshot, stats, thread, instructions, crew, realtime bind", async () => {
+    const c = await db.client();
+    const token = (await rpc<string>(c, "create_manager_session_pending", {
+      p_manager_id: MANAGER_ID,
+    })).data as string;
+
+    const snapshot = await rpc(c, "get_manager_snapshot", { p_manager_token: token });
+    expect(snapshot.data).toBeNull();
+
+    const stats = await rpc(c, "get_manager_daily_stats", {
+      p_manager_token: token,
+      p_date: null,
+    });
+    expect(stats.data).toBeNull();
+
+    const thread = await rpc(c, "get_instruction_thread", {
+      p_manager_token: token,
+      p_date: null,
+    });
+    expect(thread.data).toBeNull();
+
+    const sent = await rpc(c, "send_manager_instruction", {
+      p_manager_token: token,
+      p_target_type: "all",
+      p_target_role_session_id: null,
+      p_message: "hello",
+    });
+    expect(sent.data).toBeNull();
+
+    const crew = await rpcRows(c, "get_manager_active_crew", { p_manager_token: token });
+    expect(crew.rows).toHaveLength(0);
+
+    const history = await rpcRows(c, "get_manager_crew_history", {
+      p_manager_token: token,
+      p_date: null,
+    });
+    expect(history.rows).toHaveLength(0);
+
+    const bound = await rpc<boolean>(c, "bind_manager_session_realtime", {
+      p_restaurant_id: R1,
+      p_manager_token: token,
+    });
+    expect(bound.data).toBe(false);
+  });
+
+  test("confirm activates exactly once; retry idempotent; exactly one active row", async () => {
+    const c = await db.client();
+    const token = (await rpc<string>(c, "create_manager_session_pending", {
+      p_manager_id: MANAGER_ID,
+    })).data as string;
+
+    const first = await rpc<boolean>(c, "confirm_manager_session", { p_token: token });
+    expect(first.data).toBe(true);
+
+    const retry = await rpc<boolean>(c, "confirm_manager_session", { p_token: token });
+    expect(retry.data).toBe(true);
+
+    const resolved = await rpc(c, "get_manager_id_by_token", { p_token: token });
+    expect(resolved.data).toBe(MANAGER_ID);
+
+    const n = await activeSessionCount();
+    expect(n).toBe(1);
+  });
+
+  test("token born active cannot be confirmed into the handshake", async () => {
+    const c = await db.client();
+    const token = rawToken();
+    await c.query(
+      `insert into public.manager_sessions (manager_id, restaurant_id, token_hash, expires_at)
+       values ($1, $2, $3, now() + interval '12 hours')`,
+      [MANAGER_ID, R1, sha256Hex(token)],
+    );
+    const confirmed = await rpc<boolean>(c, "confirm_manager_session", { p_token: token });
+    expect(confirmed.data).toBe(false);
+    await c.query(`delete from public.manager_sessions where token_hash = $1`, [
+      sha256Hex(token),
+    ]);
+  });
+
+  test("concurrent confirm creates exactly one active session", async () => {
+    const c1 = await connect(db.connectionString);
+    const c2 = await connect(db.connectionString);
+    const token = (await rpc<string>(c1, "create_manager_session_pending", {
+      p_manager_id: MANAGER_ID,
+    })).data as string;
+
+    const [a, b] = await Promise.all([
+      rpc<boolean>(c1, "confirm_manager_session", { p_token: token }),
+      rpc<boolean>(c2, "confirm_manager_session", { p_token: token }),
+    ]);
+    expect([a.data, b.data]).toContain(true);
+    const n = await activeSessionCount();
+    expect(n).toBe(1);
+    await c1.end();
+    await c2.end();
+  });
+
+  test("end-to-end: login mints pending; snapshot denied until confirm; handoff failure leaves zero active sessions", async () => {
+    const c = await db.client();
+    const result = await loginManagerCore(
+      { idManager: MANAGER_USER, password: MANAGER_PW },
+      { rpc: dbRpc(c), verify: verifyManagerPassword },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // Pending: dashboard data must be denied before the browser confirms.
+    const snapshot = await rpc(c, "get_manager_snapshot", {
+      p_manager_token: result.managerToken,
+    });
+    expect(snapshot.data).toBeNull();
+
+    // Handoff failure (navigation throws) must clean everything up.
+    const mem = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => mem.get(k) ?? null,
+      setItem: (k: string, v: string) => void mem.set(k, v),
+      removeItem: (k: string) => void mem.delete(k),
+    };
+    const handoff = await managerLoginHandoffCore(
+      {
+        idManager: result.idManager,
+        fullName: result.fullName,
+        restaurantId: result.restaurantId,
+        restaurantDisplayName: result.restaurantDisplayName,
+        restaurantCode: result.restaurantCode,
+        managerToken: result.managerToken,
+      },
+      {
+        ensureAccessToken: async () => "anon-access-token",
+        getStorage: () => storage,
+        writeIdentity: (s, identity) => {
+          s?.setItem("tt-manager-identity", JSON.stringify(identity));
+          return identity;
+        },
+        setReminderFlag: () => undefined,
+        navigate: async () => {
+          throw new Error("navigation exploded");
+        },
+        confirmHandoff: async () => true,
+        cleanupPending: async (managerToken) => {
+          await rpc(c, "cleanup_pending_manager_session", { p_token: managerToken });
+        },
+      },
+    );
+    expect(handoff.ok).toBe(false);
+    expect(await activeSessionCount()).toBe(0);
+
+    // Successful handoff path: confirm makes the snapshot available.
+    const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
+      p_token: result.managerToken,
+    });
+    expect(confirmed.data).toBe(true);
+    const after = await rpc(c, "get_manager_snapshot", { p_manager_token: result.managerToken });
+    expect(after.data).not.toBeNull();
+  });
+});
