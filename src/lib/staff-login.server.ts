@@ -204,9 +204,14 @@ export async function loginStaffCore(
   //    loginManagerCore mints the session internally, so its ok flag already
   //    means "usable session established".
   const managerResult = await loginManagerCore(
-    { idManager: staffId, password },
+    {
+      idManager: staffId,
+      password,
+      rateLimitReservationId: deps.rateLimitReservationId ?? undefined,
+    },
     {
       rpc: deps.rpc,
+      rateLimitReservationId: deps.rateLimitReservationId ?? undefined,
       verify: deps.verify ?? verifyManagerPassword,
     },
   ).catch(() => null);

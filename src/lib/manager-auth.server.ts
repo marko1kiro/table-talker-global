@@ -8,6 +8,7 @@ const GENERIC = "Terjadi kesalahan. Coba lagi.";
 
 export type ManagerAuthDeps = {
   rpc: RpcCaller;
+  rateLimitReservationId?: string;
   hash?: (password: string) => Promise<string>;
   verify?: (password: string, stored: string) => Promise<boolean>;
   createSession?: (managerId: string) => Promise<{ token: string; expiresAt: string } | null>;
@@ -49,16 +50,18 @@ export type LoginManagerResult =
 async function defaultCreateSession(
   rpc: RpcCaller,
   managerId: string,
+  rateLimitReservationId?: string,
 ): Promise<{ token: string; expiresAt: string } | null> {
   const { data, error } = await rpc("create_manager_session_pending", {
     p_manager_id: managerId,
+    ...(rateLimitReservationId ? { p_reservation_id: rateLimitReservationId } : {}),
   });
   if (error || typeof data !== "string" || !data) return null;
   return { token: data, expiresAt: "" };
 }
 
 export async function loginManagerCore(
-  data: { idManager: string; password: string },
+  data: { idManager: string; password: string; rateLimitReservationId?: string },
   deps: ManagerAuthDeps,
 ): Promise<LoginManagerResult> {
   const verify = deps.verify ?? verifyManagerPassword;
@@ -85,7 +88,7 @@ export async function loginManagerCore(
   }
   const session = deps.createSession
     ? await deps.createSession(c.id)
-    : await defaultCreateSession(deps.rpc, c.id);
+    : await defaultCreateSession(deps.rpc, c.id, data.rateLimitReservationId);
   if (!session) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
   return {
     ok: true,
