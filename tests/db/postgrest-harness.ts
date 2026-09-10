@@ -120,7 +120,7 @@ export async function startPostgrestHarness(connectionString: string): Promise<P
       'db-anon-role = "anon"',
       `jwt-secret = "${secret}"`,
       `server-port = ${port}`,
-      "server-host = 127.0.0.1",
+      'server-host = "127.0.0.1"',
     ].join("\n"),
     { mode: 0o600 },
   );
