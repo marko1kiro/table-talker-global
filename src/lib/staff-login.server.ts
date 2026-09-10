@@ -174,20 +174,15 @@ async function revokePreviousCredentials(
   deps: StaffLoginDeps,
   opts: LoginStaffOpts,
 ): Promise<void> {
-  const tolerateUnknown = { tolerateUnknown: true } as const;
   const cookie = deps.cookieStaffTokens ? await deps.cookieStaffTokens() : null;
   if (cookie?.superAdminToken) {
-    await deps.revokeStaffSessionByToken?.("super_admin", cookie.superAdminToken, tolerateUnknown);
+    await deps.revokeStaffSessionByToken?.("super_admin", cookie.superAdminToken);
   }
   if (cookie?.areaManagerToken) {
-    await deps.revokeStaffSessionByToken?.(
-      "area_manager",
-      cookie.areaManagerToken,
-      tolerateUnknown,
-    );
+    await deps.revokeStaffSessionByToken?.("area_manager", cookie.areaManagerToken);
   }
   if (opts.managerTokenToRevoke) {
-    await deps.revokeManagerSessionByToken?.(opts.managerTokenToRevoke, tolerateUnknown);
+    await deps.revokeManagerSessionByToken?.(opts.managerTokenToRevoke);
   }
 }
 
@@ -226,9 +221,7 @@ export async function loginStaffCore(
     try {
       if (managerTokenToRevoke) {
         // Surrendered sessionStorage token: dead (purged elsewhere) is fine.
-        await deps.revokeManagerSessionByToken?.(managerTokenToRevoke, {
-          tolerateUnknown: true,
-        });
+        await deps.revokeManagerSessionByToken?.(managerTokenToRevoke);
       }
       await revokePreviousCredentials(deps, { managerTokenToRevoke: null });
     } catch {

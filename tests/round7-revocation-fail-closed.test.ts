@@ -28,7 +28,6 @@ const baseDeps = (revoked: string[]): StaffLoginDeps => ({
   },
   revokeStaffSessionByToken: async () => undefined,
   clearSession: async () => undefined,
-  createSession: async () => ({ token: "pending-token", expiresAt: "later" }),
 });
 
 describe("R7-B mandatory manager switch revocation", () => {
@@ -38,6 +37,6 @@ describe("R7-B mandatory manager switch revocation", () => {
       managerTokenToRevoke: "old-manager-token",
     });
     expect(result.ok).toBe(false);
-    expect(revoked).toEqual(["undefined"]);
+    expect(revoked).toEqual([undefined]);
   });
 });
