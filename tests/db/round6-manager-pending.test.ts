@@ -3,13 +3,14 @@
 // is invisible to EVERY manager-token consumer. Runs the FULL migration chain
 // on an embedded Postgres. Baseline a239081 fails these: pending rows live in
 // manager_sessions (usable) and the login path mints active sessions.
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { randomBytes } from "node:crypto";
 import type { Client } from "pg";
 import {
   connect,
   createTestDb,
   rpc,
+  rpcNamed,
   rpcRows,
   scryptHash,
   sha256Hex,
@@ -47,6 +48,13 @@ afterAll(async () => {
   await stopAll();
 });
 
+// Test scaffolding: each test starts from a clean session state.
+afterEach(async () => {
+  const c = await db.client();
+  await c.query(`delete from public.manager_sessions`);
+  await c.query(`delete from public.manager_pending_sessions`);
+});
+
 function rawToken(): string {
   return randomBytes(32).toString("hex");
 }
@@ -71,9 +79,11 @@ async function activeSessionCount(): Promise<number> {
 describe("R6-A: pending sessions are invisible to every manager-token consumer", () => {
   test("pending token is not resolvable by get_manager_id_by_token", async () => {
     const c = await db.client();
-    const token = (await rpc<string>(c, "create_manager_session_pending", {
-      p_manager_id: MANAGER_ID,
-    })).data as string;
+    const token = (
+      await rpc<string>(c, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+      })
+    ).data as string;
     expect(token).toBeTruthy();
     const resolved = await rpc(c, "get_manager_id_by_token", { p_token: token });
     expect(resolved.data).toBeNull();
@@ -81,9 +91,11 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
 
   test("pending token yields no dashboard snapshot, stats, thread, instructions, crew, realtime bind", async () => {
     const c = await db.client();
-    const token = (await rpc<string>(c, "create_manager_session_pending", {
-      p_manager_id: MANAGER_ID,
-    })).data as string;
+    const token = (
+      await rpc<string>(c, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+      })
+    ).data as string;
 
     const snapshot = await rpc(c, "get_manager_snapshot", { p_manager_token: token });
     expect(snapshot.data).toBeNull();
@@ -117,18 +129,28 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
     });
     expect(history.rows).toHaveLength(0);
 
-    const bound = await rpc<boolean>(c, "bind_manager_session_realtime", {
+    // The realtime binder raises INVALID_SESSION on any token that is not a
+    // usable active row — a pending token must never bind a channel.
+    const b = await connect(db.connectionString);
+    await b.query("select set_config('request.jwt.claim.sub', $1, false)", [
+      "11111111-1111-4111-8111-111111111199",
+    ]);
+    const bound = await rpcNamed<boolean>(b, "bind_manager_session_realtime", {
       p_restaurant_id: R1,
-      p_manager_token: token,
+      p_session_token: token,
     });
-    expect(bound.data).toBe(false);
+    expect(bound.error ?? "").toMatch(/INVALID_SESSION/);
+    expect(bound.data).toBeNull();
+    await b.end();
   });
 
   test("confirm activates exactly once; retry idempotent; exactly one active row", async () => {
     const c = await db.client();
-    const token = (await rpc<string>(c, "create_manager_session_pending", {
-      p_manager_id: MANAGER_ID,
-    })).data as string;
+    const token = (
+      await rpc<string>(c, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+      })
+    ).data as string;
 
     const first = await rpc<boolean>(c, "confirm_manager_session", { p_token: token });
     expect(first.data).toBe(true);
@@ -153,17 +175,17 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
     );
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", { p_token: token });
     expect(confirmed.data).toBe(false);
-    await c.query(`delete from public.manager_sessions where token_hash = $1`, [
-      sha256Hex(token),
-    ]);
+    await c.query(`delete from public.manager_sessions where token_hash = $1`, [sha256Hex(token)]);
   });
 
   test("concurrent confirm creates exactly one active session", async () => {
     const c1 = await connect(db.connectionString);
     const c2 = await connect(db.connectionString);
-    const token = (await rpc<string>(c1, "create_manager_session_pending", {
-      p_manager_id: MANAGER_ID,
-    })).data as string;
+    const token = (
+      await rpc<string>(c1, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+      })
+    ).data as string;
 
     const [a, b] = await Promise.all([
       rpc<boolean>(c1, "confirm_manager_session", { p_token: token }),
@@ -227,12 +249,24 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
     expect(handoff.ok).toBe(false);
     expect(await activeSessionCount()).toBe(0);
 
-    // Successful handoff path: confirm makes the snapshot available.
-    const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
+    // A cleaned-up pending token can never be confirmed afterwards.
+    const dead = await rpc<boolean>(c, "confirm_manager_session", {
       p_token: result.managerToken,
     });
+    expect(dead.data).toBe(false);
+
+    // Successful path: a fresh login + confirm makes the snapshot available.
+    const again = await loginManagerCore(
+      { idManager: MANAGER_USER, password: MANAGER_PW },
+      { rpc: dbRpc(c), verify: verifyManagerPassword },
+    );
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
+      p_token: again.managerToken,
+    });
     expect(confirmed.data).toBe(true);
-    const after = await rpc(c, "get_manager_snapshot", { p_manager_token: result.managerToken });
+    const after = await rpc(c, "get_manager_snapshot", { p_manager_token: again.managerToken });
     expect(after.data).not.toBeNull();
   });
 });

@@ -14,6 +14,7 @@ import {
   createTestDb,
   generateToken,
   migrationFiles,
+  mintActiveManagerSession,
   rpc,
   rpcNamed,
   rpcOk,
@@ -1125,7 +1126,7 @@ describe("password reset: one-pending, first decision wins, bookkeeping", () => 
         p_candidate_hash: candidate,
       }),
     ).toMatchObject({ data: false });
-    const before = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const before = await mintActiveManagerSession(c, managerId);
     expect(typeof before).toBe("string");
     const pendingId = await oneText(
       c,
@@ -1452,7 +1453,7 @@ describe("realtime isolation for Manager (review C14)", () => {
       c,
       `insert into auth.users (email) values ('named.bind@example.test') returning (id::text) as n`,
     );
-    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const token = await mintActiveManagerSession(c, managerId);
     const b = await freshClient();
     await b.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
     const bound = await rpcNamed<boolean>(b, "bind_manager_session_realtime", {
@@ -1466,7 +1467,7 @@ describe("realtime isolation for Manager (review C14)", () => {
 
   test("calling the binder with a WRONG parameter name fails (contract guard)", async () => {
     const c = await db.client();
-    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const token = await mintActiveManagerSession(c, managerId);
     const wrong = await rpcNamed<boolean>(c, "bind_manager_session_realtime", {
       p_restaurant_id: R1,
       p_manager_token: token,
@@ -1485,9 +1486,7 @@ describe("realtime isolation for Manager (review C14)", () => {
       c,
       `insert into auth.users (email) values ('intruder2@example.test') returning (id::text) as n`,
     );
-    const managerToken = await rpcOk<string>(c, "create_manager_session", {
-      p_manager_id: managerId,
-    });
+    const managerToken = await mintActiveManagerSession(c, managerId);
 
     const b1 = await freshClient();
     await b1.query("select set_config('request.jwt.claim.sub', $1, false)", [u1]);
@@ -1802,7 +1801,7 @@ describe("R3-A: single-session revocation by raw token", () => {
 
   test("revoking a manager bearer kills it for get_manager_id_by_token (idempotent)", async () => {
     const c = await db.client();
-    const t = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const t = await mintActiveManagerSession(c, managerId);
     expect(await rpcOk<string | null>(c, "get_manager_id_by_token", { p_token: t })).toBe(
       managerId,
     );
@@ -1823,7 +1822,7 @@ describe("R3-A: single-session revocation by raw token", () => {
       p_kind: "area_manager",
       p_account_id: am1Id,
     });
-    const oldMgr = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const oldMgr = await mintActiveManagerSession(c, managerId);
     const newAm = await rpcOk<string>(c, "create_staff_session", {
       p_kind: "area_manager",
       p_account_id: am1Id,
@@ -2155,7 +2154,7 @@ describe("R3-G: realtime bind isolation under revocation", () => {
       c,
       `insert into auth.users (email) values ('r3.revoke@example.test') returning (id::text) as n`,
     );
-    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const token = await mintActiveManagerSession(c, managerId);
     await rpcOk<boolean>(c, "revoke_manager_session_by_token", { p_token: token });
     const b = await freshClient();
     await b.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
@@ -2178,7 +2177,7 @@ describe("R3-G: realtime bind isolation under revocation", () => {
       c,
       `insert into auth.users (email) values ('r3.live@example.test') returning (id::text) as n`,
     );
-    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const token = await mintActiveManagerSession(c, managerId);
     const b = await freshClient();
     await b.query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
     const bound = await rpcNamed<boolean>(b, "bind_manager_session_realtime", {
@@ -2231,7 +2230,7 @@ describe("R3-G: realtime bind isolation under revocation", () => {
 describe("R4-B: stale-token replay after revocation is rejected server-side", () => {
   test("revoked manager token maps to NO account and cannot mint anything", async () => {
     const c = await db.client();
-    const token = await rpcOk<string>(c, "create_manager_session", { p_manager_id: managerId });
+    const token = await mintActiveManagerSession(c, managerId);
     expect(await rpcOk<string | null>(c, "get_manager_id_by_token", { p_token: token })).toBe(
       managerId,
     );

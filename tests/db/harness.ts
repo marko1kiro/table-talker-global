@@ -47,23 +47,40 @@ type EmbeddedHandle = {
     getPgClient: (name: string) => Client;
     stop: () => Promise<void>;
   };
+  port: number;
 };
 
 let embeddedHandle: EmbeddedHandle | null = null;
 
+/** Reserve an ephemeral free port so parallel test files each get their own
+ * embedded Postgres instead of fighting over the hardcoded 54329. */
+async function getFreePort(): Promise<number> {
+  const net = await import("node:net");
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const address = srv.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      srv.close(() => (port ? resolve(port) : reject(new Error("no free port"))));
+    });
+    srv.on("error", reject);
+  });
+}
+
 async function getEmbedded(): Promise<EmbeddedHandle> {
   if (!embeddedHandle) {
-    const dataDir = path.join(os.tmpdir(), `lime-pg-staff-tests-${process.pid}`);
+    const dataDir = path.join(os.tmpdir(), `lime-pg-staff-tests-${process.pid}-${Date.now()}`);
+    const port = await getFreePort();
     const embedded = new EmbeddedPostgres({
       databaseDir: dataDir,
       user: "postgres",
       password: "postgres",
-      port: 54329,
+      port,
       persistent: false,
     });
     await embedded.initialise();
     await embedded.start();
-    embeddedHandle = { pg: null, embedded };
+    embeddedHandle = { pg: null, embedded, port };
     process.on("exit", () => {
       void embeddedHandle?.embedded.stop();
     });
@@ -72,7 +89,8 @@ async function getEmbedded(): Promise<EmbeddedHandle> {
 }
 
 async function adminClient(connectionString?: string): Promise<Client> {
-  const c = new Client(connectionString ?? "postgres://postgres:postgres@localhost:54329/postgres");
+  const fallback = `postgres://postgres:postgres@localhost:${embeddedHandle?.port ?? 54329}/postgres`;
+  const c = new Client(connectionString ?? fallback);
   await c.connect();
   return c;
 }
@@ -92,7 +110,7 @@ export async function createTestDb(
 
   const connectionString = external
     ? external.replace(/\/postgres(\?|$)/, `/${name}$1`)
-    : `postgres://postgres:postgres@localhost:54329/${name}`;
+    : `postgres://postgres:postgres@localhost:${embeddedHandle?.port ?? 54329}/${name}`;
 
   const client = new Client({ connectionString });
   await client.connect();
@@ -213,4 +231,16 @@ export async function rpcOk<T = unknown>(
   const { data, error } = await rpc<T>(client, fn, params);
   if (error) throw new Error(`rpc ${fn} failed: ${error}`);
   return data as T;
+}
+
+/** R6-A: mints a USABLE (active) manager session through the real pending ->
+ * confirm handshake. Tests that need a live bearer must go through this, never
+ * through the dropped legacy create_manager_session RPC. */
+export async function mintActiveManagerSession(client: Client, managerId: string): Promise<string> {
+  const token = await rpcOk<string>(client, "create_manager_session_pending", {
+    p_manager_id: managerId,
+  });
+  const confirmed = await rpcOk<boolean>(client, "confirm_manager_session", { p_token: token });
+  if (confirmed !== true) throw new Error("confirm_manager_session failed in test harness");
+  return token;
 }

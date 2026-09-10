@@ -226,7 +226,7 @@ describe("R3-A: role switches revoke the PREVIOUS server sessions", () => {
       rpc: async (fn) =>
         fn === "get_manager_credential"
           ? ok(managerCred)
-          : fn === "create_manager_session"
+          : fn === "create_manager_session_pending"
             ? ok("mtok")
             : err("x"),
       verify: async () => true,

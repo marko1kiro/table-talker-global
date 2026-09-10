@@ -25,7 +25,7 @@ function baseDeps(overrides: Partial<StaffLoginDeps> = {}) {
     rpc: async (fn) =>
       fn === "get_manager_credential"
         ? { data: managerCred, error: null }
-        : fn === "create_manager_session"
+        : fn === "create_manager_session_pending"
           ? { data: "new-mgr-tok", error: null }
           : { data: null, error: { message: "x" } },
     verify: async () => true,
@@ -145,7 +145,7 @@ describe("R5-C: exactly-once reporter + bounded timeout", () => {
       rpc: async (fn) =>
         fn === "get_manager_credential"
           ? { data: managerCred, error: null }
-          : fn === "create_manager_session"
+          : fn === "create_manager_session_pending"
             ? { data: null, error: { message: "session mint failed" } }
             : { data: null, error: { message: "x" } },
     });

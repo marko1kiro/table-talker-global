@@ -41,12 +41,18 @@ export type LoginManagerResult =
       message: string;
     };
 
-// create_manager_session returns the plaintext bearer token as a scalar string.
+// create_manager_session_pending returns the plaintext bearer token as a
+// scalar string. R6-A: the login path mints a PENDING session (60s TTL,
+// unusable by every consumer until the browser confirms the handoff). The
+// legacy active-mint RPC create_manager_session was dropped — no caller may
+// establish a usable session server-side anymore.
 async function defaultCreateSession(
   rpc: RpcCaller,
   managerId: string,
 ): Promise<{ token: string; expiresAt: string } | null> {
-  const { data, error } = await rpc("create_manager_session", { p_manager_id: managerId });
+  const { data, error } = await rpc("create_manager_session_pending", {
+    p_manager_id: managerId,
+  });
   if (error || typeof data !== "string" || !data) return null;
   return { token: data, expiresAt: "" };
 }

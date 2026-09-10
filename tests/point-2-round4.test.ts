@@ -282,7 +282,7 @@ function managerLoginDeps(overrides: LoginOverrides = {}) {
     rpc: async (fn) =>
       fn === "get_manager_credential"
         ? { data: managerCred, error: null }
-        : fn === "create_manager_session"
+        : fn === "create_manager_session_pending"
           ? { data: "new-mgr-tok", error: null }
           : { data: null, error: { message: "x" } },
     verify: async () => true,
