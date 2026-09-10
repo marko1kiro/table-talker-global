@@ -80,8 +80,9 @@ export async function managerLoginHandoffCore(
       confirmed =
         (await deps.confirmHandoff(identity.managerToken, identity.rateLimitReservationId)) ===
         true;
+      if (!confirmed) break;
     } catch {
-      confirmed = false;
+      if (attempt === 1) return cleanup();
     }
   }
   if (!confirmed) return cleanup();
