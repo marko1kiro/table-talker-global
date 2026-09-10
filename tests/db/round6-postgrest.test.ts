@@ -88,7 +88,11 @@ async function rpcPost(
   return { status: res.status, json, text };
 }
 
-const service = () => pgrst.jwt({ role: "service_role", sub: "r6-evidence" });
+// sub must be a uuid: the supabase shim casts request.jwt.claim.sub::uuid
+// (auth.uid()) and every real Supabase JWT carries a uuid sub.
+const SERVICE_SUB = "99999999-9999-4999-8999-999999999999";
+
+const service = () => pgrst.jwt({ role: "service_role", sub: SERVICE_SUB });
 
 describe.skipIf(!RUN)("R6-E: PostgREST HTTP evidence (digest-pinned, required in CI)", () => {
   it("anon: no JWT -> 401 permission denied", async () => {
