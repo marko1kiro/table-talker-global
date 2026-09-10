@@ -112,10 +112,11 @@ export async function startPostgrestHarness(connectionString: string): Promise<P
   fs.writeFileSync(
     configPath,
     [
-      `db-uri = ${connectionString}`,
+      // v16 config parser requires quoted string values.
+      `db-uri = "${connectionString}"`,
       "db-schemas = public",
       "db-anon-role = anon",
-      `jwt-secret = ${secret}`,
+      `jwt-secret = "${secret}"`,
       `server-port = ${port}`,
       "server-host = 127.0.0.1",
     ].join("\n"),
