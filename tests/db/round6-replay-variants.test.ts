@@ -14,14 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Client } from "pg";
-import {
-  createTestDb,
-  rpc,
-  rpcRows,
-  stopAll,
-  type LegacySeed,
-  type TestDb,
-} from "./harness";
+import { createTestDb, rpc, rpcRows, stopAll, type LegacySeed, type TestDb } from "./harness";
 
 const POIN2_MIGRATIONS = [
   "20260909010000_staff_identity_schema.sql",
