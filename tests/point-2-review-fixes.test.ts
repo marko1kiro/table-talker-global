@@ -2,7 +2,7 @@
 // (the DB integration suite proves the RPC side). These exercise the extracted
 // *Core functions with injected fake email/rpc/report deps — real logic, no
 // regex-over-source assertions.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   bootstrapCreateSuperAdminCore,
   inviteSuperAdminCore,
@@ -235,23 +235,39 @@ describe("reset request accounting (B12)", () => {
       expect(reported).toBe(c.want);
     }
   });
-  it("terminally reports an RPC exception instead of abandoning the reservation", async () => {
+  it("preserves the reservation when an RPC response is uncertain", async () => {
     const reports: boolean[] = [];
-    const result = await submitResetRequestCore(
-      "submit_manager_reset_request",
-      { staffId: "mgr", newPassword: "abcdefghijkl" },
-      {
-        rpc: async () => {
-          throw new Error("response unavailable");
+    await expect(
+      submitResetRequestCore(
+        "submit_manager_reset_request",
+        { staffId: "mgr", newPassword: "abcdefghijkl" },
+        {
+          rpc: async () => {
+            throw new Error("response unavailable");
+          },
+          report: async (valid) => reports.push(valid),
         },
-        report: async (valid) => reports.push(valid),
-      },
-    );
-    expect(result).toEqual({
-      ok: false,
-      message: "Login gagal. Periksa kembali ID dan password.",
+      ),
+    ).rejects.toThrow("response unavailable");
+    expect(reports).toEqual([]);
+  });
+
+  it("binds the reset mutation to the limiter reservation for idempotent retry", async () => {
+    const reservationId = "11111111-1111-4111-8111-111111111111";
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const input = {
+      staffId: "mgr",
+      newPassword: "abcdefghijkl",
+      rateLimitReservationId: reservationId,
+    };
+    await submitResetRequestCore("submit_manager_reset_request", input, {
+      rpc,
+      report: async () => "SUCCEEDED",
     });
-    expect(reports).toEqual([false]);
+    expect(rpc).toHaveBeenCalledWith(
+      "submit_manager_reset_request",
+      expect.objectContaining({ p_reservation_id: reservationId }),
+    );
   });
 
   it("weak password is a failure and never reaches the RPC", async () => {
