@@ -129,31 +129,50 @@ export async function loginManagerCore(
 
 export const logoutManagerInputSchema = z.object({ managerToken: z.string().min(1).max(200) });
 
+type ManagerLogoutRpcClient = {
+  rpc: (
+    fn: string,
+    params: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+
 /**
  * Revokes the manager bearer session server-side BEFORE the client drops its
  * sessionStorage identity. A stolen token can no longer be replayed after
- * logout. Returns ok:false on transport failure so the client keeps its
- * credential (fail closed) instead of silently leaving a live bearer.
+ * logout. Returns ok:false on transport failure or an unproven verdict so the
+ * client keeps its credential (fail closed) instead of silently leaving a
+ * live bearer.
  */
-export const logoutManagerSession = createServerFn({ method: "POST" })
-  .validator(logoutManagerInputSchema)
-  .handler(async ({ data }): Promise<{ ok: boolean }> => {
-    const client = getServiceClient();
-    if (!client) return { ok: false };
-    // R6-B: structured verdict. REVOKED (row died now) and the
-    // tombstone-proven ALREADY_INACTIVE count as logged out. UNKNOWN_TOKEN
-    // also counts: the token is client-surrendered and provably not live
-    // (purged by a still tombstone-less path — cutover or a direct row delete;
-    // newest-wins supersede and account-wide revoke do tombstone since
-    // 20260909100000), so refusing would brick logout for that browser
-    // forever. KIND_MISMATCH still fails closed.
+export async function logoutManagerSessionCore(
+  client: ManagerLogoutRpcClient | null,
+  managerToken: string,
+): Promise<{ ok: boolean }> {
+  if (!client) return { ok: false };
+  // R6-B: logout is fail-closed. REVOKED means the live row was revoked
+  // now; ALREADY_INACTIVE is safe only when the hashed tombstone proves the
+  // token was issued and revoked earlier. UNKNOWN_TOKEN has no such proof:
+  // historical cutover data and tombstone deployment/history gaps can leave
+  // no durable record, so it must not be treated as successful logout.
+  try {
     const { data: verdict, error } = await client.rpc("revoke_manager_session_by_token", {
-      p_token: data.managerToken,
+      p_token: managerToken,
     });
     if (error) return { ok: false };
     const v = (verdict as { verdict?: string } | null)?.verdict;
-    return { ok: v === "REVOKED" || v === "ALREADY_INACTIVE" || v === "UNKNOWN_TOKEN" };
-  });
+    return { ok: v === "REVOKED" || v === "ALREADY_INACTIVE" };
+  } catch {
+    // The server function is a logout safety boundary: normalize a rejected
+    // transport promise to the same fail-closed result as an RPC error.
+    return { ok: false };
+  }
+}
+
+export const logoutManagerSession = createServerFn({ method: "POST" })
+  .validator(logoutManagerInputSchema)
+  .handler(
+    async ({ data }): Promise<{ ok: boolean }> =>
+      logoutManagerSessionCore(getServiceClient(), data.managerToken),
+  );
 
 // --- change own password (while logged in) ----------------------------------
 

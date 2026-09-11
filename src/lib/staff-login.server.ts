@@ -101,7 +101,8 @@ export type StaffLoginDeps = {
     areaManagerToken: string | null;
   }>;
   /** R3-A: server-side revocation of one staff/manager bearer session.
-   * Cleanup call sites pass tolerateUnknown for client-surrendered tokens. */
+   * Mandatory role handoffs use strict defaults; only explicitly scoped
+   * non-handoff cleanup may opt into UNKNOWN_TOKEN tolerance. */
   revokeStaffSessionByToken?: (
     kind: "super_admin" | "area_manager",
     token: string,
@@ -163,13 +164,11 @@ async function finalizeAreaManagerCompletion(deps: StaffLoginDeps): Promise<bool
 
 /**
  * R3-A: revokes every OLD credential carried by this browser context
- * (cookie staff bearers + the surrendered manager token). Throws on failure
- * so the caller can fail closed instead of leaving two usable credentials.
- * These tokens are CLIENT-SURRENDERED: an UNKNOWN_TOKEN verdict proves the
- * token was already purged elsewhere by a still tombstone-less path (cutover
- * or a direct row delete; newest-wins supersede and account-wide revoke do
- * leave tombstones since 20260909100000), so it cannot authenticate anything
- * and cleanup must NOT brick this login.
+ * (cookie staff bearers + the surrendered manager token). This is a mandatory
+ * role handoff: failure, including UNKNOWN_TOKEN, aborts before a replacement
+ * credential is minted. UNKNOWN_TOKEN has no tombstone proof; irreversible
+ * cutover history and pending tombstone deployment/history gaps must not be
+ * treated as evidence that an old credential was never usable.
  */
 async function revokePreviousCredentials(
   deps: StaffLoginDeps,
@@ -243,7 +242,8 @@ export async function loginStaffCore(
     // rate-limit outcome is recorded as a failure (R6-C).
     try {
       if (managerTokenToRevoke) {
-        // Surrendered sessionStorage token: dead (purged elsewhere) is fine.
+        // The surrendered sessionStorage token is part of the mandatory
+        // handoff; UNKNOWN_TOKEN remains a failure, not proof of safety.
         await deps.revokeManagerSessionByToken?.(managerTokenToRevoke);
       }
       await revokePreviousCredentials(deps, { managerTokenToRevoke: null });
@@ -402,10 +402,9 @@ export const loginStaff = createServerFn({ method: "POST" })
         rateLimitReservationId: reservationId,
         updateSession: updateAuthSession,
         clearSession: clearAuthSession,
-        // R3-A: server-authoritative revocation of the previous credentials.
-        // R4-B: cookie/sessionStorage tokens may already be dead — dead ones
-        // are skipped (provably unusable), live ones are revoked with
-        // mandatory semantics (a no-op fails closed).
+        // R3-A/R4-B: mandatory server-authoritative revocation of previous
+        // credentials. REVOKED and tombstone-proven ALREADY_INACTIVE proceed;
+        // UNKNOWN_TOKEN and every other unexplained result fail closed.
         cookieStaffTokens: readCookieStaffTokens,
         revokeStaffSessionByToken: revokeStaffSessionByTokenIfLive,
         revokeManagerSessionByToken: revokeManagerSessionByTokenIfLive,

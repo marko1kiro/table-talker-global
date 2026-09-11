@@ -44,6 +44,7 @@ afterEach(async () => {
   await c.query(`delete from public.manager_pending_sessions`);
   await c.query(`delete from public.staff_sessions`);
   await c.query(`delete from public.revoked_session_tombstones`);
+  await c.query(`delete from public.manager_bearer_lifecycle_hashes`);
   await c.query(`delete from public.owner_login_rate_limit_reservations`);
   await c.query(`delete from public.owner_login_rate_limit_buckets`);
 });
@@ -71,6 +72,22 @@ async function mintPending(key: string): Promise<{ token: string; reservationId:
   });
   expect(minted.error).toBeNull();
   expect(minted.data).toBe(true);
+  return { token, reservationId };
+}
+
+async function mintPendingFor(
+  managerId: string,
+  key: string,
+): Promise<{ token: string; reservationId: string }> {
+  const c = await db.client();
+  const token = rawHexToken();
+  const reservationId = await reserve(key);
+  const minted = await rpc<boolean>(c, "create_manager_session_pending", {
+    p_manager_id: managerId,
+    p_reservation_id: reservationId,
+    p_token: token,
+  });
+  expect(minted).toMatchObject({ data: true, error: null });
   return { token, reservationId };
 }
 
@@ -365,6 +382,83 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
     ]);
   });
 
+  test("an active hash cannot be repurposed as pending, before or after revoke", async () => {
+    const c = await db.client();
+    const active = await mintPending("active-global-identity");
+    expect(
+      (await rpc<boolean>(c, "confirm_manager_session", {
+        p_token: active.token,
+        p_reservation_id: active.reservationId,
+      })).data,
+    ).toBe(true);
+    const secondReservationId = await reserve("active-global-identity-second");
+    expect(
+      await rpc<boolean>(c, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+        p_reservation_id: secondReservationId,
+        p_token: active.token,
+      }),
+    ).toMatchObject({ data: false, error: null });
+    expect(
+      (await rpc<Verdict>(c, "revoke_manager_session_by_token", { p_token: active.token })).data
+        ?.verdict,
+    ).toBe("REVOKED");
+    expect(
+      await rpc<boolean>(c, "create_manager_session_pending", {
+        p_manager_id: MANAGER_ID,
+        p_reservation_id: secondReservationId,
+        p_token: active.token,
+      }),
+    ).toMatchObject({ data: false, error: null });
+  });
+
+  test("confirm holds reservation then pending rows, so a reservation cascade waits without inversion", async () => {
+    const c = await db.client();
+    const pending = await mintPending("parent-row-lock-order");
+    const blocker = await connect(db.connectionString);
+    const confirmer = await connect(db.connectionString);
+    const parent = await connect(db.connectionString);
+    let blockerOpen = false;
+    try {
+      // This test-only trigger pauses after confirm has acquired reservation and
+      // pending locks, exposing the historically inverted parent cascade path.
+      await c.query(`create or replace function public.test_confirm_barrier() returns trigger
+        language plpgsql as $$ begin perform pg_advisory_xact_lock(991, 1); return new; end $$`);
+      await c.query(`create trigger test_confirm_barrier before update of confirmed_at
+        on public.manager_pending_sessions for each row execute function public.test_confirm_barrier()`);
+      await blocker.query("begin");
+      blockerOpen = true;
+      await blocker.query("select pg_advisory_xact_lock(991, 1)");
+      const confirmPid = Number((await confirmer.query("select pg_backend_pid() as pid")).rows[0]?.pid);
+      const confirming = rpc<boolean>(confirmer, "confirm_manager_session", {
+        p_token: pending.token,
+        p_reservation_id: pending.reservationId,
+      });
+      await waitForAdvisoryWait(c, confirmPid);
+      const deleting = parent.query(
+        `delete from public.owner_login_rate_limit_reservations where id = $1`,
+        [pending.reservationId],
+      );
+      // The parent is blocked on the canonical reservation row, not a reverse
+      // advisory request.  Releasing confirm must allow both transactions out.
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await blocker.query("commit");
+      blockerOpen = false;
+      expect(await confirming).toMatchObject({ data: true, error: null });
+      await expect(deleting).resolves.toEqual(expect.anything());
+      expect(
+        await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [
+          sha256Hex(pending.token),
+        ]),
+      ).toMatchObject({ rowCount: 1 });
+    } finally {
+      if (blockerOpen) await blocker.query("rollback").catch(() => undefined);
+      await c.query(`drop trigger if exists test_confirm_barrier on public.manager_pending_sessions`);
+      await c.query(`drop function if exists public.test_confirm_barrier()`);
+      await Promise.all([blocker.end(), confirmer.end(), parent.end()]);
+    }
+  });
+
   test("confirm and account-wide revoke wait on the manager hierarchy and cannot reproduce the old cycle", async () => {
     const c = await db.client();
     // Promote an old bearer so confirmation would have to revoke it.
@@ -560,7 +654,7 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
     }
   });
 
-  test("explicit pending tombstone cleanup has no unsafe default and enforces its horizon", async () => {
+  test("pending terminal evidence and the minimal anti-reuse registry are permanent", async () => {
     const c = await db.client();
     const pending = await mintPending("tombstone-retention");
     await rpc<boolean>(c, "cleanup_pending_manager_session", {
@@ -577,9 +671,8 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
                    where namespace = 'manager_pending' and token_hash = $1`,
       [sha256Hex(pending.token)],
     );
-    // A live exact reservation preserves reconciliation evidence even past
-    // the conservative age floor; only an operationally removed reservation
-    // permits explicit tombstone cleanup.
+    // No operational cleanup may reopen reuse, even after the reservation is
+    // gone.  The permanent minimal registry is intentionally service-private.
     const whileReservationLives = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
       p_before: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
     });
@@ -587,13 +680,77 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
     await c.query(`delete from public.owner_login_rate_limit_reservations where id = $1`, [
       pending.reservationId,
     ]);
-    const cleaned = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
+    const retained = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
       p_before: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
     });
-    expect(cleaned).toMatchObject({ data: 1, error: null });
+    expect(retained).toMatchObject({ data: 0, error: null });
+    expect(
+      await c.query(`select 1 from public.manager_bearer_lifecycle_hashes where token_hash = $1`, [
+        sha256Hex(pending.token),
+      ]),
+    ).toMatchObject({ rowCount: 1 });
   });
 
-  test("every R9/R10 SECURITY DEFINER lifecycle function has the intended service-only grant", async () => {
+  test("manager and restaurant parent cascades wait behind confirmation and leave terminal evidence", async () => {
+    const c = await db.client();
+    const restaurantId = "33333333-3333-4333-8333-333333333333";
+    const managerId = "cccccccc-cccc-4ccc-8ccc-ccccccccccc3";
+    await c.query(
+      `insert into public.restaurants (id, code, display_name, pin_hash, credential_rotated_at)
+       values ($1, 'RESTO-3', 'Resto Tiga', encode(extensions.digest('pin', 'sha256'), 'hex'), now())`,
+      [restaurantId],
+    );
+    await c.query(
+      `insert into public.manager_accounts (id, id_manager, full_name, restaurant_id, password_hash, status)
+       values ($1, 'cascade.tiga', 'Cascade Tiga', $2, $3, 'aktif')`,
+      [managerId, restaurantId, await scryptHash("pw")],
+    );
+    const pending = await mintPendingFor(managerId, "manager-restaurant-cascade");
+    const blocker = await connect(db.connectionString);
+    const confirmer = await connect(db.connectionString);
+    const parent = await connect(db.connectionString);
+    let blockerOpen = false;
+    try {
+      await c.query(`create or replace function public.test_confirm_parent_barrier() returns trigger
+        language plpgsql as $$ begin perform pg_advisory_xact_lock(991, 2); return new; end $$`);
+      await c.query(`create trigger test_confirm_parent_barrier before update of confirmed_at
+        on public.manager_pending_sessions for each row execute function public.test_confirm_parent_barrier()`);
+      await blocker.query("begin");
+      blockerOpen = true;
+      await blocker.query("select pg_advisory_xact_lock(991, 2)");
+      const confirmPid = Number((await confirmer.query("select pg_backend_pid() as pid")).rows[0]?.pid);
+      const confirming = rpc<boolean>(confirmer, "confirm_manager_session", {
+        p_token: pending.token,
+        p_reservation_id: pending.reservationId,
+      });
+      await waitForAdvisoryWait(c, confirmPid);
+      // DELETE restaurant cascades through manager_accounts and both manager
+      // session tables. It must wait on confirmation's restaurant parent lock,
+      // not form a child/parent cycle.
+      const deleting = parent.query(`delete from public.restaurants where id = $1`, [restaurantId]);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await blocker.query("commit");
+      blockerOpen = false;
+      expect(await confirming).toMatchObject({ data: true, error: null });
+      await expect(deleting).resolves.toEqual(expect.anything());
+      expect(
+        (await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [
+          sha256Hex(pending.token),
+        ])).rowCount,
+      ).toBe(0);
+      expect(
+        (await rpc<Verdict>(c, "revoke_manager_session_by_token", { p_token: pending.token })).data
+          ?.verdict,
+      ).toBe("ALREADY_INACTIVE");
+    } finally {
+      if (blockerOpen) await blocker.query("rollback").catch(() => undefined);
+      await c.query(`drop trigger if exists test_confirm_parent_barrier on public.manager_pending_sessions`);
+      await c.query(`drop function if exists public.test_confirm_parent_barrier()`);
+      await Promise.all([blocker.end(), confirmer.end(), parent.end()]);
+    }
+  });
+
+  test("every R9/R11 SECURITY DEFINER lifecycle function has the intended service-only grant", async () => {
     const c = await db.client();
     const rows = await c.query<{
       name: string;
@@ -614,6 +771,8 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
           "lock_session_lifecycle_hash",
           "lock_manager_session_lifecycle",
           "lock_staff_session_lifecycle",
+          "lock_manager_handoff_parent_rows",
+          "tombstone_manager_active_delete",
           "tombstone_unconfirmed_manager_pending_delete",
           "expire_manager_pending_session_hash",
           "expire_manager_pending_sessions",
@@ -632,7 +791,7 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
         ],
       ],
     );
-    expect(rows.rows).toHaveLength(18);
+    expect(rows.rows).toHaveLength(20);
     for (const row of rows.rows) {
       expect(row.prosecdef).toBe(true);
       expect(row.anon).toBe(false);
@@ -642,6 +801,8 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
           "lock_session_lifecycle_hash",
           "lock_manager_session_lifecycle",
           "lock_staff_session_lifecycle",
+          "lock_manager_handoff_parent_rows",
+          "tombstone_manager_active_delete",
           "tombstone_unconfirmed_manager_pending_delete",
           "expire_manager_pending_session_hash",
           "revoke_manager_active_sessions",
@@ -663,7 +824,7 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
     expect(permissions.rows[0]).toEqual({ anon: false, service: true, table_anon: false });
   });
 
-  test("neither pending, active, nor tombstone rows store the raw bearer", async () => {
+  test("neither pending, active, tombstone, nor anti-reuse rows store the raw bearer", async () => {
     const c = await db.client();
     const { token, reservationId } = await mintPending("raw-token");
     const hash = sha256Hex(token);
@@ -672,6 +833,12 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
     ).toMatchObject({ rowCount: 0 });
     expect(
       await c.query(`select 1 from public.manager_pending_sessions where token_hash = $1`, [hash]),
+    ).toMatchObject({ rowCount: 1 });
+    expect(
+      await c.query(`select 1 from public.manager_bearer_lifecycle_hashes where token_hash = $1`, [token]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await c.query(`select 1 from public.manager_bearer_lifecycle_hashes where token_hash = $1`, [hash]),
     ).toMatchObject({ rowCount: 1 });
     expect(
       (

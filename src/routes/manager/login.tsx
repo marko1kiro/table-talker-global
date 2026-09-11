@@ -11,7 +11,12 @@ import {
   cleanupManagerPendingSession,
 } from "@/lib/staff-login.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { managerLoginHandoffCore } from "@/lib/manager-login-handoff";
+import {
+  readPendingManagerHandoff,
+  removePendingManagerHandoff,
+  writePendingManagerHandoff,
+} from "@/lib/manager-pending-handoff";
+import { managerLoginHandoffCore, type ManagerHandoffIdentity } from "@/lib/manager-login-handoff";
 import {
   browserManagerStorage,
   readManagerIdentity,
@@ -43,11 +48,60 @@ function StaffLoginPage() {
 
   const canSubmit = staffId.trim().length > 0 && password.length > 0;
 
+  async function runManagerHandoff(identity: ManagerHandoffIdentity, remindPassword = false) {
+    const storage = browserManagerStorage();
+    const handoff = await managerLoginHandoffCore(identity, {
+      ensureAccessToken: () => ensureAnonAccessToken(getSupabaseBrowserClient()),
+      getStorage: browserManagerStorage,
+      writeIdentity: writeManagerIdentity,
+      setReminderFlag: () => {
+        if (remindPassword) sessionStorage.setItem("tt-password-reminder", "1");
+      },
+      navigate: () => navigate({ to: "/manager" }),
+      confirmHandoff: async (managerToken, rateLimitReservationId) => {
+        const r = await confirmManagerHandoff({ data: { managerToken, rateLimitReservationId } });
+        return r?.ok === true;
+      },
+      reconcileHandoff: async (managerToken, rateLimitReservationId) => {
+        const r = await reconcileManagerHandoff({ data: { managerToken, rateLimitReservationId } });
+        return r?.verdict ?? "unknown";
+      },
+      cleanupPending: async (managerToken, rateLimitReservationId) => {
+        const r = await cleanupManagerPendingSession({
+          data: { managerToken, rateLimitReservationId },
+        });
+        if (r?.ok !== true) throw new Error("manager handoff cleanup failed");
+      },
+    });
+    // Only terminal server evidence (or successful confirmation) retires the
+    // recovery record. UNKNOWN/cleanup failure must resume this exact pair.
+    if (handoff.ok || handoff.reason === "handoff_failed") {
+      removePendingManagerHandoff(storage);
+    }
+    return handoff;
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSubmit) return;
     setBusy(true);
     setError("");
+    // Resume an uncertain handoff before a fresh authentication attempt.  In
+    // particular, never send its newly minted pending bearer as managerToken
+    // to the mandatory old-credential revoker.
+    const pending = readPendingManagerHandoff(browserManagerStorage());
+    if (pending) {
+      try {
+        const handoff = await runManagerHandoff(pending);
+        if (handoff.ok || handoff.reason === "handoff_failed") attemptKeyRef.current = "";
+        if (!handoff.ok) setError("Gagal memulai sesi. Coba lagi.");
+      } catch {
+        setError("Gagal memulai sesi. Coba lagi.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!attemptKeyRef.current) attemptKeyRef.current = crypto.randomUUID();
     const attemptKey = attemptKeyRef.current;
     try {
@@ -69,55 +123,21 @@ function StaffLoginPage() {
         return;
       }
       if (result.role === "manager") {
-        // R6-A/R6-C: the server minted a PENDING session and handed us the
-        // rate-limit reservation. Every handoff failure (anon token, identity
-        // write, confirm) cleans the pending session up AND banks the durable
-        // failure outcome. A navigation that already happened is followed by
-        // cleanup inside the handoff core; the raw token never appears in any
-        // message, URL, or log.
-        const handoff = await managerLoginHandoffCore(
-          {
-            idManager: result.idManager,
-            fullName: result.fullName,
-            restaurantId: result.restaurantId,
-            restaurantDisplayName: result.restaurantDisplayName,
-            restaurantCode: result.restaurantCode,
-            managerToken: result.managerToken,
-            rateLimitReservationId: result.rateLimitReservationId,
-          },
-          {
-            ensureAccessToken: () => ensureAnonAccessToken(getSupabaseBrowserClient()),
-            getStorage: browserManagerStorage,
-            writeIdentity: writeManagerIdentity,
-            setReminderFlag: () => {
-              if (result.mustRemindPassword) {
-                sessionStorage.setItem("tt-password-reminder", "1");
-              }
-            },
-            navigate: () => navigate({ to: "/manager" }),
-            confirmHandoff: async (managerToken, rateLimitReservationId) => {
-              const r = await confirmManagerHandoff({
-                data: { managerToken, rateLimitReservationId },
-              });
-              return r?.ok === true;
-            },
-            reconcileHandoff: async (managerToken, rateLimitReservationId) => {
-              const r = await reconcileManagerHandoff({
-                data: { managerToken, rateLimitReservationId },
-              });
-              return r?.verdict ?? "unknown";
-            },
-            cleanupPending: async (managerToken, rateLimitReservationId) => {
-              const r = await cleanupManagerPendingSession({
-                data: { managerToken, rateLimitReservationId },
-              });
-              if (r?.ok !== true) throw new Error("manager handoff cleanup failed");
-            },
-          },
-        );
+        const identity: ManagerHandoffIdentity = {
+          idManager: result.idManager,
+          fullName: result.fullName,
+          restaurantId: result.restaurantId,
+          restaurantDisplayName: result.restaurantDisplayName,
+          restaurantCode: result.restaurantCode,
+          managerToken: result.managerToken,
+          rateLimitReservationId: result.rateLimitReservationId,
+        };
+        // Persist only a recoverable pending pair before browser-side work.
+        // If reconciliation is UNKNOWN, a later submit resumes this handoff
+        // rather than entering loginStaff with this token as an old session.
+        writePendingManagerHandoff(browserManagerStorage(), identity);
+        const handoff = await runManagerHandoff(identity, result.mustRemindPassword);
         if (!handoff.ok) {
-          // cleanup_failed is uncertain: preserve the logical attempt key so a
-          // retry can recover the same consumed reservation and bearer.
           if (handoff.reason === "handoff_failed") attemptKeyRef.current = "";
           setError("Gagal memulai sesi. Coba lagi.");
           return;

@@ -370,10 +370,10 @@ export const logout = createServerFn({ method: "POST" }).handler(async () => {
     await import("./auth.server");
   // R3-A: revoke the CURRENT server session BEFORE clearing the cookie. On
   // revocation failure the cookie stays (fail closed) — the caller reports a
-  // failed logout instead of silently leaving a live bearer behind. The
-  // token is client-surrendered: UNKNOWN_TOKEN (purged elsewhere without a
-  // tombstone) proves it is already unusable, so cleanup passes tolerance —
-  // a dead token must not brick logout or the next login for this browser.
+  // failed logout instead of silently leaving a live bearer behind. This
+  // legacy Super Admin logout path explicitly accepts UNKNOWN_TOKEN for its
+  // client-surrendered cleanup policy; that verdict is not historical proof
+  // that the bearer was never usable.
   const session = await getAuthSession();
   const token = session.data.superAdminSessionToken;
   if (token) {
