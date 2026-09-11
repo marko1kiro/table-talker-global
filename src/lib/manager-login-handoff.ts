@@ -27,13 +27,21 @@ export type ManagerHandoffDeps = {
    * success in one DB transaction. true = session now active and outcome final.
    */
   confirmHandoff: (managerToken: string, rateLimitReservationId: string) => Promise<boolean>;
+  /** Read the authoritative DB state after confirm response loss/ambiguity. */
+  reconcileHandoff: (
+    managerToken: string,
+    rateLimitReservationId: string,
+  ) => Promise<"succeeded" | "pending" | "failed" | "unknown">;
   /** R5-A + R6-C: delete the pending session + bank the failure outcome. */
   cleanupPending: (managerToken: string, rateLimitReservationId: string) => Promise<void>;
 };
 
 export type ManagerHandoffResult =
   | { ok: true }
-  | { ok: false; reason: "handoff_failed" | "cleanup_failed" };
+  | {
+      ok: false;
+      reason: "handoff_failed" | "cleanup_failed" | "reconciliation_unknown";
+    };
 
 export async function managerLoginHandoffCore(
   identity: ManagerHandoffIdentity,
@@ -72,20 +80,35 @@ export async function managerLoginHandoffCore(
     return cleanup();
   }
 
-  // Confirm AFTER identity write + navigate succeed. If confirm fails,
-  // the pending session is cleaned up — the browser never had a usable session.
-  let confirmed = false;
-  for (let attempt = 0; attempt < 2 && !confirmed; attempt += 1) {
+  // Confirm AFTER identity write + navigate succeed. A false/throw may be a
+  // lost or malformed response after the DB already committed, so retry the
+  // exact token+reservation pair and then read authoritative state. Never run
+  // compensation while activation is uncertain: cleanup cannot undo an active
+  // session and would create a false failure in the browser.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      confirmed =
-        (await deps.confirmHandoff(identity.managerToken, identity.rateLimitReservationId)) ===
-        true;
-      if (!confirmed) break;
+      if (
+        (await deps.confirmHandoff(identity.managerToken, identity.rateLimitReservationId)) === true
+      ) {
+        return { ok: true };
+      }
     } catch {
-      if (attempt === 1) return cleanup();
+      // Reconcile below after both bounded attempts.
     }
   }
-  if (!confirmed) return cleanup();
 
-  return { ok: true };
+  let reconciled: "succeeded" | "pending" | "failed" | "unknown" = "unknown";
+  try {
+    reconciled = await deps.reconcileHandoff(
+      identity.managerToken,
+      identity.rateLimitReservationId,
+    );
+  } catch {
+    return { ok: false, reason: "reconciliation_unknown" };
+  }
+  if (reconciled === "succeeded") return { ok: true };
+  if (reconciled === "failed") return { ok: false, reason: "handoff_failed" };
+  if (reconciled === "unknown") return { ok: false, reason: "reconciliation_unknown" };
+
+  return cleanup();
 }

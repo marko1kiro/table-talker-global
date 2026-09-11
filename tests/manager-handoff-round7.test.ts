@@ -22,6 +22,7 @@ function deps(overrides: Partial<Parameters<typeof managerLoginHandoffCore>[1]> 
     setReminderFlag: vi.fn(),
     navigate: vi.fn(async () => undefined),
     confirmHandoff: vi.fn(async () => true),
+    reconcileHandoff: vi.fn(async () => "pending" as const),
     cleanupPending: vi.fn(async () => undefined),
     ...overrides,
   };

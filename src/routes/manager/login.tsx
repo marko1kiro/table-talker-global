@@ -7,6 +7,7 @@ import { Footer } from "@/components/Footer";
 import {
   loginStaff,
   confirmManagerHandoff,
+  reconcileManagerHandoff,
   cleanupManagerPendingSession,
 } from "@/lib/staff-login.server";
 import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -99,6 +100,12 @@ function StaffLoginPage() {
                 data: { managerToken, rateLimitReservationId },
               });
               return r?.ok === true;
+            },
+            reconcileHandoff: async (managerToken, rateLimitReservationId) => {
+              const r = await reconcileManagerHandoff({
+                data: { managerToken, rateLimitReservationId },
+              });
+              return r?.verdict ?? "unknown";
             },
             cleanupPending: async (managerToken, rateLimitReservationId) => {
               const r = await cleanupManagerPendingSession({

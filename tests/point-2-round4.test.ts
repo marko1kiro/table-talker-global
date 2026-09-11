@@ -59,6 +59,7 @@ function handoffDeps(overrides: HandoffOverrides = {}) {
       calls.confirmations.push(managerToken);
       return true;
     },
+    reconcileHandoff: async () => "pending",
     cleanupPending: async (managerToken: string) => {
       calls.cleanups.push(managerToken);
     },

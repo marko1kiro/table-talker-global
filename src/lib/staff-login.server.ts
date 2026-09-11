@@ -494,6 +494,36 @@ export const confirmManagerHandoff = createServerFn({ method: "POST" })
     return { ok: await confirmManagerHandoffCore(client, data) };
   });
 
+export type ManagerHandoffReconciliation = "succeeded" | "pending" | "failed" | "unknown";
+
+/**
+ * Reads the committed handoff state using the same bearer + reservation pair.
+ * Transport errors remain throws; malformed/error responses are unknown and
+ * must never trigger destructive compensation.
+ */
+export async function reconcileManagerHandoffCore(
+  client: HandoffRpcClient,
+  data: ManagerHandoffRequest,
+): Promise<ManagerHandoffReconciliation> {
+  const { data: result, error } = await client.rpc("reconcile_manager_session_handoff", {
+    p_token: data.managerToken,
+    p_reservation_id: data.rateLimitReservationId,
+  });
+  if (error || typeof result !== "string") return "unknown";
+  if (result === "SUCCEEDED") return "succeeded";
+  if (result === "PENDING") return "pending";
+  if (result === "FAILED") return "failed";
+  return "unknown";
+}
+
+export const reconcileManagerHandoff = createServerFn({ method: "POST" })
+  .validator(confirmManagerHandoffInput)
+  .handler(async ({ data }): Promise<{ verdict: ManagerHandoffReconciliation }> => {
+    const client = getServiceClient();
+    if (!client) return { verdict: "unknown" };
+    return { verdict: await reconcileManagerHandoffCore(client, data) };
+  });
+
 // R5-A + R6-C: failure-path cleanup. The unconfirmed pending session is
 // deleted (it was never usable) and the durable rate-limit outcome is banked
 // as a failure — a handoff that never reached confirm never becomes a

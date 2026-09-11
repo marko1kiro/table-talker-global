@@ -322,6 +322,7 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
           throw new Error("navigation exploded");
         },
         confirmHandoff: async () => true,
+        reconcileHandoff: async () => "pending",
         cleanupPending: async (managerToken, reservationId) => {
           const cleaned = await rpc<boolean>(c, "cleanup_pending_manager_session", {
             p_token: managerToken,

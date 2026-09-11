@@ -55,6 +55,7 @@ function handoffDeps(overrides: HandoffOverrides = {}) {
       calls.confirmations.push(token);
       return true;
     },
+    reconcileHandoff: async () => "pending",
     cleanupPending: async (token: string) => {
       calls.cleanups.push(token);
     },
@@ -92,7 +93,7 @@ describe("R5-A: pending→active handshake never leaves active orphan", () => {
     expect(r.ok).toBe(false);
     expect(r).toMatchObject({ ok: false, reason: "handoff_failed" });
     expect(calls.navigations).toBe(1);
-    expect(calls.confirmations).toEqual(["pending-mgr-tok"]);
+    expect(calls.confirmations).toEqual(["pending-mgr-tok", "pending-mgr-tok"]);
     expect(calls.cleanups).toEqual(["pending-mgr-tok"]);
   });
 
@@ -202,7 +203,7 @@ describe("R5-A: pending→active handshake never leaves active orphan", () => {
     expect(calls.writtenIdentities.at(-1)?.accessToken).toBe("anon-access-tok");
     // Both attempts navigate (first navigates then confirm fails, second navigates then confirms)
     expect(calls.navigations).toBe(2);
-    expect(calls.confirmations).toEqual(["pending-mgr-tok", "pending-mgr-tok"]);
+    expect(calls.confirmations).toEqual(["pending-mgr-tok", "pending-mgr-tok", "pending-mgr-tok"]);
   });
 
   // --- Raw token never leaks ---
