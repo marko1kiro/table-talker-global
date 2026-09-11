@@ -15,7 +15,11 @@ let anonToken: string | null = null;
 let anonThrows = false;
 const cleanups: string[] = [];
 const confirmations: string[] = [];
+const reconciliations: string[] = [];
 let confirmOk = true;
+// R8 contract: after a non-true confirm the browser reads authoritative DB
+// state instead of compensating blindly (src/lib/manager-login-handoff.ts).
+let reconcileVerdict: "succeeded" | "pending" | "failed" | "unknown" = "pending";
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => options,
@@ -31,6 +35,10 @@ vi.mock("@/lib/staff-login.server", () => ({
   confirmManagerHandoff: async ({ data }: { data: { managerToken: string } }) => {
     confirmations.push(data.managerToken);
     return { ok: confirmOk };
+  },
+  reconcileManagerHandoff: async ({ data }: { data: { managerToken: string } }) => {
+    reconciliations.push(data.managerToken);
+    return { verdict: reconcileVerdict };
   },
   cleanupManagerPendingSession: async ({ data }: { data: { managerToken: string } }) => {
     cleanups.push(data.managerToken);
@@ -69,7 +77,9 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     navigations.length = 0;
     cleanups.length = 0;
     confirmations.length = 0;
+    reconciliations.length = 0;
     confirmOk = true;
+    reconcileVerdict = "pending";
     anonThrows = false;
     loginResult = { ...managerLogin };
     anonToken = "anon-tok";
@@ -142,17 +152,55 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     }
   });
 
-  it("FAILED confirmation: pending session cleaned up, generic failure, navigates before confirm", async () => {
+  // R8 contract (src/lib/manager-login-handoff.ts:83-113): a non-true confirm
+  // response may be a lost response over an already committed activation, so
+  // the browser retries the SAME token+reservation twice and then reads
+  // authoritative state. Compensation runs only when that state proves the
+  // session is still pending — never while activation is uncertain.
+  it("FAILED confirmation, still pending: confirm retried twice, then pending session cleaned up", async () => {
     confirmOk = false;
+    reconcileVerdict = "pending";
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);
-    // Navigate happens before confirm; on confirm failure, pending is cleaned up
+    // Navigate happens before confirm; the pending session is cleaned up only
+    // after reconciliation proves activation never happened.
     expect(navigations).toEqual(["/manager"]);
-    expect(confirmations).toEqual(["minted-tok"]);
+    expect(confirmations).toEqual(["minted-tok", "minted-tok"]);
+    expect(reconciliations).toEqual(["minted-tok"]);
     expect(cleanups).toEqual(["minted-tok"]);
     expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
     expect(screen.getByRole("alert").textContent).not.toContain("minted-tok");
+  });
+
+  it("FAILED confirmation, authoritative failed: no compensation, generic failure", async () => {
+    confirmOk = false;
+    reconcileVerdict = "failed";
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(navigations).toEqual(["/manager"]);
+    expect(confirmations).toEqual(["minted-tok", "minted-tok"]);
+    expect(reconciliations).toEqual(["minted-tok"]);
+    // The DB already banked the terminal failure; cleanup would be redundant.
+    expect(cleanups).toEqual([]);
+    expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
+    expect(screen.getByRole("alert").textContent).not.toContain("minted-tok");
+  });
+
+  it("LOST confirmation, authoritative succeeded: session usable, no compensation, no error", async () => {
+    confirmOk = false;
+    reconcileVerdict = "succeeded";
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(navigations).toEqual(["/manager"]);
+    expect(confirmations).toEqual(["minted-tok", "minted-tok"]);
+    expect(reconciliations).toEqual(["minted-tok"]);
+    expect(cleanups).toEqual([]);
+    expect(screen.queryByRole("alert")).toBeNull();
+    const raw = sessionStorage.getItem("table-talker.manager-identity");
+    expect(JSON.parse(raw as string).managerToken).toBe("minted-tok");
   });
 
   it("AM role: cookie session made server-side; old manager identity cleared; no confirm/cleanup", async () => {
