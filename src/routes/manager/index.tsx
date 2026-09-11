@@ -15,6 +15,7 @@ import {
   removeManagerIdentity,
   type ManagerIdentity,
 } from "@/lib/manager-session-identity";
+import { readPendingManagerHandoff } from "@/lib/manager-pending-handoff";
 import { getManagerSnapshot, getManagerCrewHistory } from "@/lib/manager-dashboard.server";
 import { getManagerDailyStats } from "@/lib/manager-stats.server";
 import { buildManagerCsv, downloadCsv } from "@/lib/manager-csv-export";
@@ -95,7 +96,13 @@ function ManagerDashboard() {
   const [msgError, setMsgError] = useState("");
 
   useEffect(() => {
-    const stored = readManagerIdentity(browserManagerStorage());
+    const storage = browserManagerStorage();
+    if (readPendingManagerHandoff(storage)) {
+      removeManagerIdentity(storage);
+      void navigate({ to: "/manager/login" });
+      return;
+    }
+    const stored = readManagerIdentity(storage);
     if (!stored) {
       void navigate({ to: "/manager/login" });
       return;

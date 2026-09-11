@@ -60,6 +60,7 @@ function StaffLoginPage() {
       ensureAccessToken: () => ensureAnonAccessToken(getSupabaseBrowserClient()),
       getStorage: browserManagerStorage,
       writeIdentity: writeManagerIdentity,
+      removeIdentity: () => removeManagerIdentity(storage),
       setReminderFlag: () => {
         if (remindPassword) sessionStorage.setItem("tt-password-reminder", "1");
       },

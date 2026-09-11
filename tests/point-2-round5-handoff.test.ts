@@ -60,6 +60,7 @@ function handoffDeps(overrides: HandoffOverrides = {}) {
     cleanupPending: async (token: string) => {
       calls.cleanups.push(token);
     },
+    removeIdentity: () => undefined,
     ...overrides,
   };
   return { deps, calls, storage };

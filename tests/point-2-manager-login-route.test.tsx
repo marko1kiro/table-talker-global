@@ -21,6 +21,8 @@ const loginAttempts: Array<{ attemptKey: string; clientKey: string; managerToken
 // P1-3: backing store used when Storage is stubbed to reject one key.
 const mockedStore = new Map<string, string>();
 let confirmOk = true;
+let navigateRejects = false;
+let cleanupOk = true;
 // R8 contract: after a non-true confirm the browser reads authoritative DB
 // state instead of compensating blindly (src/lib/manager-login-handoff.ts).
 let reconcileVerdict: "succeeded" | "pending" | "failed" | "unknown" = "pending";
@@ -31,6 +33,7 @@ vi.mock("@tanstack/react-router", () => ({
     () =>
     async (opts: { to: string }): Promise<void> => {
       navigations.push(opts.to);
+      if (navigateRejects) throw new Error("navigation rejected");
     },
   Link: () => null,
 }));
@@ -57,7 +60,7 @@ vi.mock("@/lib/staff-login.server", () => ({
   },
   cleanupManagerPendingSession: async ({ data }: { data: HandoffPair }) => {
     cleanups.push({ ...data });
-    return { ok: true };
+    return { ok: cleanupOk };
   },
 }));
 vi.mock("@/lib/supabase-browser", () => ({
@@ -101,6 +104,8 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     loginAttempts.length = 0;
     confirmOk = true;
     reconcileVerdict = "pending";
+    navigateRejects = false;
+    cleanupOk = true;
     anonThrows = false;
     loginResult = { ...managerLogin };
     anonToken = "anon-tok";
@@ -313,6 +318,70 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     expect(
       JSON.parse(sessionStorage.getItem("table-talker.manager-identity") as string).managerToken,
     ).toBe(managerLogin.managerToken);
+  });
+
+  // P1-4: after a definitive core failure the browser identity is removed (by
+  // the core) AND the recovery record is removed (by the route), so a stale,
+  // never-confirmed session can never be presented as an "old" credential. On
+  // an unresolved outcome BOTH survive: /manager bounces to /manager/login and
+  // the next submit resumes this exact pair.
+  const IDENTITY_KEY = "table-talker.manager-identity";
+  const PENDING_KEY = "table-talker.manager-pending-handoff";
+  const keysPresent = () => ({
+    identity: sessionStorage.getItem(IDENTITY_KEY) !== null,
+    pending: sessionStorage.getItem(PENDING_KEY) !== null,
+  });
+
+  it("P1-4 navigation rejected: identity AND pending both removed", async () => {
+    navigateRejects = true;
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(cleanups).toEqual([handoffPair]);
+    expect(keysPresent()).toEqual({ identity: false, pending: false });
+    expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
+  });
+
+  it("P1-4 authoritative reconciliation failed: identity AND pending both removed", async () => {
+    confirmOk = false;
+    reconcileVerdict = "failed";
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(cleanups).toEqual([]);
+    expect(keysPresent()).toEqual({ identity: false, pending: false });
+  });
+
+  it("P1-4 pending cleanup succeeded: identity AND pending both removed", async () => {
+    confirmOk = false;
+    reconcileVerdict = "pending";
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(cleanups).toEqual([handoffPair]);
+    expect(keysPresent()).toEqual({ identity: false, pending: false });
+  });
+
+  it("P1-4 reconciliation unknown: identity AND pending both retained", async () => {
+    confirmOk = false;
+    reconcileVerdict = "unknown";
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(cleanups).toEqual([]);
+    expect(keysPresent()).toEqual({ identity: true, pending: true });
+  });
+
+  it("P1-4 cleanup failed: identity AND pending both retained", async () => {
+    confirmOk = false;
+    reconcileVerdict = "pending";
+    cleanupOk = false;
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(cleanups).toEqual([handoffPair]);
+    expect(keysPresent()).toEqual({ identity: true, pending: true });
+    expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
   });
 
   it("AM role: cookie session made server-side; old manager identity cleared; no confirm/cleanup", async () => {

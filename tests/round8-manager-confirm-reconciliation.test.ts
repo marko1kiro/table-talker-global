@@ -39,6 +39,7 @@ function deps(overrides: Partial<ReconciliationDeps> = {}): ReconciliationDeps {
     confirmHandoff: vi.fn().mockResolvedValue(true),
     reconcileHandoff: vi.fn().mockResolvedValue("unknown"),
     cleanupPending: vi.fn().mockResolvedValue(undefined),
+    removeIdentity: vi.fn(),
     ...overrides,
   };
 }

@@ -42,6 +42,15 @@ export type ManagerHandoffDeps = {
   ) => Promise<"succeeded" | "pending" | "failed" | "unknown">;
   /** R5-A + R6-C: delete the pending session + bank the failure outcome. */
   cleanupPending: (managerToken: string, rateLimitReservationId: string) => Promise<void>;
+  /**
+   * P1-4: delete the freshly written browser identity. The core calls this ONLY
+   * on a definitive post-write failure — after a successful pending cleanup or
+   * an authoritative `failed` reconciliation — so a stale, never-confirmed
+   * identity is never left usable. It is NEVER called on unresolved outcomes
+   * (`reconciliation_unknown` / `cleanup_failed`) or on pre-write failures,
+   * where no identity was ever successfully written.
+   */
+  removeIdentity: () => void;
 };
 
 export type ManagerHandoffResult =
@@ -55,9 +64,26 @@ export async function managerLoginHandoffCore(
   identity: ManagerHandoffIdentity,
   deps: ManagerHandoffDeps,
 ): Promise<ManagerHandoffResult> {
+  // P1-4: identity removal is only legitimate AFTER a successful write. Every
+  // pre-write failure (persistence, token, storage/write) leaves nothing written
+  // to remove, so the flag gates cleanup's removal call.
+  let identityWritten = false;
+
+  // Reviewer finding (P1-4): browser-side removal is best-effort. Once the
+  // server outcome is definitive, a storage throw here must never change the
+  // verdict (no downgrade to cleanup_failed) nor escape as a rejection.
+  const removeIdentityBestEffort = (): void => {
+    try {
+      deps.removeIdentity();
+    } catch {
+      // identity stays stale; route-level recovery remains the backstop
+    }
+  };
+
   const cleanup = async (): Promise<ManagerHandoffResult> => {
     try {
       await deps.cleanupPending(identity.managerToken, identity.rateLimitReservationId);
+      if (identityWritten) removeIdentityBestEffort();
       return { ok: false, reason: "handoff_failed" };
     } catch {
       return { ok: false, reason: "cleanup_failed" };
@@ -91,6 +117,7 @@ export async function managerLoginHandoffCore(
     storage = deps.getStorage();
     const written = deps.writeIdentity(storage, { ...identity, accessToken });
     if (!written) return cleanup();
+    identityWritten = true;
   } catch {
     return cleanup();
   }
@@ -128,7 +155,13 @@ export async function managerLoginHandoffCore(
     return { ok: false, reason: "reconciliation_unknown" };
   }
   if (reconciled === "succeeded") return { ok: true };
-  if (reconciled === "failed") return { ok: false, reason: "handoff_failed" };
+  // P1-4: authoritative `failed` is definitive — server already settled the
+  // pending session, so cleanup would be a redundant no-op. Still drop the
+  // stale browser identity so the next submit cannot present it.
+  if (reconciled === "failed") {
+    removeIdentityBestEffort();
+    return { ok: false, reason: "handoff_failed" };
+  }
   if (reconciled === "unknown") return { ok: false, reason: "reconciliation_unknown" };
 
   return cleanup();

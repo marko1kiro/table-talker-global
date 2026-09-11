@@ -266,6 +266,7 @@ function handoffProbe(overrides: Partial<ManagerHandoffDeps> = {}) {
       order.push("cleanupPending");
       cleanups.push([token, reservationId]);
     },
+    removeIdentity: () => undefined,
     ...overrides,
   };
   return { deps, order, cleanups, confirmations, written, storage };

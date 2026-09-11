@@ -334,6 +334,9 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
           });
           if (cleaned.error || cleaned.data !== true) throw new Error("cleanup failed");
         },
+        // P1-4: navigation failed AFTER the write below, and cleanup succeeds,
+        // so the core removes the stale browser identity best-effort.
+        removeIdentity: () => storage.removeItem("tt-manager-identity"),
       },
     );
     expect(handoff.ok).toBe(false);
