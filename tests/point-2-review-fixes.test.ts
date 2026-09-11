@@ -235,6 +235,25 @@ describe("reset request accounting (B12)", () => {
       expect(reported).toBe(c.want);
     }
   });
+  it("terminally reports an RPC exception instead of abandoning the reservation", async () => {
+    const reports: boolean[] = [];
+    const result = await submitResetRequestCore(
+      "submit_manager_reset_request",
+      { staffId: "mgr", newPassword: "abcdefghijkl" },
+      {
+        rpc: async () => {
+          throw new Error("response unavailable");
+        },
+        report: async (valid) => reports.push(valid),
+      },
+    );
+    expect(result).toEqual({
+      ok: false,
+      message: "Login gagal. Periksa kembali ID dan password.",
+    });
+    expect(reports).toEqual([false]);
+  });
+
   it("weak password is a failure and never reaches the RPC", async () => {
     let reported: boolean | null = null;
     let rpc = false;
