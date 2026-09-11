@@ -107,9 +107,11 @@ describe("logoutManagerSessionCore", () => {
   it.each(["UNKNOWN_TOKEN", "KIND_MISMATCH", "OTHER", null])(
     "fails closed on non-success verdict %s",
     async (verdict) => {
-      await expect(logoutManagerSessionCore(client({ verdict }), "manager-token")).resolves.toEqual({
-        ok: false,
-      });
+      await expect(logoutManagerSessionCore(client({ verdict }), "manager-token")).resolves.toEqual(
+        {
+          ok: false,
+        },
+      );
     },
   );
 
@@ -122,7 +124,10 @@ describe("logoutManagerSessionCore", () => {
   it("fails closed for no client, RPC error, and rejected RPC", async () => {
     await expect(logoutManagerSessionCore(null, "manager-token")).resolves.toEqual({ ok: false });
     await expect(
-      logoutManagerSessionCore(client({ verdict: "REVOKED" }, { message: "offline" }), "manager-token"),
+      logoutManagerSessionCore(
+        client({ verdict: "REVOKED" }, { message: "offline" }),
+        "manager-token",
+      ),
     ).resolves.toEqual({ ok: false });
     await expect(
       logoutManagerSessionCore(

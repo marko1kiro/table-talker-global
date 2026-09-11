@@ -17,7 +17,9 @@ const REQUIRED_KEYS = [
   "rateLimitReservationId",
 ] as const;
 
-export function readPendingManagerHandoff(storage: StorageLike | null): ManagerHandoffIdentity | null {
+export function readPendingManagerHandoff(
+  storage: StorageLike | null,
+): ManagerHandoffIdentity | null {
   if (!storage) return null;
   try {
     const raw = storage.getItem(PENDING_HANDOFF_KEY);

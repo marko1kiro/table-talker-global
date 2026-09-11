@@ -386,10 +386,12 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
     const c = await db.client();
     const active = await mintPending("active-global-identity");
     expect(
-      (await rpc<boolean>(c, "confirm_manager_session", {
-        p_token: active.token,
-        p_reservation_id: active.reservationId,
-      })).data,
+      (
+        await rpc<boolean>(c, "confirm_manager_session", {
+          p_token: active.token,
+          p_reservation_id: active.reservationId,
+        })
+      ).data,
     ).toBe(true);
     const secondReservationId = await reserve("active-global-identity-second");
     expect(
@@ -429,7 +431,9 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
       await blocker.query("begin");
       blockerOpen = true;
       await blocker.query("select pg_advisory_xact_lock(991, 1)");
-      const confirmPid = Number((await confirmer.query("select pg_backend_pid() as pid")).rows[0]?.pid);
+      const confirmPid = Number(
+        (await confirmer.query("select pg_backend_pid() as pid")).rows[0]?.pid,
+      );
       const confirming = rpc<boolean>(confirmer, "confirm_manager_session", {
         p_token: pending.token,
         p_reservation_id: pending.reservationId,
@@ -453,7 +457,9 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
       ).toMatchObject({ rowCount: 1 });
     } finally {
       if (blockerOpen) await blocker.query("rollback").catch(() => undefined);
-      await c.query(`drop trigger if exists test_confirm_barrier on public.manager_pending_sessions`);
+      await c.query(
+        `drop trigger if exists test_confirm_barrier on public.manager_pending_sessions`,
+      );
       await c.query(`drop function if exists public.test_confirm_barrier()`);
       await Promise.all([blocker.end(), confirmer.end(), parent.end()]);
     }
@@ -697,7 +703,7 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
     const managerId = "cccccccc-cccc-4ccc-8ccc-ccccccccccc3";
     await c.query(
       `insert into public.restaurants (id, code, display_name, pin_hash, credential_rotated_at)
-       values ($1, 'RESTO-3', 'Resto Tiga', encode(extensions.digest('pin', 'sha256'), 'hex'), now())`,
+       values ($1, 'RESTO-3', 'Resto Tiga', encode(extensions.digest('pin-resto-3', 'sha256'), 'hex'), now())`,
       [restaurantId],
     );
     await c.query(
@@ -718,7 +724,9 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
       await blocker.query("begin");
       blockerOpen = true;
       await blocker.query("select pg_advisory_xact_lock(991, 2)");
-      const confirmPid = Number((await confirmer.query("select pg_backend_pid() as pid")).rows[0]?.pid);
+      const confirmPid = Number(
+        (await confirmer.query("select pg_backend_pid() as pid")).rows[0]?.pid,
+      );
       const confirming = rpc<boolean>(confirmer, "confirm_manager_session", {
         p_token: pending.token,
         p_reservation_id: pending.reservationId,
@@ -734,9 +742,11 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
       expect(await confirming).toMatchObject({ data: true, error: null });
       await expect(deleting).resolves.toEqual(expect.anything());
       expect(
-        (await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [
-          sha256Hex(pending.token),
-        ])).rowCount,
+        (
+          await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [
+            sha256Hex(pending.token),
+          ])
+        ).rowCount,
       ).toBe(0);
       expect(
         (await rpc<Verdict>(c, "revoke_manager_session_by_token", { p_token: pending.token })).data
@@ -744,7 +754,9 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
       ).toBe("ALREADY_INACTIVE");
     } finally {
       if (blockerOpen) await blocker.query("rollback").catch(() => undefined);
-      await c.query(`drop trigger if exists test_confirm_parent_barrier on public.manager_pending_sessions`);
+      await c.query(
+        `drop trigger if exists test_confirm_parent_barrier on public.manager_pending_sessions`,
+      );
       await c.query(`drop function if exists public.test_confirm_parent_barrier()`);
       await Promise.all([blocker.end(), confirmer.end(), parent.end()]);
     }
@@ -835,10 +847,14 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
       await c.query(`select 1 from public.manager_pending_sessions where token_hash = $1`, [hash]),
     ).toMatchObject({ rowCount: 1 });
     expect(
-      await c.query(`select 1 from public.manager_bearer_lifecycle_hashes where token_hash = $1`, [token]),
+      await c.query(`select 1 from public.manager_bearer_lifecycle_hashes where token_hash = $1`, [
+        token,
+      ]),
     ).toMatchObject({ rowCount: 0 });
     expect(
-      await c.query(`select 1 from public.manager_bearer_lifecycle_hashes where token_hash = $1`, [hash]),
+      await c.query(`select 1 from public.manager_bearer_lifecycle_hashes where token_hash = $1`, [
+        hash,
+      ]),
     ).toMatchObject({ rowCount: 1 });
     expect(
       (
