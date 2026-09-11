@@ -11,7 +11,10 @@ import {
   sha256Hex,
 } from "../src/lib/super-admin-auth.server";
 import { loginStaffCore } from "../src/lib/staff-login.server";
-import { submitResetRequestCore } from "../src/lib/staff-password-reset.server";
+import {
+  submitResetRequestAttemptCore,
+  submitResetRequestCore,
+} from "../src/lib/staff-password-reset.server";
 import { superAdminReauthCore } from "../src/lib/auth.server";
 import { computeAuthStatus } from "../src/lib/auth";
 import { generateStaffToken } from "../src/lib/staff-identity.server";
@@ -268,6 +271,65 @@ describe("reset request accounting (B12)", () => {
       "submit_manager_reset_request",
       expect.objectContaining({ p_reservation_id: reservationId }),
     );
+  });
+
+  it("reconciles an already-terminal attempt when the reservation response is gone", async () => {
+    const submit = vi.fn();
+    const result = await submitResetRequestAttemptCore(
+      "manager",
+      {
+        staffId: "mgr",
+        newPassword: "abcdefghijkl",
+        clientKey: "client-key-long-enough",
+        attemptKey: "attempt-key-long-enough",
+      },
+      {
+        reserve: async () => null,
+        reconcile: async () => "SUCCEEDED",
+        submit,
+      },
+    );
+    expect(result).toEqual({ ok: true });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("reuses a live reservation for the reset mutation", async () => {
+    const reservationId = "11111111-1111-4111-8111-111111111111";
+    const submit = vi.fn().mockResolvedValue({ ok: true });
+    const result = await submitResetRequestAttemptCore(
+      "area_manager",
+      {
+        staffId: "am",
+        newPassword: "abcdefghijkl",
+        clientKey: "client-key-long-enough",
+        attemptKey: "attempt-key-long-enough",
+      },
+      {
+        reserve: async () => reservationId,
+        reconcile: async () => "UNKNOWN",
+        submit,
+      },
+    );
+    expect(result).toEqual({ ok: true });
+    expect(submit).toHaveBeenCalledWith(reservationId);
+  });
+
+  it("fails closed when a dead attempt has no authoritative reset result", async () => {
+    const result = await submitResetRequestAttemptCore(
+      "manager",
+      {
+        staffId: "mgr",
+        newPassword: "abcdefghijkl",
+        clientKey: "client-key-long-enough",
+        attemptKey: "attempt-key-long-enough",
+      },
+      {
+        reserve: async () => null,
+        reconcile: async () => "UNKNOWN",
+        submit: async () => ({ ok: true }),
+      },
+    );
+    expect(result).toEqual({ ok: false, message: GENERIC_AUTH_FAILURE });
   });
 
   it("weak password is a failure and never reaches the RPC", async () => {
