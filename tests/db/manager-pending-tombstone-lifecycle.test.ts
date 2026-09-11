@@ -47,6 +47,8 @@ afterEach(async () => {
   await c.query(`delete from public.manager_bearer_lifecycle_hashes`);
   await c.query(`delete from public.owner_login_rate_limit_reservations`);
   await c.query(`delete from public.owner_login_rate_limit_buckets`);
+  // Last: the deletes above fire the P1-5 terminal-evidence triggers.
+  await c.query(`delete from public.manager_handoff_reconciliation_registry`);
 });
 
 async function reserve(key: string): Promise<string> {
@@ -99,6 +101,24 @@ async function pendingTombstone(token: string) {
      where namespace = 'manager_pending' and token_hash = $1`,
     [sha256Hex(token)],
   );
+}
+
+/** P1-5 durable exact evidence. The registry table is intentionally absent
+ * until the P1-5 forward migration lands, so every lookup through this helper
+ * fails RED. */
+async function registry(
+  token: string,
+  reservationId: string,
+): Promise<{ state: string; manager_id: string } | undefined> {
+  const c = await db.client();
+  const rows = (
+    await c.query<{ state: string; manager_id: string }>(
+      `select state, manager_id from public.manager_handoff_reconciliation_registry
+       where token_hash = $1 and reservation_id = $2`,
+      [sha256Hex(token), reservationId],
+    )
+  ).rows;
+  return rows[0];
 }
 
 async function waitForAdvisoryWait(c: Awaited<ReturnType<TestDb["client"]>>, pid: number) {
@@ -883,5 +903,325 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
         hash,
       ]),
     ).toMatchObject({ rowCount: 1 });
+  });
+});
+
+describe("P1-5: durable exact reconciliation registry", () => {
+  let p15Seq = 0;
+
+  /** Fresh restaurant+manager pair per cascade test: the cascade itself is
+   * what deletes the parents, so the fixture can never be shared. */
+  async function seedCascadePair(): Promise<string> {
+    const c = await db.client();
+    p15Seq += 1;
+    const suffix = String(p15Seq).padStart(2, "0");
+    const restaurantId = `77777777-7777-4777-8777-7777777777${suffix}`;
+    const managerId = `88888888-8888-4888-8888-8888888888${suffix}`;
+    await c.query(
+      `insert into public.restaurants (id, code, display_name, pin_hash, credential_rotated_at)
+       values ($1, $2, $3, encode(extensions.digest($4, 'sha256'), 'hex'), now())`,
+      [restaurantId, `RESTO-P15-${suffix}`, `Resto P15 ${suffix}`, `p15-pin-${suffix}`],
+    );
+    await c.query(
+      `insert into public.manager_accounts (id, id_manager, full_name, restaurant_id, password_hash, status)
+       values ($1, $2, 'P15 Cascade', $3, $4, 'aktif')`,
+      [managerId, `p15.cascade.${suffix}`, restaurantId, await scryptHash("pw")],
+    );
+    return managerId;
+  }
+
+  async function reconcile(token: string, reservationId: string): Promise<string | null> {
+    const c = await db.client();
+    const { data, error } = await rpc<string>(c, "reconcile_manager_session_handoff", {
+      p_token: token,
+      p_reservation_id: reservationId,
+    });
+    if (error) throw new Error(`reconcile failed: ${error}`);
+    return data;
+  }
+
+  async function confirm(token: string, reservationId: string): Promise<void> {
+    const c = await db.client();
+    expect(
+      (
+        await rpc<boolean>(c, "confirm_manager_session", {
+          p_token: token,
+          p_reservation_id: reservationId,
+        })
+      ).data,
+    ).toBe(true);
+  }
+
+  test("mint records exact PENDING evidence for the (hash, reservation) pair", async () => {
+    const { token, reservationId } = await mintPending("p15-mint-pending");
+    expect(await registry(token, reservationId)).toMatchObject({
+      state: "PENDING",
+      manager_id: MANAGER_ID,
+    });
+    expect(await reconcile(token, reservationId)).toBe("PENDING");
+  });
+
+  test("confirm records exact SUCCEEDED evidence", async () => {
+    const { token, reservationId } = await mintPending("p15-confirm-succeeded");
+    await confirm(token, reservationId);
+    expect(await registry(token, reservationId)).toMatchObject({
+      state: "SUCCEEDED",
+      manager_id: MANAGER_ID,
+    });
+    expect(await reconcile(token, reservationId)).toBe("SUCCEEDED");
+  });
+
+  test("revoking the active session leaves exact FAILED evidence", async () => {
+    const c = await db.client();
+    const { token, reservationId } = await mintPending("p15-active-revoke");
+    await confirm(token, reservationId);
+    expect(
+      (await rpc<Verdict>(c, "revoke_manager_session_by_token", { p_token: token })).data?.verdict,
+    ).toBe("REVOKED");
+    expect(await registry(token, reservationId)).toMatchObject({ state: "FAILED" });
+    expect(await reconcile(token, reservationId)).toBe("FAILED");
+  });
+
+  test("pending cleanup leaves exact FAILED evidence", async () => {
+    const c = await db.client();
+    const { token, reservationId } = await mintPending("p15-cleanup-failed");
+    expect(
+      (
+        await rpc<boolean>(c, "cleanup_pending_manager_session", {
+          p_token: token,
+          p_reservation_id: reservationId,
+        })
+      ).data,
+    ).toBe(true);
+    expect(await registry(token, reservationId)).toMatchObject({ state: "FAILED" });
+    expect(await reconcile(token, reservationId)).toBe("FAILED");
+  });
+
+  test("manager account cascade preserves exact terminal FAILED evidence", async () => {
+    const c = await db.client();
+    const managerId = await seedCascadePair();
+    const { token, reservationId } = await mintPendingFor(managerId, "p15-manager-cascade");
+    await confirm(token, reservationId);
+    await c.query(`delete from public.manager_accounts where id = $1`, [managerId]);
+    expect(
+      await c.query(`select 1 from public.manager_pending_sessions where token_hash = $1`, [
+        sha256Hex(token),
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(await registry(token, reservationId)).toMatchObject({
+      state: "FAILED",
+      manager_id: managerId,
+    });
+    expect(await reconcile(token, reservationId)).toBe("FAILED");
+  });
+
+  test("restaurant cascade preserves exact terminal FAILED evidence", async () => {
+    const c = await db.client();
+    const managerId = await seedCascadePair();
+    const { token, reservationId } = await mintPendingFor(managerId, "p15-restaurant-cascade");
+    await confirm(token, reservationId);
+    const restaurantId = (
+      await c.query<{ restaurant_id: string }>(
+        `select restaurant_id from public.manager_accounts where id = $1`,
+        [managerId],
+      )
+    ).rows[0].restaurant_id;
+    await c.query(`delete from public.restaurants where id = $1`, [restaurantId]);
+    expect(
+      await c.query(`select 1 from public.manager_pending_sessions where token_hash = $1`, [
+        sha256Hex(token),
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(await registry(token, reservationId)).toMatchObject({
+      state: "FAILED",
+      manager_id: managerId,
+    });
+    expect(await reconcile(token, reservationId)).toBe("FAILED");
+  });
+
+  test("TTL expiry terminalization records exact FAILED evidence", async () => {
+    const c = await db.client();
+    const { token, reservationId } = await mintPending("p15-expiry-failed");
+    await c.query(
+      `update public.manager_pending_sessions set expires_at = now() - interval '1 second'
+       where token_hash = $1`,
+      [sha256Hex(token)],
+    );
+    const expired = await rpc<number>(c, "expire_manager_pending_sessions", {});
+    expect(expired.error).toBeNull();
+    expect(expired.data).toBe(1);
+    expect(
+      await c.query(`select 1 from public.manager_pending_sessions where token_hash = $1`, [
+        sha256Hex(token),
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(await registry(token, reservationId)).toMatchObject({ state: "FAILED" });
+    expect(await reconcile(token, reservationId)).toBe("FAILED");
+  });
+
+  test("reservation retention preserves exact terminal FAILED evidence", async () => {
+    const c = await db.client();
+    const { token, reservationId } = await mintPending("p15-retention-failed");
+    await confirm(token, reservationId);
+    await c.query(
+      `update public.manager_sessions
+       set expires_at = clock_timestamp() - interval '2 days'
+       where token_hash = $1`,
+      [sha256Hex(token)],
+    );
+    await c.query(
+      `update public.owner_login_rate_limit_reservations
+       set consumed_at = clock_timestamp() - interval '2 days'
+       where id = $1`,
+      [reservationId],
+    );
+    const retained = await rpc<{ reservations_deleted?: number }>(
+      c,
+      "cleanup_owner_login_rate_limits",
+      {},
+    );
+    expect(retained.error).toBeNull();
+    expect(retained.data?.reservations_deleted).toBeGreaterThanOrEqual(1);
+    expect(
+      await c.query(`select 1 from public.owner_login_rate_limit_reservations where id = $1`, [
+        reservationId,
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(await registry(token, reservationId)).toMatchObject({ state: "FAILED" });
+    expect(await reconcile(token, reservationId)).toBe("FAILED");
+  });
+
+  test("tombstone retention preserves exact FAILED evidence once its reservation is gone", async () => {
+    const c = await db.client();
+    const { token, reservationId } = await mintPending("p15-tombstone-retention");
+    expect(
+      (
+        await rpc<boolean>(c, "cleanup_pending_manager_session", {
+          p_token: token,
+          p_reservation_id: reservationId,
+        })
+      ).data,
+    ).toBe(true);
+    // Age the tombstone safely past the 48h floor, then remove its reservation
+    // so the operational cleanup is allowed to delete the tombstone itself.
+    await c.query(
+      `update public.revoked_session_tombstones
+       set revoked_at = clock_timestamp() - interval '49 hours'
+       where namespace = 'manager_pending' and token_hash = $1`,
+      [sha256Hex(token)],
+    );
+    await c.query(`delete from public.owner_login_rate_limit_reservations where id = $1`, [
+      reservationId,
+    ]);
+    const retained = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
+      p_before: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    });
+    // The helper is fail-closed: it never deletes the tombstone. Either way the
+    // exact registry row is the durable evidence: it must stay terminal FAILED
+    // and reconciliation must not degrade to UNKNOWN.
+    expect(retained).toMatchObject({ data: 0, error: null });
+    expect((await pendingTombstone(token)).rows).toHaveLength(1);
+    expect(await registry(token, reservationId)).toMatchObject({ state: "FAILED" });
+    expect(await reconcile(token, reservationId)).toBe("FAILED");
+  });
+
+  test("the same hash with another reservation stays UNKNOWN with no registry row", async () => {
+    const c = await db.client();
+    const { token, reservationId } = await mintPending("p15-wrong-pair");
+    expect(
+      (
+        await rpc<boolean>(c, "cleanup_pending_manager_session", {
+          p_token: token,
+          p_reservation_id: reservationId,
+        })
+      ).data,
+    ).toBe(true);
+    const otherReservationId = crypto.randomUUID();
+    expect(await registry(token, otherReservationId)).toBeUndefined();
+    expect(await reconcile(token, otherReservationId)).toBe("UNKNOWN");
+    expect(await reconcile(token, reservationId)).toBe("FAILED");
+  });
+
+  test("reconciliation stays a fixed-search_path service-only RPC", async () => {
+    const c = await db.client();
+    const rows = await c.query<{
+      prosecdef: boolean;
+      config: string[] | null;
+      anon: boolean;
+      authenticated: boolean;
+      service: boolean;
+    }>(
+      `select p.prosecdef, p.proconfig as config,
+              has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
+              has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated,
+              has_function_privilege('service_role', p.oid, 'EXECUTE') as service
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'reconcile_manager_session_handoff'`,
+    );
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0].prosecdef).toBe(true);
+    expect(rows.rows[0].config?.join(",")).toContain("search_path=pg_catalog, public");
+    expect(rows.rows[0]).toMatchObject({ anon: false, authenticated: false, service: true });
+  });
+});
+
+// Task-3-ready security invariants. RED only while the registry is absent;
+// they must stay green once the forward migration lands.
+describe("P1-5 Task 3: registry security invariants", () => {
+  test("the registry stores only the SHA-256 hash, never the raw bearer substring", async () => {
+    const c = await db.client();
+    const { token, reservationId } = await mintPending("p15-raw-bearer");
+    expect(
+      (
+        await rpc<boolean>(c, "confirm_manager_session", {
+          p_token: token,
+          p_reservation_id: reservationId,
+        })
+      ).data,
+    ).toBe(true);
+    const hash = sha256Hex(token);
+    const row = (
+      await c.query<{ evidence: string }>(
+        `select row_to_json(r)::text as evidence
+         from public.manager_handoff_reconciliation_registry r
+         where token_hash = $1 and reservation_id = $2`,
+        [hash, reservationId],
+      )
+    ).rows[0]?.evidence;
+    expect(row, "exact registry row must exist").toBeDefined();
+    // Substring position check: the raw bearer may not appear anywhere in the
+    // serialized row, while its SHA-256 hash must.
+    expect(row.indexOf(token)).toBe(-1);
+    expect(row.indexOf(hash)).toBeGreaterThan(-1);
+  });
+
+  test("the registry is RLS-enforced, policy-less, and service-private", async () => {
+    const c = await db.client();
+    const rows = await c.query<{
+      relrowsecurity: boolean;
+      policies: string;
+      anon_select: boolean;
+      authenticated_select: boolean;
+      anon_insert: boolean;
+      authenticated_insert: boolean;
+    }>(
+      `select r.relrowsecurity,
+              (select count(*)::text from pg_policy p where p.polrelid = r.oid) as policies,
+              has_table_privilege('anon', r.oid, 'SELECT') as anon_select,
+              has_table_privilege('authenticated', r.oid, 'SELECT') as authenticated_select,
+              has_table_privilege('anon', r.oid, 'INSERT') as anon_insert,
+              has_table_privilege('authenticated', r.oid, 'INSERT') as authenticated_insert
+       from pg_class r join pg_namespace n on n.oid = r.relnamespace
+       where n.nspname = 'public' and r.relname = 'manager_handoff_reconciliation_registry'`,
+    );
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]).toMatchObject({
+      relrowsecurity: true,
+      policies: "0",
+      anon_select: false,
+      authenticated_select: false,
+      anon_insert: false,
+      authenticated_insert: false,
+    });
   });
 });

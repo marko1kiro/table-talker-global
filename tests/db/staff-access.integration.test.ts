@@ -1453,6 +1453,7 @@ describe("atomic Manager/AM reset reservation binding", () => {
     await observer.query(`delete from public.manager_reset_requests where manager_id = $1`, [
       resetManagerId,
     ]);
+    const candidateHash = await scryptHash("ExpiryReset#1");
     const { reservationId } = await reserveResetAttempt(observer, "reset-expires-after-wait");
     await observer.query(
       `update public.owner_login_rate_limit_reservations
@@ -1469,7 +1470,7 @@ describe("atomic Manager/AM reset reservation binding", () => {
     try {
       const call = rpc<boolean>(contender, "submit_manager_reset_request", {
         p_staff_id: "budi.santoso",
-        p_candidate_hash: await scryptHash("ExpiryReset#1"),
+        p_candidate_hash: candidateHash,
         p_reservation_id: reservationId,
       });
       await waitForLockWait(observer, "reset-expiry-account-wait");

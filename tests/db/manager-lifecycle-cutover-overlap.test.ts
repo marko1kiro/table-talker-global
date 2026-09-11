@@ -189,6 +189,23 @@ async function reconcile(c: Client, token: string, reservationId: string): Promi
   return data;
 }
 
+/** P1-5 durable exact evidence. The registry table is intentionally absent
+ * until the P1-5 forward migration lands, so lookups fail RED. */
+async function registry(
+  c: Client,
+  token: string,
+  reservationId: string,
+): Promise<{ state: string; manager_id: string } | undefined> {
+  const rows = (
+    await c.query<{ state: string; manager_id: string }>(
+      `select state, manager_id from public.manager_handoff_reconciliation_registry
+       where token_hash = $1 and reservation_id = $2`,
+      [sha256Hex(token), reservationId],
+    )
+  ).rows;
+  return rows[0];
+}
+
 // --- 1. upgrade from seeded legacy-invalid state -------------------------------
 
 describe("R12-B: the cutover repairs legacy invalid bearer overlaps", () => {
@@ -619,6 +636,26 @@ describe("R12-B: retry, confirmation and reconciliation each refuse an overlap",
     });
   });
 
+  test("P1-5: runtime overlap terminalization records exact FAILED evidence", async () => {
+    const managerId = await seedManager(c, restaurantId);
+    const pending = await mintPending(c, managerId, "runtime-overlap-registry");
+    await giveHashToAnotherActiveSession(pending.hash);
+
+    expect(
+      await rpc<boolean>(c, "create_manager_session_pending", {
+        p_manager_id: managerId,
+        p_reservation_id: pending.reservationId,
+        p_token: pending.token,
+      }),
+    ).toEqual({ data: false, error: null });
+    expect(await pendingRow(c, pending.hash)).toBeUndefined();
+    expect(await registry(c, pending.token, pending.reservationId)).toMatchObject({
+      state: "FAILED",
+      manager_id: managerId,
+    });
+    expect(await reconcile(c, pending.token, pending.reservationId)).toBe("FAILED");
+  });
+
   test("confirmation refuses a bearer with a terminal manager tombstone", async () => {
     const managerId = await seedManager(c, restaurantId);
     const pending = await mintPending(c, managerId, "runtime-confirm");
@@ -692,6 +729,19 @@ describe("R12-B: retry, confirmation and reconciliation each refuse an overlap",
     ).toEqual({ data: true, error: null });
     expect(await reconcile(c, pending.token, pending.reservationId)).toBe("SUCCEEDED");
     expect(await reservationState(pending.reservationId)).toMatchObject({ outcome: "succeeded" });
+  });
+
+  test("P1-5: durable evidence exists only for the exact minted pair", async () => {
+    const managerId = await seedManager(c, restaurantId);
+    const pending = await mintPending(c, managerId, "runtime-exact-evidence");
+    const otherReservationId = await reserve(c, "runtime-exact-evidence-other");
+
+    expect(await registry(c, pending.token, pending.reservationId)).toMatchObject({
+      state: "PENDING",
+      manager_id: managerId,
+    });
+    expect(await registry(c, pending.token, otherReservationId)).toBeUndefined();
+    expect(await reconcile(c, pending.token, otherReservationId)).toBe("UNKNOWN");
   });
 
   test("supersede-on-confirm still revokes the manager's previous bearer", async () => {
