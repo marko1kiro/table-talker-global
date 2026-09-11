@@ -1005,6 +1005,95 @@ describe("durable denial audits (review B8)", () => {
     await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [managerId]);
   });
 
+  test("same reservation idempotently reconciles a committed reset request", async () => {
+    const c = await db.client();
+    const resetManagerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+    await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [
+      resetManagerId,
+    ]);
+    const reservation = await rpcRows<{ reservation_id: string }>(
+      c,
+      "reserve_owner_login_attempt",
+      {
+        p_client_bucket_hash: "c".repeat(64),
+        p_ip_bucket_hash: "d".repeat(64),
+        p_attempt_key: "reset-response-loss-attempt",
+      },
+    );
+    const reservationId = reservation.rows[0]?.reservation_id;
+    expect(reservation.error).toBeNull();
+    expect(reservationId).toBeTruthy();
+
+    const first = await rpc<boolean>(c, "submit_manager_reset_request", {
+      p_staff_id: "budi.santoso",
+      p_candidate_hash: await scryptHash("ResetAttempt#1"),
+      p_reservation_id: reservationId,
+    });
+    const retry = await rpc<boolean>(c, "submit_manager_reset_request", {
+      p_staff_id: "budi.santoso",
+      p_candidate_hash: await scryptHash("ResetAttempt#1"),
+      p_reservation_id: reservationId,
+    });
+    expect(first).toEqual({ data: true, error: null });
+    expect(retry).toEqual({ data: true, error: null });
+
+    const rows = await c.query(
+      `select count(*)::int as n from public.manager_reset_requests
+       where manager_id = $1 and reservation_id = $2`,
+      [resetManagerId, reservationId],
+    );
+    expect(rows.rows[0]?.n).toBe(1);
+    await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [
+      resetManagerId,
+    ]);
+  });
+
+  test("same reservation idempotently reconciles a committed AM reset request", async () => {
+    const c = await db.client();
+    const resetAmId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    await c.query(
+      `insert into public.area_manager_accounts
+         (id, staff_id, full_name, password_hash, status)
+       values ($1, 'am.reset.idem', 'AM Reset Idempotency', 'salt:hash', 'aktif')
+       on conflict (id) do update set status = 'aktif'`,
+      [resetAmId],
+    );
+    await c.query(`delete from public.am_reset_requests where area_manager_id = $1`, [resetAmId]);
+    const reservation = await rpcRows<{ reservation_id: string }>(
+      c,
+      "reserve_owner_login_attempt",
+      {
+        p_client_bucket_hash: "e".repeat(64),
+        p_ip_bucket_hash: "f".repeat(64),
+        p_attempt_key: "am-reset-response-loss-attempt",
+      },
+    );
+    const reservationId = reservation.rows[0]?.reservation_id;
+    expect(reservation.error).toBeNull();
+    expect(reservationId).toBeTruthy();
+
+    const first = await rpc<boolean>(c, "submit_am_reset_request", {
+      p_staff_id: "am.reset.idem",
+      p_candidate_hash: await scryptHash("ResetAttempt#2"),
+      p_reservation_id: reservationId,
+    });
+    const retry = await rpc<boolean>(c, "submit_am_reset_request", {
+      p_staff_id: "am.reset.idem",
+      p_candidate_hash: await scryptHash("ResetAttempt#2"),
+      p_reservation_id: reservationId,
+    });
+    expect(first).toEqual({ data: true, error: null });
+    expect(retry).toEqual({ data: true, error: null });
+
+    const rows = await c.query(
+      `select count(*)::int as n from public.am_reset_requests
+       where area_manager_id = $1 and reservation_id = $2`,
+      [resetAmId, reservationId],
+    );
+    expect(rows.rows[0]?.n).toBe(1);
+    await c.query(`delete from public.area_manager_accounts where id = $1`, [resetAmId]);
+  });
+
   test("denial audits never carry secrets or candidate hashes in metadata", async () => {
     const c = await db.client();
     const withSecrets = await scalar(
