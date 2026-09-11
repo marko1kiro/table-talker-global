@@ -1036,6 +1036,14 @@ describe("durable denial audits (review B8)", () => {
     });
     expect(first).toEqual({ data: true, error: null });
     expect(retry).toEqual({ data: true, error: null });
+    expect(
+      await oneText(
+        c,
+        `select coalesce(outcome, 'pending') as n
+         from public.owner_login_rate_limit_reservations where id = $1`,
+        [reservationId],
+      ),
+    ).toBe("succeeded");
 
     const rows = await c.query(
       `select count(*)::int as n from public.manager_reset_requests
@@ -1084,6 +1092,14 @@ describe("durable denial audits (review B8)", () => {
     });
     expect(first).toEqual({ data: true, error: null });
     expect(retry).toEqual({ data: true, error: null });
+    expect(
+      await oneText(
+        c,
+        `select coalesce(outcome, 'pending') as n
+         from public.owner_login_rate_limit_reservations where id = $1`,
+        [reservationId],
+      ),
+    ).toBe("succeeded");
 
     const rows = await c.query(
       `select count(*)::int as n from public.am_reset_requests
