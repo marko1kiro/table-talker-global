@@ -119,6 +119,63 @@ async function expectDenial(
   return v;
 }
 
+async function reserveResetAttempt(
+  client: Client,
+  label: string,
+): Promise<{ reservationId: string; clientHash: string; ipHash: string; attemptKey: string }> {
+  const nonce = generateToken();
+  const clientHash = sha256Hex(`${label}:client:${nonce}`);
+  const ipHash = sha256Hex(`${label}:ip:${nonce}`);
+  const attemptKey = `${label}:${nonce}`;
+  const reservation = await rpcRows<{ reservation_id: string }>(
+    client,
+    "reserve_owner_login_attempt",
+    {
+      p_client_bucket_hash: clientHash,
+      p_ip_bucket_hash: ipHash,
+      p_attempt_key: attemptKey,
+    },
+  );
+  expect(reservation.error).toBeNull();
+  const reservationId = reservation.rows[0]?.reservation_id;
+  expect(reservationId).toBeTruthy();
+  return { reservationId, clientHash, ipHash, attemptKey };
+}
+
+async function submitResetRpc(
+  client: Client,
+  fn: "submit_manager_reset_request" | "submit_am_reset_request",
+  params: { p_staff_id: string; p_candidate_hash: string },
+): Promise<{ data: boolean | null; error: string | null }> {
+  const { reservationId } = await reserveResetAttempt(client, `reset-helper-${fn}`);
+  return rpc<boolean>(client, fn, { ...params, p_reservation_id: reservationId });
+}
+
+async function submitResetOk(
+  client: Client,
+  fn: "submit_manager_reset_request" | "submit_am_reset_request",
+  params: { p_staff_id: string; p_candidate_hash: string },
+): Promise<boolean> {
+  const result = await submitResetRpc(client, fn, params);
+  expect(result.error).toBeNull();
+  return result.data === true;
+}
+
+async function waitForLockWait(observer: Client, applicationName: string): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const waiting = await scalar(
+      observer,
+      `select count(*) from pg_stat_activity
+       where application_name = $1 and wait_event_type = 'Lock'`,
+      [applicationName],
+    );
+    if (waiting === 1) return;
+    await sleep(20);
+  }
+  throw new Error(`timed out waiting for ${applicationName} to block on a lock`);
+}
+
 async function scalar(client: Client, sql: string, params: unknown[] = []): Promise<number> {
   const result = await client.query(sql, params);
   return Number(Object.values(result.rows[0] ?? { n: 0 })[0]);
@@ -240,7 +297,7 @@ describe("legacy mixed-case manager identity (review A2)", () => {
     const c = await db.client();
     const candidate = await scryptHash("ResetLegacy#1");
     expect(
-      await rpcOk<boolean>(c, "submit_manager_reset_request", {
+      await submitResetOk(c, "submit_manager_reset_request", {
         p_staff_id: "AGUSKASIR",
         p_candidate_hash: candidate,
       }),
@@ -616,7 +673,7 @@ describe("AM scope revocation is serialized with every scoped action (review A3)
     const c = await db.client();
     await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [managerId]);
     expect(
-      await rpcOk<boolean>(c, "submit_manager_reset_request", {
+      await submitResetOk(c, "submit_manager_reset_request", {
         p_staff_id: "kasir.satgas01",
         p_candidate_hash: await scryptHash("ResetDuringRace#1"),
       }),
@@ -986,12 +1043,12 @@ describe("durable denial audits (review B8)", () => {
        where action = 'manager_reset.submit' and result = 'failed' and reason = 'already pending'`,
     );
     expect(
-      await rpcOk<boolean>(c, "submit_manager_reset_request", {
+      await submitResetOk(c, "submit_manager_reset_request", {
         p_staff_id: "kasir.satgas01",
         p_candidate_hash: await scryptHash("DupPending#1"),
       }),
     ).toBe(true);
-    const second = await rpcOk<boolean>(c, "submit_manager_reset_request", {
+    const second = await submitResetOk(c, "submit_manager_reset_request", {
       p_staff_id: "kasir.satgas01",
       p_candidate_hash: await scryptHash("DupPending#1"),
     });
@@ -1051,6 +1108,19 @@ describe("durable denial audits (review B8)", () => {
       [resetManagerId, reservationId],
     );
     expect(rows.rows[0]?.n).toBe(1);
+    const ledger = await c.query(
+      `select request_kind, staff_id, result, request_id::text as request_id
+       from public.staff_reset_attempts where reservation_id = $1`,
+      [reservationId],
+    );
+    expect(ledger.rows).toEqual([
+      expect.objectContaining({
+        request_kind: "manager",
+        staff_id: "budi.santoso",
+        result: true,
+        request_id: expect.any(String),
+      }),
+    ]);
     await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [
       resetManagerId,
     ]);
@@ -1107,6 +1177,19 @@ describe("durable denial audits (review B8)", () => {
       [resetAmId, reservationId],
     );
     expect(rows.rows[0]?.n).toBe(1);
+    const ledger = await c.query(
+      `select request_kind, staff_id, result, request_id::text as request_id
+       from public.staff_reset_attempts where reservation_id = $1`,
+      [reservationId],
+    );
+    expect(ledger.rows).toEqual([
+      expect.objectContaining({
+        request_kind: "area_manager",
+        staff_id: "am.reset.idem",
+        result: true,
+        request_id: expect.any(String),
+      }),
+    ]);
     await c.query(`delete from public.area_manager_accounts where id = $1`, [resetAmId]);
   });
 
@@ -1118,6 +1201,389 @@ describe("durable denial audits (review B8)", () => {
        where metadata::text ~ 'candidate_hash|password_hash|token'`,
     );
     expect(withSecrets).toBe(0);
+  });
+});
+
+describe("atomic Manager/AM reset reservation binding", () => {
+  test("a definitive failure is charged and ledgered exactly once across replay", async () => {
+    const c = await db.client();
+    const { reservationId, clientHash, ipHash } = await reserveResetAttempt(
+      c,
+      "reset-failure-once",
+    );
+    const beforeAudit = await scalar(
+      c,
+      `select count(*) from public.admin_audit_log
+       where action = 'manager_reset.submit' and reason = 'unknown or inactive account'`,
+    );
+    const params = {
+      p_staff_id: "missing.reset.identity",
+      p_candidate_hash: await scryptHash("MissingReset#1"),
+      p_reservation_id: reservationId,
+    };
+    expect(await rpc<boolean>(c, "submit_manager_reset_request", params)).toEqual({
+      data: false,
+      error: null,
+    });
+    expect(await rpc<boolean>(c, "submit_manager_reset_request", params)).toEqual({
+      data: false,
+      error: null,
+    });
+    const terminal = await c.query(
+      `select outcome, consumed_at is not null as consumed
+       from public.owner_login_rate_limit_reservations where id = $1`,
+      [reservationId],
+    );
+    expect(terminal.rows).toEqual([{ outcome: "failed", consumed: true }]);
+    expect(
+      await scalar(
+        c,
+        `select count(*) from public.staff_reset_attempts
+         where reservation_id = $1 and request_kind = 'manager'
+           and staff_id = 'missing.reset.identity' and result = false
+           and request_id is null`,
+        [reservationId],
+      ),
+    ).toBe(1);
+    const buckets = await c.query(
+      `select bucket_hash, failures from public.owner_login_rate_limit_buckets
+       where bucket_hash in ($1, $2) order by bucket_hash`,
+      [clientHash, ipHash],
+    );
+    expect(buckets.rows).toEqual([
+      { bucket_hash: [clientHash, ipHash].sort()[0], failures: 1 },
+      { bucket_hash: [clientHash, ipHash].sort()[1], failures: 1 },
+    ]);
+    expect(
+      await scalar(
+        c,
+        `select count(*) from public.admin_audit_log
+         where action = 'manager_reset.submit' and reason = 'unknown or inactive account'`,
+      ),
+    ).toBe(beforeAudit + 1);
+  });
+
+  test("reset row, immutable ledger, audit, and limiter terminal update roll back together", async () => {
+    const c = await db.client();
+    const resetManagerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+    await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [
+      resetManagerId,
+    ]);
+    const { reservationId } = await reserveResetAttempt(c, "reset-terminal-throws");
+    const beforeAudit = await scalar(
+      c,
+      `select count(*) from public.admin_audit_log where action = 'manager_reset.submit'`,
+    );
+    await c.query(`create function pg_temp.raise_reset_terminal_update()
+      returns trigger language plpgsql as $$ begin
+        raise exception 'forced terminal limiter update failure';
+      end $$`);
+    await c.query(`create trigger force_reset_terminal_update
+      before update on public.owner_login_rate_limit_reservations
+      for each row when (old.id = '${reservationId}'::uuid)
+      execute function pg_temp.raise_reset_terminal_update()`);
+    const result = await rpc<boolean>(c, "submit_manager_reset_request", {
+      p_staff_id: "budi.santoso",
+      p_candidate_hash: await scryptHash("RollbackReset#1"),
+      p_reservation_id: reservationId,
+    });
+    await c.query(
+      `drop trigger force_reset_terminal_update on public.owner_login_rate_limit_reservations`,
+    );
+    expect(result.error).toContain("forced terminal limiter update failure");
+    expect(
+      await scalar(
+        c,
+        `select count(*) from public.manager_reset_requests where reservation_id = $1`,
+        [reservationId],
+      ),
+    ).toBe(0);
+    expect(
+      await scalar(
+        c,
+        `select count(*) from public.staff_reset_attempts where reservation_id = $1`,
+        [reservationId],
+      ),
+    ).toBe(0);
+    const reservation = await c.query(
+      `select consumed_at, outcome from public.owner_login_rate_limit_reservations where id = $1`,
+      [reservationId],
+    );
+    expect(reservation.rows).toEqual([{ consumed_at: null, outcome: null }]);
+    expect(
+      await scalar(
+        c,
+        `select count(*) from public.admin_audit_log where action = 'manager_reset.submit'`,
+      ),
+    ).toBe(beforeAudit);
+  });
+
+  test("one raw reservation globally binds cross-role contenders in deterministic FIFO order", async () => {
+    const observer = await db.client();
+    await observer.query(`delete from public.manager_reset_requests where manager_id = $1`, [
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+    ]);
+    await observer.query(`delete from public.am_reset_requests where area_manager_id = $1`, [
+      am1Id,
+    ]);
+    const { reservationId } = await reserveResetAttempt(observer, "reset-cross-role-race");
+    const holder = await freshClient();
+    const manager = await freshClient();
+    const areaManager = await freshClient();
+    await manager.query(`set application_name = 'reset-cross-role-manager'`);
+    await areaManager.query(`set application_name = 'reset-cross-role-am'`);
+    await holder.query("begin");
+    await holder.query(
+      `select 1 from public.owner_login_rate_limit_reservations where id = $1 for update`,
+      [reservationId],
+    );
+    try {
+      const managerCall = rpc<boolean>(manager, "submit_manager_reset_request", {
+        p_staff_id: "budi.santoso",
+        p_candidate_hash: await scryptHash("CrossRoleReset#1"),
+        p_reservation_id: reservationId,
+      });
+      await waitForLockWait(observer, "reset-cross-role-manager");
+      const amCall = rpc<boolean>(areaManager, "submit_am_reset_request", {
+        p_staff_id: "am.satu",
+        p_candidate_hash: await scryptHash("CrossRoleReset#2"),
+        p_reservation_id: reservationId,
+      });
+      await waitForLockWait(observer, "reset-cross-role-am");
+      await holder.query("commit");
+      expect(await managerCall).toEqual({ data: true, error: null });
+      expect(await amCall).toEqual({ data: false, error: null });
+    } finally {
+      await holder.query("rollback").catch(() => undefined);
+      await holder.end();
+      await manager.end();
+      await areaManager.end();
+    }
+    expect(
+      await scalar(
+        observer,
+        `select count(*) from public.staff_reset_attempts where reservation_id = $1`,
+        [reservationId],
+      ),
+    ).toBe(1);
+    expect(
+      await scalar(
+        observer,
+        `select count(*) from public.staff_reset_attempts
+         where reservation_id = $1 and request_kind = 'manager' and staff_id = 'budi.santoso'`,
+        [reservationId],
+      ),
+    ).toBe(1);
+  });
+
+  test("one raw reservation globally binds cross-staff contenders in deterministic FIFO order", async () => {
+    const observer = await db.client();
+    await observer.query(
+      `delete from public.manager_reset_requests
+       where manager_id in ($1, $2)`,
+      ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", managerId],
+    );
+    const { reservationId } = await reserveResetAttempt(observer, "reset-cross-staff-race");
+    const holder = await freshClient();
+    const first = await freshClient();
+    const second = await freshClient();
+    await first.query(`set application_name = 'reset-cross-staff-first'`);
+    await second.query(`set application_name = 'reset-cross-staff-second'`);
+    await holder.query("begin");
+    await holder.query(
+      `select 1 from public.owner_login_rate_limit_reservations where id = $1 for update`,
+      [reservationId],
+    );
+    try {
+      const firstCall = rpc<boolean>(first, "submit_manager_reset_request", {
+        p_staff_id: "budi.santoso",
+        p_candidate_hash: await scryptHash("CrossStaffReset#1"),
+        p_reservation_id: reservationId,
+      });
+      await waitForLockWait(observer, "reset-cross-staff-first");
+      const secondCall = rpc<boolean>(second, "submit_manager_reset_request", {
+        p_staff_id: "kasir.satgas01",
+        p_candidate_hash: await scryptHash("CrossStaffReset#2"),
+        p_reservation_id: reservationId,
+      });
+      await waitForLockWait(observer, "reset-cross-staff-second");
+      await holder.query("commit");
+      expect(await firstCall).toEqual({ data: true, error: null });
+      expect(await secondCall).toEqual({ data: false, error: null });
+    } finally {
+      await holder.query("rollback").catch(() => undefined);
+      await holder.end();
+      await first.end();
+      await second.end();
+    }
+    const ledger = await observer.query(
+      `select request_kind, staff_id, result from public.staff_reset_attempts where reservation_id = $1`,
+      [reservationId],
+    );
+    expect(ledger.rows).toEqual([
+      { request_kind: "manager", staff_id: "budi.santoso", result: true },
+    ]);
+  });
+
+  test("expiry is revalidated with wall clock after waiting on the account lock", async () => {
+    const observer = await db.client();
+    const resetManagerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+    await observer.query(`delete from public.manager_reset_requests where manager_id = $1`, [
+      resetManagerId,
+    ]);
+    const { reservationId } = await reserveResetAttempt(observer, "reset-expires-after-wait");
+    await observer.query(
+      `update public.owner_login_rate_limit_reservations
+       set expires_at = clock_timestamp() + interval '500 milliseconds' where id = $1`,
+      [reservationId],
+    );
+    const holder = await freshClient();
+    const contender = await freshClient();
+    await contender.query(`set application_name = 'reset-expiry-account-wait'`);
+    await holder.query("begin");
+    await holder.query(`select 1 from public.manager_accounts where id = $1 for update`, [
+      resetManagerId,
+    ]);
+    try {
+      const call = rpc<boolean>(contender, "submit_manager_reset_request", {
+        p_staff_id: "budi.santoso",
+        p_candidate_hash: await scryptHash("ExpiryReset#1"),
+        p_reservation_id: reservationId,
+      });
+      await waitForLockWait(observer, "reset-expiry-account-wait");
+      await sleep(650);
+      await holder.query("commit");
+      expect(await call).toEqual({ data: false, error: null });
+    } finally {
+      await holder.query("rollback").catch(() => undefined);
+      await holder.end();
+      await contender.end();
+    }
+    expect(
+      await scalar(
+        observer,
+        `select count(*) from public.manager_reset_requests where reservation_id = $1`,
+        [reservationId],
+      ),
+    ).toBe(0);
+    expect(
+      await scalar(
+        observer,
+        `select count(*) from public.staff_reset_attempts where reservation_id = $1`,
+        [reservationId],
+      ),
+    ).toBe(0);
+    const state = await observer.query(
+      `select consumed_at, outcome from public.owner_login_rate_limit_reservations where id = $1`,
+      [reservationId],
+    );
+    expect(state.rows).toEqual([{ consumed_at: null, outcome: null }]);
+  });
+
+  test("run_owner_retention removes old reset ledgers in a bounded batch and preserves recent rows", async () => {
+    const c = await db.client();
+    const clientHash = sha256Hex("reset-retention-client");
+    const ipHash = sha256Hex("reset-retention-ip");
+    await c.query(
+      `insert into public.owner_login_rate_limit_buckets(bucket_hash)
+       values ($1), ($2) on conflict do nothing`,
+      [clientHash, ipHash],
+    );
+    await c.query(
+      `with inserted as (
+         insert into public.owner_login_rate_limit_reservations
+           (id, client_bucket_hash, ip_bucket_hash, client_sequence, ip_sequence,
+            expires_at, consumed_at, attempt_key, outcome)
+         select gen_random_uuid(), $1, $2, n, n,
+                clock_timestamp() - interval '3 days', clock_timestamp() - interval '3 days',
+                'reset-retention-old-' || n::text, 'failed'
+         from generate_series(1, 501) n
+         returning id, attempt_key
+       )
+       insert into public.staff_reset_attempts
+         (reservation_id, request_kind, staff_id, result, created_at)
+       select id, 'manager', 'retention-' || attempt_key, false,
+              clock_timestamp() - interval '3 days'
+       from inserted`,
+      [clientHash, ipHash],
+    );
+    const { reservationId } = await reserveResetAttempt(c, "reset-retention-recent");
+    expect(
+      await rpc<boolean>(c, "submit_manager_reset_request", {
+        p_staff_id: "missing.retention.recent",
+        p_candidate_hash: await scryptHash("RetentionReset#1"),
+        p_reservation_id: reservationId,
+      }),
+    ).toEqual({ data: false, error: null });
+    const first = await rpcOk<Record<string, unknown>>(c, "run_owner_retention", {});
+    expect(first).toMatchObject({ staff_reset_attempts: { attempts_deleted: 500 } });
+    expect(
+      await scalar(
+        c,
+        `select count(*) from public.staff_reset_attempts where staff_id like 'retention-reset-retention-old-%'`,
+      ),
+    ).toBe(1);
+    expect(
+      await scalar(
+        c,
+        `select count(*) from public.staff_reset_attempts where reservation_id = $1`,
+        [reservationId],
+      ),
+    ).toBe(1);
+    const second = await rpcOk<Record<string, unknown>>(c, "run_owner_retention", {});
+    expect(second).toMatchObject({ staff_reset_attempts: { attempts_deleted: 1 } });
+    expect(
+      await scalar(
+        c,
+        `select count(*) from public.staff_reset_attempts where staff_id like 'retention-reset-retention-old-%'`,
+      ),
+    ).toBe(0);
+  });
+
+  test("legacy reset overloads are absent and reset ledger is immutable and not directly exposed", async () => {
+    const c = await db.client();
+    await c.query(`do $$ begin
+      if not exists (select 1 from pg_roles where rolname = 'p2_probe') then
+        create role p2_probe;
+      end if;
+    end $$`);
+    await expect(
+      c.query(`update public.staff_reset_attempts set staff_id = staff_id where reservation_id = (
+        select reservation_id from public.staff_reset_attempts limit 1
+      )`),
+    ).rejects.toThrow(/immutable/i);
+    expect(
+      await scalar(
+        c,
+        `select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public' and p.oid in (
+           to_regprocedure('public.submit_manager_reset_request(text,text)'),
+           to_regprocedure('public.submit_am_reset_request(text,text)')
+         )`,
+      ),
+    ).toBe(0);
+    for (const role of ["anon", "authenticated", "p2_probe"]) {
+      expect(
+        await scalar(
+          c,
+          `select has_table_privilege($1, 'public.staff_reset_attempts', 'select,insert,update,delete')::int`,
+          [role],
+        ),
+      ).toBe(0);
+    }
+    const defs = await c.query(
+      `select p.proname, p.prosecdef, p.proconfig
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public'
+         and p.proname in ('submit_manager_reset_request', 'submit_am_reset_request',
+                           'reconcile_staff_reset_attempt', 'cleanup_staff_reset_attempts')
+       order by p.proname`,
+    );
+    expect(defs.rows).toHaveLength(4);
+    expect(defs.rows.every((row) => row.prosecdef === true)).toBe(true);
+    expect(
+      defs.rows.every((row) => row.proconfig?.includes("search_path=pg_catalog, public")),
+    ).toBe(true);
   });
 });
 
@@ -1220,13 +1686,13 @@ describe("password reset: one-pending, first decision wins, bookkeeping", () => 
     await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [managerId]);
     const candidate = await scryptHash("PasswordBaru#1");
     expect(
-      await rpcOk<boolean>(c, "submit_manager_reset_request", {
+      await submitResetOk(c, "submit_manager_reset_request", {
         p_staff_id: "kasir.satgas01",
         p_candidate_hash: candidate,
       }),
     ).toBe(true);
     expect(
-      await rpc<boolean>(c, "submit_manager_reset_request", {
+      await submitResetRpc(c, "submit_manager_reset_request", {
         p_staff_id: "kasir.satgas01",
         p_candidate_hash: candidate,
       }),
@@ -1280,7 +1746,7 @@ describe("password reset: one-pending, first decision wins, bookkeeping", () => 
     const c = await db.client();
     await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [managerId]);
     expect(
-      await rpcOk<boolean>(c, "submit_manager_reset_request", {
+      await submitResetOk(c, "submit_manager_reset_request", {
         p_staff_id: "kasir.satgas01",
         p_candidate_hash: await scryptHash("PasswordBaru#2"),
       }),
@@ -1334,7 +1800,7 @@ describe("password reset: one-pending, first decision wins, bookkeeping", () => 
     });
     const candidate = await scryptHash("AmNewPass#11");
     expect(
-      await rpcOk<boolean>(c, "submit_am_reset_request", {
+      await submitResetOk(c, "submit_am_reset_request", {
         p_staff_id: "am.satu",
         p_candidate_hash: candidate,
       }),
@@ -1698,8 +2164,10 @@ describe("privilege matrix: every Poin 2 SECURITY DEFINER function (review B5)",
     "actor_can_manage_restaurant(text,uuid,uuid)",
     "create_manager_account(text,uuid,text,text,uuid,text)",
     "set_manager_status(text,uuid,uuid,text)",
-    "submit_manager_reset_request(text,text)",
-    "submit_am_reset_request(text,text)",
+    "submit_manager_reset_request(text,text,uuid)",
+    "submit_am_reset_request(text,text,uuid)",
+    "reconcile_staff_reset_attempt(text,text)",
+    "cleanup_staff_reset_attempts()",
     "decide_manager_reset(text,uuid,uuid,text)",
     "decide_am_reset(uuid,uuid,text)",
     "list_am_scope_restaurants(uuid)",
