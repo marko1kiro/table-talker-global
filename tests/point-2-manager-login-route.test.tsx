@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-// R4-A route-level runtime evidence: the ACTUAL /manager/login component runs
-// in jsdom, submits the real form, and every browser-handoff failure provably
-// calls the server cleanup (deleting the pending session). Confirm-failure
-// keeps the user on the form (cleanup + banked failure); a navigation only
-// happens on the happy path, and success writes exactly one usable identity
-// and confirms the pending→active session.
+// R4-A/R8 route-level runtime evidence: the ACTUAL /manager/login component
+// runs in jsdom and submits the real form. The browser writes the exact
+// token+reservation pair, navigates before confirmation, and retries a
+// non-true confirmation before reconciling authoritative state. Only a
+// definitively pending handoff is cleaned up; uncertain/terminal outcomes are
+// not destructively compensated. Success writes one usable identity.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -13,9 +13,15 @@ const navigations: string[] = [];
 let loginResult: unknown = { ok: false, message: "Login gagal." };
 let anonToken: string | null = null;
 let anonThrows = false;
-const cleanups: string[] = [];
-const confirmations: string[] = [];
+type HandoffPair = { managerToken: string; rateLimitReservationId: string };
+const cleanups: HandoffPair[] = [];
+const confirmations: HandoffPair[] = [];
+const reconciliations: HandoffPair[] = [];
+const loginAttempts: Array<{ attemptKey: string; clientKey: string }> = [];
 let confirmOk = true;
+// R8 contract: after a non-true confirm the browser reads authoritative DB
+// state instead of compensating blindly (src/lib/manager-login-handoff.ts).
+let reconcileVerdict: "succeeded" | "pending" | "failed" | "unknown" = "pending";
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => options,
@@ -27,13 +33,20 @@ vi.mock("@tanstack/react-router", () => ({
   Link: () => null,
 }));
 vi.mock("@/lib/staff-login.server", () => ({
-  loginStaff: async () => loginResult,
-  confirmManagerHandoff: async ({ data }: { data: { managerToken: string } }) => {
-    confirmations.push(data.managerToken);
+  loginStaff: async ({ data }: { data: { attemptKey: string; clientKey: string } }) => {
+    loginAttempts.push({ attemptKey: data.attemptKey, clientKey: data.clientKey });
+    return loginResult;
+  },
+  confirmManagerHandoff: async ({ data }: { data: HandoffPair }) => {
+    confirmations.push({ ...data });
     return { ok: confirmOk };
   },
-  cleanupManagerPendingSession: async ({ data }: { data: { managerToken: string } }) => {
-    cleanups.push(data.managerToken);
+  reconcileManagerHandoff: async ({ data }: { data: HandoffPair }) => {
+    reconciliations.push({ ...data });
+    return { verdict: reconcileVerdict };
+  },
+  cleanupManagerPendingSession: async ({ data }: { data: HandoffPair }) => {
+    cleanups.push({ ...data });
     return { ok: true };
   },
 }));
@@ -54,12 +67,17 @@ const managerLogin = {
   ok: true,
   role: "manager",
   managerToken: "minted-tok",
+  rateLimitReservationId: "11111111-1111-4111-8111-111111111111",
   idManager: "kasir.satgas01",
   fullName: "Kasir Satgas",
   restaurantId: "r1",
   restaurantDisplayName: "Resto Satu",
   restaurantCode: "R1",
   mustRemindPassword: false,
+};
+const handoffPair: HandoffPair = {
+  managerToken: managerLogin.managerToken,
+  rateLimitReservationId: managerLogin.rateLimitReservationId,
 };
 
 describe("R4-A: /manager/login runtime handoff behaviour", () => {
@@ -69,7 +87,10 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     navigations.length = 0;
     cleanups.length = 0;
     confirmations.length = 0;
+    reconciliations.length = 0;
+    loginAttempts.length = 0;
     confirmOk = true;
+    reconcileVerdict = "pending";
     anonThrows = false;
     loginResult = { ...managerLogin };
     anonToken = "anon-tok";
@@ -90,7 +111,7 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     render(<StaffLoginPage />);
     await submit(user);
     expect(navigations).toEqual(["/manager"]);
-    expect(confirmations).toEqual(["minted-tok"]);
+    expect(confirmations).toEqual([handoffPair]);
     expect(cleanups).toEqual([]);
     const raw = sessionStorage.getItem("table-talker.manager-identity");
     expect(raw).toBeTruthy();
@@ -105,7 +126,7 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);
-    expect(cleanups).toEqual(["minted-tok"]);
+    expect(cleanups).toEqual([handoffPair]);
     expect(confirmations).toEqual([]);
     expect(navigations).toEqual([]);
     expect(sessionStorage.getItem("table-talker.manager-identity")).toBeNull();
@@ -117,7 +138,7 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);
-    expect(cleanups).toEqual(["minted-tok"]);
+    expect(cleanups).toEqual([handoffPair]);
     expect(navigations).toEqual([]);
     expect(sessionStorage.getItem("table-talker.manager-identity")).toBeNull();
   });
@@ -134,7 +155,7 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
       const user = userEvent.setup();
       render(<StaffLoginPage />);
       await submit(user);
-      expect(cleanups).toEqual(["minted-tok"]);
+      expect(cleanups).toEqual([handoffPair]);
       expect(navigations).toEqual([]);
       expect(screen.getByRole("alert")).toBeTruthy();
     } finally {
@@ -142,17 +163,73 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     }
   });
 
-  it("FAILED confirmation: pending session cleaned up, generic failure, navigates before confirm", async () => {
+  // R8 contract (src/lib/manager-login-handoff.ts:83-113): navigation occurs
+  // before confirmation. A non-true confirm may be a lost response over an
+  // already committed activation, so the browser retries the SAME
+  // token+reservation twice and then reads authoritative state. Compensation
+  // runs only when that state proves the session is still pending — never while
+  // activation is uncertain.
+  it("FAILED confirmation, still pending: confirm retried twice, then pending session cleaned up", async () => {
     confirmOk = false;
+    reconcileVerdict = "pending";
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);
-    // Navigate happens before confirm; on confirm failure, pending is cleaned up
+    // Navigate happens before confirm; the pending session is cleaned up only
+    // after reconciliation proves activation never happened.
     expect(navigations).toEqual(["/manager"]);
-    expect(confirmations).toEqual(["minted-tok"]);
-    expect(cleanups).toEqual(["minted-tok"]);
+    expect(confirmations).toEqual([handoffPair, handoffPair]);
+    expect(reconciliations).toEqual([handoffPair]);
+    expect(cleanups).toEqual([handoffPair]);
     expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
     expect(screen.getByRole("alert").textContent).not.toContain("minted-tok");
+  });
+
+  it("FAILED confirmation, authoritative failed: no compensation, generic failure", async () => {
+    confirmOk = false;
+    reconcileVerdict = "failed";
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(navigations).toEqual(["/manager"]);
+    expect(confirmations).toEqual([handoffPair, handoffPair]);
+    expect(reconciliations).toEqual([handoffPair]);
+    // The DB already banked the terminal failure; cleanup would be redundant.
+    expect(cleanups).toEqual([]);
+    expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
+    expect(screen.getByRole("alert").textContent).not.toContain("minted-tok");
+  });
+
+  it("LOST confirmation, authoritative succeeded: session usable, no compensation, no error", async () => {
+    confirmOk = false;
+    reconcileVerdict = "succeeded";
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(navigations).toEqual(["/manager"]);
+    expect(confirmations).toEqual([handoffPair, handoffPair]);
+    expect(reconciliations).toEqual([handoffPair]);
+    expect(cleanups).toEqual([]);
+    expect(screen.queryByRole("alert")).toBeNull();
+    const raw = sessionStorage.getItem("table-talker.manager-identity");
+    expect(JSON.parse(raw as string).managerToken).toBe("minted-tok");
+  });
+
+  it("UNKNOWN reconciliation: no cleanup and a generic token-free failure", async () => {
+    confirmOk = false;
+    reconcileVerdict = "unknown";
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+
+    expect(loginAttempts).toHaveLength(1);
+    expect(navigations).toEqual(["/manager"]);
+    expect(confirmations).toEqual([handoffPair, handoffPair]);
+    expect(reconciliations).toEqual([handoffPair]);
+    expect(cleanups).toEqual([]);
+    expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
+    expect(screen.getByRole("alert").textContent).not.toContain(managerLogin.managerToken);
+    expect(document.body.textContent).not.toContain(managerLogin.managerToken);
   });
 
   it("AM role: cookie session made server-side; old manager identity cleared; no confirm/cleanup", async () => {

@@ -26,6 +26,7 @@ export const loginInputSchema = z.object({
   staffId: z.string().optional(),
   password: z.string(),
   clientKey: z.string().min(16).max(200),
+  attemptKey: z.string().min(16).max(200),
   // R3-A: the OLD manager bearer token surrendered on a Manager -> SA switch.
   managerToken: z.string().min(1).max(200).optional(),
 });
@@ -56,12 +57,13 @@ export const getAuthStatus = createServerFn({ method: "GET" }).handler(
 
 async function withLoginRateLimit<T>(
   clientKey: string,
+  attemptKey: string,
   action: (report: (valid: boolean) => Promise<boolean>) => Promise<T>,
   onFailure: () => T,
 ): Promise<T> {
   const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
     await import("./owner-login-rate-limit.server");
-  const reservationId = await reserveOwnerLoginAttempt(clientKey);
+  const reservationId = await reserveOwnerLoginAttempt(clientKey, attemptKey);
   if (!reservationId) return onFailure();
   const report = async (valid: boolean) => {
     const verdict = await completeOwnerLoginAttempt(reservationId, valid);
@@ -99,7 +101,8 @@ export type SuperAdminLoginDeps = {
     areaManagerToken: string | null;
   }>;
   /** R3-A: server-side revocation of one staff/manager bearer session.
-   * Cleanup call sites pass tolerateUnknown for client-surrendered tokens. */
+   * Role-switch handoff is mandatory: UNKNOWN_TOKEN must throw and prevent
+   * replacement credential minting. Optional logout cleanup is elsewhere. */
   revokeStaffSessionByToken?: (
     kind: "super_admin" | "area_manager",
     token: string,
@@ -157,31 +160,21 @@ export async function superAdminLoginCore(
   /**
    * R3-A: revoke every OLD credential carried by this browser context before
    * the replacement session is minted. Throws on failure so the caller can
-   * fail closed instead of leaving two usable credentials. These tokens are
-   * CLIENT-SURRENDERED (cookie bearers + the sessionStorage manager token):
-   * an UNKNOWN_TOKEN verdict proves the token was purged elsewhere without a
-   * tombstone and cannot authenticate anything, so cleanup passes tolerance
-   * instead of bricking this login for the cookie's remaining lifetime.
+   * fail closed instead of leaving two usable credentials. Although the raw
+   * values came from this browser, this is a mandatory credential handoff,
+   * not optional cleanup: UNKNOWN_TOKEN is not proof that no live credential
+   * remains and therefore aborts before any replacement is minted.
    */
   const revokePrevious = async () => {
-    const tolerateUnknown = { tolerateUnknown: true } as const;
     const cookie = deps.cookieStaffTokens ? await deps.cookieStaffTokens() : null;
     if (cookie?.superAdminToken) {
-      await deps.revokeStaffSessionByToken?.(
-        "super_admin",
-        cookie.superAdminToken,
-        tolerateUnknown,
-      );
+      await deps.revokeStaffSessionByToken?.("super_admin", cookie.superAdminToken);
     }
     if (cookie?.areaManagerToken) {
-      await deps.revokeStaffSessionByToken?.(
-        "area_manager",
-        cookie.areaManagerToken,
-        tolerateUnknown,
-      );
+      await deps.revokeStaffSessionByToken?.("area_manager", cookie.areaManagerToken);
     }
     if (deps.managerTokenToRevoke) {
-      await deps.revokeManagerSessionByToken?.(deps.managerTokenToRevoke, tolerateUnknown);
+      await deps.revokeManagerSessionByToken?.(deps.managerTokenToRevoke);
     }
   };
   try {
@@ -317,9 +310,8 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
     if (!client) return ownerLoginFailure();
     const revocationDeps = {
       cookieStaffTokens: readCookieStaffTokens,
-      // R4-B/R6 review fix: client-surrendered tokens tolerate UNKNOWN_TOKEN
-      // (purged elsewhere without a tombstone — provably dead); everything
-      // else fails closed (see revokeStaffSessionByTokenIfLive).
+      // Mandatory role handoff is strict: only REVOKED / tombstone-proven
+      // ALREADY_INACTIVE may proceed. UNKNOWN_TOKEN aborts before minting.
       revokeStaffSessionByToken: revokeStaffSessionByTokenIfLive,
       revokeManagerSessionByToken: revokeManagerSessionByTokenIfLive,
       managerTokenToRevoke: data.managerToken ?? null,
@@ -331,6 +323,7 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
       if (expectedPassword === null) return ownerLoginFailure();
       return withLoginRateLimit(
         data.clientKey,
+        data.attemptKey,
         (report) =>
           superAdminLoginCore(
             { mode: "legacy", password: data.password },
@@ -351,6 +344,7 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
     const { normalizeStaffId } = await import("./staff-identity.server");
     return withLoginRateLimit(
       data.clientKey,
+      data.attemptKey,
       (report) =>
         superAdminLoginCore(
           {
@@ -376,10 +370,10 @@ export const logout = createServerFn({ method: "POST" }).handler(async () => {
     await import("./auth.server");
   // R3-A: revoke the CURRENT server session BEFORE clearing the cookie. On
   // revocation failure the cookie stays (fail closed) — the caller reports a
-  // failed logout instead of silently leaving a live bearer behind. The
-  // token is client-surrendered: UNKNOWN_TOKEN (purged elsewhere without a
-  // tombstone) proves it is already unusable, so cleanup passes tolerance —
-  // a dead token must not brick logout or the next login for this browser.
+  // failed logout instead of silently leaving a live bearer behind. This
+  // legacy Super Admin logout path explicitly accepts UNKNOWN_TOKEN for its
+  // client-surrendered cleanup policy; that verdict is not historical proof
+  // that the bearer was never usable.
   const session = await getAuthSession();
   const token = session.data.superAdminSessionToken;
   if (token) {

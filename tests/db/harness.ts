@@ -255,10 +255,13 @@ export async function mintActiveManagerSession(client: Client, managerId: string
     p_attempt_key: key,
   });
   if (!reservationId) throw new Error("reservation failed in test harness");
-  const token = await rpcOk<string>(client, "create_manager_session_pending", {
+  const token = rawHexToken();
+  const minted = await rpcOk<boolean>(client, "create_manager_session_pending", {
     p_manager_id: managerId,
     p_reservation_id: reservationId,
+    p_token: token,
   });
+  if (minted !== true) throw new Error("pending mint failed in test harness");
   const confirmed = await rpcOk<boolean>(client, "confirm_manager_session", {
     p_token: token,
     p_reservation_id: reservationId,

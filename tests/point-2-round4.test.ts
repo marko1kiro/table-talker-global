@@ -59,6 +59,7 @@ function handoffDeps(overrides: HandoffOverrides = {}) {
       calls.confirmations.push(managerToken);
       return true;
     },
+    reconcileHandoff: async () => "pending",
     cleanupPending: async (managerToken: string) => {
       calls.cleanups.push(managerToken);
     },
@@ -291,7 +292,7 @@ function managerLoginDeps(overrides: LoginOverrides = {}) {
       fn === "get_manager_credential"
         ? { data: managerCred, error: null }
         : fn === "create_manager_session_pending"
-          ? { data: "new-mgr-tok", error: null }
+          ? { data: true, error: null }
           : { data: null, error: { message: "x" } },
     verify: async () => true,
     report: async (v) => {

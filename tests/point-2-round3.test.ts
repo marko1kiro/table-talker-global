@@ -232,7 +232,7 @@ describe("R3-A: role switches revoke the PREVIOUS server sessions", () => {
         fn === "get_manager_credential"
           ? ok(managerCred)
           : fn === "create_manager_session_pending"
-            ? ok("mtok")
+            ? ok(true)
             : err("x"),
       verify: async () => true,
       report: async () => "SUCCEEDED",

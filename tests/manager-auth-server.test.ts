@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { loginManagerCore, type ManagerAuthDeps } from "../src/lib/manager-auth.server";
+import { describe, expect, it, vi } from "vitest";
+import {
+  loginManagerCore,
+  logoutManagerSessionCore,
+  type ManagerAuthDeps,
+} from "../src/lib/manager-auth.server";
 
 function fakeVerify(pw: string, stored: string) {
   return Promise.resolve(stored === `hash(${pw})`);
@@ -84,5 +88,47 @@ describe("loginManagerCore", () => {
       expect(r.restaurantId).toBe("r-1");
       expect(r.restaurantCode).toBe("CKRBUL");
     }
+  });
+});
+
+describe("logoutManagerSessionCore", () => {
+  const client = (verdict: unknown, error: { message: string } | null = null) => ({
+    rpc: async (_fn: string, _params: Record<string, unknown>) => ({ data: verdict, error }),
+  });
+
+  it("uses the exact revoke RPC and parameter", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { verdict: "REVOKED" }, error: null });
+    await expect(logoutManagerSessionCore({ rpc }, "manager-token")).resolves.toEqual({ ok: true });
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("revoke_manager_session_by_token", {
+      p_token: "manager-token",
+    });
+  });
+
+  it.each(["UNKNOWN_TOKEN", "KIND_MISMATCH", "OTHER", null])(
+    "fails closed on non-success verdict %s",
+    async (verdict) => {
+      await expect(logoutManagerSessionCore(client({ verdict }), "manager-token")).resolves.toEqual({
+        ok: false,
+      });
+    },
+  );
+
+  it.each(["REVOKED", "ALREADY_INACTIVE"])("accepts %s", async (verdict) => {
+    await expect(logoutManagerSessionCore(client({ verdict }), "manager-token")).resolves.toEqual({
+      ok: true,
+    });
+  });
+
+  it("fails closed for no client, RPC error, and rejected RPC", async () => {
+    await expect(logoutManagerSessionCore(null, "manager-token")).resolves.toEqual({ ok: false });
+    await expect(
+      logoutManagerSessionCore(client({ verdict: "REVOKED" }, { message: "offline" }), "manager-token"),
+    ).resolves.toEqual({ ok: false });
+    await expect(
+      logoutManagerSessionCore(
+        { rpc: async () => Promise.reject(new Error("offline")) },
+        "manager-token",
+      ),
+    ).resolves.toEqual({ ok: false });
   });
 });

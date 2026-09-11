@@ -14,7 +14,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Client } from "pg";
-import { createTestDb, rpc, rpcRows, stopAll, type LegacySeed, type TestDb } from "./harness";
+import {
+  createTestDb,
+  rawHexToken,
+  rpc,
+  rpcRows,
+  stopAll,
+  type LegacySeed,
+  type TestDb,
+} from "./harness";
 
 const POIN2_MIGRATIONS = [
   "20260909010000_staff_identity_schema.sql",
@@ -177,13 +185,13 @@ async function assertHandshakeWorks(c: Client, managerId: string, restaurantId: 
   });
   const reservationId = reserved.rows[0]?.reservation_id;
   expect(reservationId).toBeTruthy();
-  const token = (
-    await rpc<string>(c, "create_manager_session_pending", {
-      p_manager_id: managerId,
-      p_reservation_id: reservationId,
-    })
-  ).data as string;
-  expect(typeof token).toBe("string");
+  const token = rawHexToken();
+  const minted = await rpc<boolean>(c, "create_manager_session_pending", {
+    p_manager_id: managerId,
+    p_reservation_id: reservationId,
+    p_token: token,
+  });
+  expect(minted.data).toBe(true);
   const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
     p_token: token,
     p_reservation_id: reservationId,

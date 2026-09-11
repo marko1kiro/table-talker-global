@@ -1,5 +1,7 @@
+import { createHmac } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { getAuthSecret } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
 import { verifyManagerPassword } from "./manager-password.server";
 import type { RpcCaller } from "./role-session.server";
@@ -42,22 +44,33 @@ export type LoginManagerResult =
       message: string;
     };
 
-// create_manager_session_pending returns the plaintext bearer token as a
-// scalar string. R6-A: the login path mints a PENDING session (60s TTL,
-// unusable by every consumer until the browser confirms the handoff). The
-// legacy active-mint RPC create_manager_session was dropped — no caller may
-// establish a usable session server-side anymore.
+// The bearer is deterministic for one manager+reservation but unforgeable
+// without AUTH_SECRET. A lost server response can therefore be retried with
+// the exact same bearer while the database persists only its SHA-256 hash.
+export function deriveManagerSessionToken(
+  managerId: string,
+  rateLimitReservationId: string,
+  secret = getAuthSecret(),
+): string {
+  return createHmac("sha256", secret)
+    .update(`manager-session:${managerId}:${rateLimitReservationId}`)
+    .digest("hex");
+}
+
 async function defaultCreateSession(
   rpc: RpcCaller,
   managerId: string,
   rateLimitReservationId?: string,
 ): Promise<{ token: string; expiresAt: string } | null> {
+  if (!rateLimitReservationId) return null;
+  const token = deriveManagerSessionToken(managerId, rateLimitReservationId);
   const { data, error } = await rpc("create_manager_session_pending", {
     p_manager_id: managerId,
     p_reservation_id: rateLimitReservationId,
+    p_token: token,
   });
-  if (error || typeof data !== "string" || !data) return null;
-  return { token: data, expiresAt: "" };
+  if (error || data !== true) return null;
+  return { token, expiresAt: "" };
 }
 
 export async function loginManagerCore(
@@ -116,30 +129,50 @@ export async function loginManagerCore(
 
 export const logoutManagerInputSchema = z.object({ managerToken: z.string().min(1).max(200) });
 
+type ManagerLogoutRpcClient = {
+  rpc: (
+    fn: string,
+    params: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+
 /**
  * Revokes the manager bearer session server-side BEFORE the client drops its
  * sessionStorage identity. A stolen token can no longer be replayed after
- * logout. Returns ok:false on transport failure so the client keeps its
- * credential (fail closed) instead of silently leaving a live bearer.
+ * logout. Returns ok:false on transport failure or an unproven verdict so the
+ * client keeps its credential (fail closed) instead of silently leaving a
+ * live bearer.
  */
-export const logoutManagerSession = createServerFn({ method: "POST" })
-  .validator(logoutManagerInputSchema)
-  .handler(async ({ data }): Promise<{ ok: boolean }> => {
-    const client = getServiceClient();
-    if (!client) return { ok: false };
-    // R6-B: structured verdict. REVOKED (row died now) and the
-    // tombstone-proven ALREADY_INACTIVE count as logged out. UNKNOWN_TOKEN
-    // also counts: the token is client-surrendered and provably not live
-    // (purged elsewhere without a tombstone — newest-wins supersede,
-    // account-wide revoke, cutover delete), so refusing would brick logout
-    // for that browser forever. KIND_MISMATCH still fails closed.
+export async function logoutManagerSessionCore(
+  client: ManagerLogoutRpcClient | null,
+  managerToken: string,
+): Promise<{ ok: boolean }> {
+  if (!client) return { ok: false };
+  // R6-B: logout is fail-closed. REVOKED means the live row was revoked
+  // now; ALREADY_INACTIVE is safe only when the hashed tombstone proves the
+  // token was issued and revoked earlier. UNKNOWN_TOKEN has no such proof:
+  // historical cutover data and tombstone deployment/history gaps can leave
+  // no durable record, so it must not be treated as successful logout.
+  try {
     const { data: verdict, error } = await client.rpc("revoke_manager_session_by_token", {
-      p_token: data.managerToken,
+      p_token: managerToken,
     });
     if (error) return { ok: false };
     const v = (verdict as { verdict?: string } | null)?.verdict;
-    return { ok: v === "REVOKED" || v === "ALREADY_INACTIVE" || v === "UNKNOWN_TOKEN" };
-  });
+    return { ok: v === "REVOKED" || v === "ALREADY_INACTIVE" };
+  } catch {
+    // The server function is a logout safety boundary: normalize a rejected
+    // transport promise to the same fail-closed result as an RPC error.
+    return { ok: false };
+  }
+}
+
+export const logoutManagerSession = createServerFn({ method: "POST" })
+  .validator(logoutManagerInputSchema)
+  .handler(
+    async ({ data }): Promise<{ ok: boolean }> =>
+      logoutManagerSessionCore(getServiceClient(), data.managerToken),
+  );
 
 // --- change own password (while logged in) ----------------------------------
 

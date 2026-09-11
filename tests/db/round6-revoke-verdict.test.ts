@@ -118,18 +118,38 @@ describe("R6-B: structured revocation verdicts", () => {
     expect((junk.data as Verdict)?.verdict).toBe("UNKNOWN_TOKEN");
   });
 
-  test("newest-wins supersede leaves no tombstone: dead token is UNKNOWN_TOKEN (why cleanup tolerates it)", async () => {
+  // R7-B contract: newest-wins supersede is a lifecycle revocation and MUST
+  // record an authoritative hashed tombstone, so a token that really was issued
+  // can never degrade into UNKNOWN_TOKEN. Implemented by
+  // 20260909100000_authoritative_manager_handoff.sql — confirm_manager_session
+  // calls the tombstone-producing revoke_manager_sessions() before activating
+  // the new session. (Superseded the 09060000 bare-delete behaviour, which the
+  // round 7 review classified as defect B-07.)
+  test("newest-wins supersede writes an authoritative tombstone: dead token is ALREADY_INACTIVE", async () => {
     const c = await db.client();
     const oldToken = await mintActiveManagerSession(c, MANAGER_ID);
-    // Second handshake deletes the first manager_sessions row WITHOUT a
-    // tombstone (09060000 newest-wins). The surrendered old token must then
-    // read as UNKNOWN_TOKEN — provably not live, hence the cleanup tolerance
-    // in revokeManagerSessionByTokenIfLive({ tolerateUnknown }).
     await mintActiveManagerSession(c, MANAGER_ID);
     const { data } = await rpc<Verdict>(c, "revoke_manager_session_by_token", {
       p_token: oldToken,
     });
-    expect((data as Verdict)?.verdict).toBe("UNKNOWN_TOKEN");
+    expect((data as Verdict)?.verdict).toBe("ALREADY_INACTIVE");
+    // The tombstone is hashed evidence: the raw token is never stored.
+    const tomb = await c.query<{ token_hash: string }>(
+      `select token_hash from public.revoked_session_tombstones
+       where namespace = 'manager' and token_hash = $1`,
+      [sha256Hex(oldToken)],
+    );
+    expect(tomb.rowCount).toBe(1);
+    const raw = await c.query(
+      `select 1 from public.revoked_session_tombstones where token_hash = $1`,
+      [oldToken],
+    );
+    expect(raw.rowCount).toBe(0);
+    // The superseded session row itself is gone: the old token is not live.
+    const live = await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [
+      sha256Hex(oldToken),
+    ]);
+    expect(live.rowCount).toBe(0);
   });
 
   test("staff token passed to manager revoke -> KIND_MISMATCH, staff row untouched", async () => {

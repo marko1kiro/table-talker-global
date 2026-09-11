@@ -507,9 +507,9 @@ export const updateOwnAmProfile = createServerFn({ method: "POST" })
 
 export const amLogout = createServerFn({ method: "POST" }).handler(async () => {
   // R3-A: revoke the AM bearer session BEFORE clearing the cookie; failure
-  // keeps the cookie (fail closed) and surfaces as a failed logout. The
-  // token is client-surrendered: UNKNOWN_TOKEN (purged elsewhere without a
-  // tombstone) proves it is already unusable, so cleanup passes tolerance.
+  // keeps the cookie (fail closed) and surfaces as a failed logout. This
+  // client-surrendered cleanup explicitly tolerates UNKNOWN_TOKEN by policy;
+  // that verdict is not historical proof that the bearer was never usable.
   const { getAuthSession, revokeStaffSessionByToken, clearAuthSession } =
     await import("./auth.server");
   const session = await getAuthSession();

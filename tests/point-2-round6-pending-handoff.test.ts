@@ -25,7 +25,7 @@ describe("R6-A: manager login mints pending, never active", () => {
             error: null,
           };
         }
-        return { data: "pending-token", error: null };
+        return { data: true, error: null };
       },
       verify: async () => true,
     };

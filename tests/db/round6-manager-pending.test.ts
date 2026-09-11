@@ -80,12 +80,14 @@ async function mintPending(
   key: string,
 ): Promise<{ token: string; reservationId: string }> {
   const reservationId = await reserveFor(c, key);
-  const result = await rpc<string>(c, "create_manager_session_pending", {
+  const token = rawHexToken();
+  const result = await rpc<boolean>(c, "create_manager_session_pending", {
     p_manager_id: MANAGER_ID,
     p_reservation_id: reservationId,
+    p_token: token,
   });
-  if (!result.data) throw new Error(`mint failed: ${result.error ?? "unknown"}`);
-  return { token: result.data, reservationId };
+  if (result.data !== true) throw new Error(`mint failed: ${result.error ?? "unknown"}`);
+  return { token, reservationId };
 }
 
 /** Wired supabase-shaped rpc caller over the real disposable DB. */
@@ -194,12 +196,16 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
     // confirms with one, and the first confirm consumes it — the retry must
     // still return true via the confirmed tombstone, never false.
     const reservationId = await reserveFor(c, "confirm-retry-idempotency");
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-        p_reservation_id: reservationId,
-      })
-    ).data as string;
+    const token = rawHexToken();
+    expect(
+      (
+        await rpc<boolean>(c, "create_manager_session_pending", {
+          p_manager_id: MANAGER_ID,
+          p_reservation_id: reservationId,
+          p_token: token,
+        })
+      ).data,
+    ).toBe(true);
 
     const first = await rpc<boolean>(c, "confirm_manager_session", {
       p_token: token,
@@ -243,12 +249,16 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
     const c1 = await connect(db.connectionString);
     const c2 = await connect(db.connectionString);
     const reservationId = await reserveFor(c1, "concurrent-confirm");
-    const token = (
-      await rpc<string>(c1, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-        p_reservation_id: reservationId,
-      })
-    ).data as string;
+    const token = rawHexToken();
+    expect(
+      (
+        await rpc<boolean>(c1, "create_manager_session_pending", {
+          p_manager_id: MANAGER_ID,
+          p_reservation_id: reservationId,
+          p_token: token,
+        })
+      ).data,
+    ).toBe(true);
 
     const [a, b] = await Promise.all([
       rpc<boolean>(c1, "confirm_manager_session", {
@@ -312,8 +322,13 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
           throw new Error("navigation exploded");
         },
         confirmHandoff: async () => true,
-        cleanupPending: async (managerToken) => {
-          await rpc(c, "cleanup_pending_manager_session", { p_token: managerToken });
+        reconcileHandoff: async () => "pending",
+        cleanupPending: async (managerToken, reservationId) => {
+          const cleaned = await rpc<boolean>(c, "cleanup_pending_manager_session", {
+            p_token: managerToken,
+            p_reservation_id: reservationId,
+          });
+          if (cleaned.error || cleaned.data !== true) throw new Error("cleanup failed");
         },
       },
     );

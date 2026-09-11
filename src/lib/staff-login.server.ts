@@ -101,7 +101,8 @@ export type StaffLoginDeps = {
     areaManagerToken: string | null;
   }>;
   /** R3-A: server-side revocation of one staff/manager bearer session.
-   * Cleanup call sites pass tolerateUnknown for client-surrendered tokens. */
+   * Mandatory role handoffs use strict defaults; only explicitly scoped
+   * non-handoff cleanup may opt into UNKNOWN_TOKEN tolerance. */
   revokeStaffSessionByToken?: (
     kind: "super_admin" | "area_manager",
     token: string,
@@ -163,12 +164,11 @@ async function finalizeAreaManagerCompletion(deps: StaffLoginDeps): Promise<bool
 
 /**
  * R3-A: revokes every OLD credential carried by this browser context
- * (cookie staff bearers + the surrendered manager token). Throws on failure
- * so the caller can fail closed instead of leaving two usable credentials.
- * These tokens are CLIENT-SURRENDERED: an UNKNOWN_TOKEN verdict proves the
- * token was already purged elsewhere (newest-wins supersede, account-wide
- * revoke, cutover delete — none of which leave tombstones), so it cannot
- * authenticate anything and cleanup must NOT brick this login.
+ * (cookie staff bearers + the surrendered manager token). This is a mandatory
+ * role handoff: failure, including UNKNOWN_TOKEN, aborts before a replacement
+ * credential is minted. UNKNOWN_TOKEN has no tombstone proof; irreversible
+ * cutover history and pending tombstone deployment/history gaps must not be
+ * treated as evidence that an old credential was never usable.
  */
 async function revokePreviousCredentials(
   deps: StaffLoginDeps,
@@ -186,6 +186,23 @@ async function revokePreviousCredentials(
   }
 }
 
+async function compensatePendingManagerLogin(
+  deps: StaffLoginDeps,
+  managerToken: string,
+): Promise<void> {
+  if (deps.rateLimitReservationId) {
+    try {
+      await deps.rpc("cleanup_pending_manager_session", {
+        p_token: managerToken,
+        p_reservation_id: deps.rateLimitReservationId,
+      });
+    } catch {
+      // The pending token is not usable and remains bounded by its short TTL.
+    }
+  }
+  await safeReport(deps.report, false);
+}
+
 export async function loginStaffCore(
   rawStaffId: string,
   password: string,
@@ -197,8 +214,10 @@ export async function loginStaffCore(
   // 1) Manager namespace first (existing bearer-token dashboard model).
   //    loginManagerCore mints the session internally, so its ok flag already
   //    means "usable session established".
-  const managerResult = deps.rateLimitReservationId
-    ? await loginManagerCore(
+  let managerResult: Awaited<ReturnType<typeof loginManagerCore>> | null = null;
+  if (deps.rateLimitReservationId) {
+    try {
+      managerResult = await loginManagerCore(
         {
           idManager: staffId,
           password,
@@ -209,8 +228,12 @@ export async function loginStaffCore(
           rateLimitReservationId: deps.rateLimitReservationId,
           verify: deps.verify ?? verifyManagerPassword,
         },
-      )
-    : null;
+      );
+    } catch {
+      await safeReport(deps.report, false);
+      return { ok: false, message: GENERIC };
+    }
+  }
   if (managerResult?.ok) {
     // R3-A: a manager takeover must revoke the PREVIOUS server sessions of
     // this browser context. On revocation failure the login fails closed:
@@ -219,7 +242,8 @@ export async function loginStaffCore(
     // rate-limit outcome is recorded as a failure (R6-C).
     try {
       if (managerTokenToRevoke) {
-        // Surrendered sessionStorage token: dead (purged elsewhere) is fine.
+        // The surrendered sessionStorage token is part of the mandatory
+        // handoff; UNKNOWN_TOKEN remains a failure, not proof of safety.
         await deps.revokeManagerSessionByToken?.(managerTokenToRevoke);
       }
       await revokePreviousCredentials(deps, { managerTokenToRevoke: null });
@@ -228,7 +252,13 @@ export async function loginStaffCore(
       return { ok: false, message: GENERIC };
     }
     // Review A4: wipe the shared cookie AFTER the server-side revocations.
-    await deps.clearSession?.().catch(() => undefined);
+    // A synchronous throw is still a handoff failure and must be compensated.
+    try {
+      await deps.clearSession?.();
+    } catch {
+      await compensatePendingManagerLogin(deps, managerResult.managerToken);
+      return { ok: false, message: GENERIC };
+    }
     // R6-C: the PENDING session is returned to the browser. The durable
     // rate-limit outcome is NOT finalized here — the browser's confirm call
     // activates the session AND banks the success in one DB transaction, so
@@ -236,9 +266,15 @@ export async function loginStaffCore(
     if (!deps.rateLimitReservationId) {
       return { ok: false, message: GENERIC };
     }
-    const extras = deps.managerExtras
-      ? await deps.managerExtras(staffId)
-      : { password_changed_at: "set" };
+    let extras: { password_changed_at: string | null } | null;
+    try {
+      extras = deps.managerExtras
+        ? await deps.managerExtras(staffId)
+        : { password_changed_at: "set" };
+    } catch {
+      await compensatePendingManagerLogin(deps, managerResult.managerToken);
+      return { ok: false, message: GENERIC };
+    }
     const mustRemindPassword = !extras || extras.password_changed_at === null;
     return {
       ok: true,
@@ -255,9 +291,16 @@ export async function loginStaffCore(
   }
 
   // 2) Area Manager namespace (cookie session backed by staff_sessions).
-  const { data: cred, error: amError } = await deps.rpc("get_area_manager_credential", {
-    p_staff_id: staffId,
-  });
+  let credentialResponse: Awaited<ReturnType<RpcCaller>>;
+  try {
+    credentialResponse = await deps.rpc("get_area_manager_credential", {
+      p_staff_id: staffId,
+    });
+  } catch {
+    await safeReport(deps.report, false);
+    return { ok: false, message: GENERIC };
+  }
+  const { data: cred, error: amError } = credentialResponse;
   const am = cred as {
     id: string;
     password_hash: string | null;
@@ -285,10 +328,17 @@ export async function loginStaffCore(
     await safeReport(deps.report, false);
     return { ok: false, message: GENERIC };
   }
-  const { data: token, error: sessionError } = await deps.rpc("create_staff_session", {
-    p_kind: "area_manager",
-    p_account_id: am.id,
-  });
+  let sessionResponse: Awaited<ReturnType<RpcCaller>>;
+  try {
+    sessionResponse = await deps.rpc("create_staff_session", {
+      p_kind: "area_manager",
+      p_account_id: am.id,
+    });
+  } catch {
+    await safeReport(deps.report, false);
+    return { ok: false, message: GENERIC };
+  }
+  const { data: token, error: sessionError } = sessionResponse;
   if (sessionError || typeof token !== "string" || !token) {
     // Password was right but no session exists — never count this as success.
     await safeReport(deps.report, false);
@@ -352,10 +402,9 @@ export const loginStaff = createServerFn({ method: "POST" })
         rateLimitReservationId: reservationId,
         updateSession: updateAuthSession,
         clearSession: clearAuthSession,
-        // R3-A: server-authoritative revocation of the previous credentials.
-        // R4-B: cookie/sessionStorage tokens may already be dead — dead ones
-        // are skipped (provably unusable), live ones are revoked with
-        // mandatory semantics (a no-op fails closed).
+        // R3-A/R4-B: mandatory server-authoritative revocation of previous
+        // credentials. REVOKED and tombstone-proven ALREADY_INACTIVE proceed;
+        // UNKNOWN_TOKEN and every other unexplained result fail closed.
         cookieStaffTokens: readCookieStaffTokens,
         revokeStaffSessionByToken: revokeStaffSessionByTokenIfLive,
         revokeManagerSessionByToken: revokeManagerSessionByTokenIfLive,
@@ -412,21 +461,67 @@ export const confirmManagerHandoffInput = z.object({
   rateLimitReservationId: z.string().uuid(),
 });
 
+type HandoffRpcClient = {
+  rpc: (
+    fn: string,
+    params: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+
+type ManagerHandoffRequest = z.infer<typeof confirmManagerHandoffInput>;
+
+/**
+ * A thrown RPC call is a transport-loss signal, not an authoritative failure.
+ * It must cross the server-function boundary so the browser handoff retries the
+ * same token + reservation and reconciles a commit whose response was lost.
+ */
+export async function confirmManagerHandoffCore(
+  client: HandoffRpcClient,
+  data: ManagerHandoffRequest,
+): Promise<boolean> {
+  const { data: result, error } = await client.rpc("confirm_manager_session", {
+    p_token: data.managerToken,
+    p_reservation_id: data.rateLimitReservationId,
+  });
+  return !error && result === true;
+}
+
 export const confirmManagerHandoff = createServerFn({ method: "POST" })
   .validator(confirmManagerHandoffInput)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
     const client = getServiceClient();
     if (!client) return { ok: false };
-    try {
-      const { data: result, error } = await client.rpc("confirm_manager_session", {
-        p_token: data.managerToken,
-        p_reservation_id: data.rateLimitReservationId,
-      });
-      if (error) return { ok: false };
-      return { ok: result === true };
-    } catch {
-      return { ok: false };
-    }
+    return { ok: await confirmManagerHandoffCore(client, data) };
+  });
+
+export type ManagerHandoffReconciliation = "succeeded" | "pending" | "failed" | "unknown";
+
+/**
+ * Reads the committed handoff state using the same bearer + reservation pair.
+ * Transport errors remain throws; malformed/error responses are unknown and
+ * must never trigger destructive compensation.
+ */
+export async function reconcileManagerHandoffCore(
+  client: HandoffRpcClient,
+  data: ManagerHandoffRequest,
+): Promise<ManagerHandoffReconciliation> {
+  const { data: result, error } = await client.rpc("reconcile_manager_session_handoff", {
+    p_token: data.managerToken,
+    p_reservation_id: data.rateLimitReservationId,
+  });
+  if (error || typeof result !== "string") return "unknown";
+  if (result === "SUCCEEDED") return "succeeded";
+  if (result === "PENDING") return "pending";
+  if (result === "FAILED") return "failed";
+  return "unknown";
+}
+
+export const reconcileManagerHandoff = createServerFn({ method: "POST" })
+  .validator(confirmManagerHandoffInput)
+  .handler(async ({ data }): Promise<{ verdict: ManagerHandoffReconciliation }> => {
+    const client = getServiceClient();
+    if (!client) return { verdict: "unknown" };
+    return { verdict: await reconcileManagerHandoffCore(client, data) };
   });
 
 // R5-A + R6-C: failure-path cleanup. The unconfirmed pending session is
@@ -438,28 +533,39 @@ export const cleanupManagerPendingSessionInput = z.object({
   rateLimitReservationId: z.string().uuid().optional(),
 });
 
+type FailureCompleter = (
+  reservationId: string,
+  success: false,
+) => Promise<Awaited<ReturnType<StaffLoginDeps["report"]>>>;
+
+/** Cleanup is successful only when both pending deletion and durable failure
+ * accounting are authoritative. Transport, timeout, malformed, and unknown
+ * states are surfaced to the browser as cleanup_failed rather than swallowed. */
+export async function cleanupManagerPendingSessionCore(
+  client: HandoffRpcClient,
+  data: ManagerHandoffRequest,
+  complete: FailureCompleter,
+): Promise<boolean> {
+  const { data: cleaned, error } = await client.rpc("cleanup_pending_manager_session", {
+    p_token: data.managerToken,
+    p_reservation_id: data.rateLimitReservationId,
+  });
+  if (error || cleaned !== true) return false;
+  const verdict = await complete(data.rateLimitReservationId, false);
+  return verdict === "FAILED" || verdict === "ALREADY_FAILED";
+}
+
 export const cleanupManagerPendingSession = createServerFn({ method: "POST" })
   .validator(cleanupManagerPendingSessionInput)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
     const client = getServiceClient();
-    if (!client) return { ok: false };
-    let cleaned = false;
-    try {
-      const { error } = await client.rpc("cleanup_pending_manager_session", {
-        p_token: data.managerToken,
-      });
-      cleaned = !error;
-    } catch {
-      cleaned = false;
-    }
-    // Best-effort durable failure accounting; the pending TTL bounds the rest.
-    if (data.rateLimitReservationId) {
-      try {
-        const { completeOwnerLoginAttempt } = await import("./owner-login-rate-limit.server");
-        await completeOwnerLoginAttempt(data.rateLimitReservationId, false);
-      } catch {
-        // reservation expires unconsumed; bounded
-      }
-    }
-    return { ok: cleaned };
+    if (!client || !data.rateLimitReservationId) return { ok: false };
+    const { completeOwnerLoginAttempt } = await import("./owner-login-rate-limit.server");
+    return {
+      ok: await cleanupManagerPendingSessionCore(
+        client,
+        { ...data, rateLimitReservationId: data.rateLimitReservationId },
+        completeOwnerLoginAttempt,
+      ),
+    };
   });

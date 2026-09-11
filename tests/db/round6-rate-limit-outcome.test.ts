@@ -10,7 +10,15 @@
 // confirm): every test below fails.
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import type { Client } from "pg";
-import { createTestDb, rpc, scryptHash, sha256Hex, stopAll, type TestDb } from "./harness";
+import {
+  createTestDb,
+  rawHexToken,
+  rpc,
+  scryptHash,
+  sha256Hex,
+  stopAll,
+  type TestDb,
+} from "./harness";
 
 const R1 = "11111111-1111-4111-8111-111111111111";
 const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
@@ -73,6 +81,17 @@ async function complete(
   });
 }
 
+async function mintPending(c: Client, reservationId: string): Promise<string> {
+  const token = rawHexToken();
+  const minted = await rpc<boolean>(c, "create_manager_session_pending", {
+    p_manager_id: MANAGER_ID,
+    p_reservation_id: reservationId,
+    p_token: token,
+  });
+  if (minted.data !== true) throw new Error(`pending mint failed: ${minted.error ?? "unknown"}`);
+  return token;
+}
+
 describe("R6-C: reservation state machine is durable and exactly-once", () => {
   test("complete returns a verdict string and records the outcome", async () => {
     const c = await db.client();
@@ -133,12 +152,12 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
     expect(second).toBe(first);
   });
 
-  test("attempt key is dead after a final outcome (no reuse)", async () => {
+  test("attempt key reconciles to the same reservation after a final outcome", async () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-bbbbbbbbbbbb");
     await complete(c, id as string, false);
-    const reuse = await reserve(c, "attempt-key-bbbbbbbbbbbb");
-    expect(reuse).toBeNull();
+    const retry = await reserve(c, "attempt-key-bbbbbbbbbbbb");
+    expect(retry).toBe(id);
   });
 
   test("fresh keys still pass the SAME bucket enforcement (rotation is not a bypass)", async () => {
@@ -154,26 +173,23 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
     expect(blockedNewKey).toBeNull();
   });
 
-  test("expired reservation with a used key cannot be re-reserved", async () => {
+  test("expired attempt identity remains stable but cannot be consumed again", async () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-expired-aaaaaa");
     await c.query(
       `update public.owner_login_rate_limit_reservations set expires_at = now() - interval '1 second' where id = $1`,
       [id],
     );
-    const reuse = await reserve(c, "attempt-key-expired-aaaaaa");
-    expect(reuse).toBeNull();
+    const retry = await reserve(c, "attempt-key-expired-aaaaaa");
+    expect(retry).toBe(id);
+    const completed = await complete(c, id as string, false);
+    expect(completed.data).toBe("EXPIRED");
   });
 
   test("confirm activates the pending session AND finalizes the outcome atomically", async () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-confirm-aaaaaaa");
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-        p_reservation_id: id,
-      })
-    ).data as string;
+    const token = await mintPending(c, id as string);
     expect(id).toBeTruthy();
 
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
@@ -197,12 +213,7 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-consumed-aaaaaa");
     expect(id).toBeTruthy();
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-        p_reservation_id: id,
-      })
-    ).data as string;
+    const token = await mintPending(c, id as string);
     await complete(c, id as string, false);
 
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
@@ -219,12 +230,7 @@ describe("R6-C: reservation state machine is durable and exactly-once", () => {
   test("confirm with an unknown reservation activates nothing (fail closed)", async () => {
     const c = await db.client();
     const id = await reserve(c, "attempt-key-mismatch-aaaaaa");
-    const token = (
-      await rpc<string>(c, "create_manager_session_pending", {
-        p_manager_id: MANAGER_ID,
-        p_reservation_id: id,
-      })
-    ).data as string;
+    const token = await mintPending(c, id as string);
     const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
       p_token: token,
       p_reservation_id: "00000000-0000-4000-8000-000000000000",

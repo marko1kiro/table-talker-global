@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowRight, LockKeyhole, Loader2 } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { getOwnerLoginClientKey } from "@/lib/owner-login-client-key";
@@ -10,6 +10,7 @@ export type SuperAdminLoginInput = {
     staffId?: string;
     password: string;
     clientKey: string;
+    attemptKey: string;
     // R3-A: the manager bearer token held by this browser, so a super admin
     // login revokes the previous manager session server-side.
     managerToken?: string;
@@ -45,6 +46,7 @@ export function AuthGate({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [bootstrapOpen, setBootstrapOpen] = useState(false);
+  const attemptKeyRef = useRef("");
 
   useEffect(() => {
     if (!staffLogin || !bootstrapStateLoader) return;
@@ -64,22 +66,26 @@ export function AuthGate({
     setLoading(true);
     setError("");
     try {
+      if (!attemptKeyRef.current) attemptKeyRef.current = crypto.randomUUID();
       const result = await loginAction({
         data: {
           mode,
           staffId: mode === "individual" ? staffId : undefined,
           password,
           clientKey: getOwnerLoginClientKey(),
+          attemptKey: attemptKeyRef.current,
           ...(staffLogin
             ? { managerToken: readManagerIdentity(browserManagerStorage())?.managerToken }
             : {}),
         },
       });
       if (!result.ok) {
+        attemptKeyRef.current = "";
         setError(result.message || "Login gagal.");
         return;
       }
       await onSuccess();
+      attemptKeyRef.current = "";
     } catch {
       setError("Login gagal. Silakan coba lagi.");
     } finally {

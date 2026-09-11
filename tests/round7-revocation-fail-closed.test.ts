@@ -17,7 +17,7 @@ const baseDeps = (revoked: string[]): StaffLoginDeps => ({
           error: null,
         }
       : fn === "create_manager_session_pending"
-        ? { data: "pending-token", error: null }
+        ? { data: true, error: null }
         : { data: null, error: null },
   verify: async () => true,
   report: async () => "FAILED",

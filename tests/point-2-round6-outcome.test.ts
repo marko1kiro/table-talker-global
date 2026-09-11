@@ -31,7 +31,7 @@ function managerDeps(reportCalls: boolean[]) {
         };
       }
       if (fn === "create_manager_session_pending") {
-        return { data: "pending-token", error: null };
+        return { data: true, error: null };
       }
       return { data: null, error: null };
     },

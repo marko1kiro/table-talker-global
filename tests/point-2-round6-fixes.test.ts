@@ -157,7 +157,7 @@ describe("owner-limiter TS adapter verdict mapping", () => {
   });
 });
 
-describe("SA login surrendered-token cleanup passes tolerance", () => {
+describe("SA role-switch handoff is mandatory", () => {
   function saDeps(revokes: {
     staff: Array<{ kind: string; token: string; opts: unknown }>;
     manager: Array<{ token: string; opts: unknown }>;
@@ -185,7 +185,7 @@ describe("SA login surrendered-token cleanup passes tolerance", () => {
     } satisfies SuperAdminLoginDeps;
   }
 
-  it("legacy SA login: every surrendered token revocation passes tolerateUnknown", async () => {
+  it("legacy SA login: every surrendered credential revoke is strict", async () => {
     const revokes = { staff: [], manager: [] } as {
       staff: Array<{ kind: string; token: string; opts: unknown }>;
       manager: Array<{ token: string; opts: unknown }>;
@@ -193,15 +193,41 @@ describe("SA login surrendered-token cleanup passes tolerance", () => {
     const result = await superAdminLoginCore({ mode: "legacy", password: "pw" }, saDeps(revokes));
     expect(result).toEqual({ ok: true });
     expect(revokes.staff).toEqual([
-      { kind: "super_admin", token: "cookie-sa", opts: { tolerateUnknown: true } },
-      { kind: "area_manager", token: "cookie-am", opts: { tolerateUnknown: true } },
+      { kind: "super_admin", token: "cookie-sa", opts: undefined },
+      { kind: "area_manager", token: "cookie-am", opts: undefined },
     ]);
-    expect(revokes.manager).toEqual([
-      { token: "surrendered-mgr", opts: { tolerateUnknown: true } },
-    ]);
+    expect(revokes.manager).toEqual([{ token: "surrendered-mgr", opts: undefined }]);
   });
 
-  it("individual SA login: surrendered revocations tolerate unknown; just-minted compensation stays strict", async () => {
+  it("UNKNOWN during mandatory handoff fails before replacement minting", async () => {
+    const revokes = { staff: [], manager: [] } as {
+      staff: Array<{ kind: string; token: string; opts: unknown }>;
+      manager: Array<{ token: string; opts: unknown }>;
+    };
+    let minted = false;
+    const deps = {
+      ...saDeps(revokes),
+      revokeManagerSessionByToken: async () => {
+        throw new Error("UNKNOWN_TOKEN");
+      },
+      rpc: (async (fn: string) => {
+        if (fn === "get_super_admin_credential") {
+          return { data: { id: "sa-1", password_hash: "x:y", status: "aktif" }, error: null };
+        }
+        if (fn === "create_staff_session") {
+          minted = true;
+          return { data: "must-not-exist", error: null };
+        }
+        return { data: null, error: null };
+      }) as SuperAdminLoginDeps["rpc"],
+    } satisfies SuperAdminLoginDeps;
+    await expect(
+      superAdminLoginCore({ mode: "individual", staffId: "sa.budi", password: "pw" }, deps),
+    ).resolves.toEqual({ ok: false, message: "Login gagal. Periksa kembali ID dan password." });
+    expect(minted).toBe(false);
+  });
+
+  it("individual SA login: surrendered revocations are strict; just-minted compensation stays strict", async () => {
     const revokes = { staff: [], manager: [] } as unknown as {
       staff: Array<{ kind: string; token: string; opts: unknown }>;
       manager: Array<{ token: string; opts: unknown }>;
@@ -224,12 +250,8 @@ describe("SA login surrendered-token cleanup passes tolerance", () => {
       deps,
     );
     expect(result).toEqual({ ok: true });
-    expect(revokes.staff).toEqual([
-      { kind: "area_manager", token: "cookie-am", opts: { tolerateUnknown: true } },
-    ]);
-    expect(revokes.manager).toEqual([
-      { token: "surrendered-mgr", opts: { tolerateUnknown: true } },
-    ]);
+    expect(revokes.staff).toEqual([{ kind: "area_manager", token: "cookie-am", opts: undefined }]);
+    expect(revokes.manager).toEqual([{ token: "surrendered-mgr", opts: undefined }]);
   });
 });
 
