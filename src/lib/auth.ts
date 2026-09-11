@@ -26,6 +26,7 @@ export const loginInputSchema = z.object({
   staffId: z.string().optional(),
   password: z.string(),
   clientKey: z.string().min(16).max(200),
+  attemptKey: z.string().min(16).max(200),
   // R3-A: the OLD manager bearer token surrendered on a Manager -> SA switch.
   managerToken: z.string().min(1).max(200).optional(),
 });
@@ -56,12 +57,13 @@ export const getAuthStatus = createServerFn({ method: "GET" }).handler(
 
 async function withLoginRateLimit<T>(
   clientKey: string,
+  attemptKey: string,
   action: (report: (valid: boolean) => Promise<boolean>) => Promise<T>,
   onFailure: () => T,
 ): Promise<T> {
   const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
     await import("./owner-login-rate-limit.server");
-  const reservationId = await reserveOwnerLoginAttempt(clientKey);
+  const reservationId = await reserveOwnerLoginAttempt(clientKey, attemptKey);
   if (!reservationId) return onFailure();
   const report = async (valid: boolean) => {
     const verdict = await completeOwnerLoginAttempt(reservationId, valid);
@@ -331,6 +333,7 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
       if (expectedPassword === null) return ownerLoginFailure();
       return withLoginRateLimit(
         data.clientKey,
+        data.attemptKey,
         (report) =>
           superAdminLoginCore(
             { mode: "legacy", password: data.password },
@@ -351,6 +354,7 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
     const { normalizeStaffId } = await import("./staff-identity.server");
     return withLoginRateLimit(
       data.clientKey,
+      data.attemptKey,
       (report) =>
         superAdminLoginCore(
           {

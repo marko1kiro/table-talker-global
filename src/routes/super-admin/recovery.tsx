@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Eye, EyeOff, Loader2, Lock, Hash } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
@@ -42,13 +42,19 @@ export function RecoveryPageInner({ search }: { search: { staff_id?: string; tok
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const requestAttemptKeyRef = useRef("");
+  const consumeAttemptKeyRef = useRef("");
 
   async function requestReset(event: FormEvent) {
     event.preventDefault();
     if (!email.includes("@")) return;
     setBusy(true);
     try {
-      await requestSuperAdminRecovery({ data: { email: email.trim() } });
+      if (!requestAttemptKeyRef.current) requestAttemptKeyRef.current = crypto.randomUUID();
+      await requestSuperAdminRecovery({
+        data: { email: email.trim(), attemptKey: requestAttemptKeyRef.current },
+      });
+      requestAttemptKeyRef.current = "";
       setRequested(true);
     } catch {
       setRequested(true);
@@ -63,15 +69,17 @@ export function RecoveryPageInner({ search }: { search: { staff_id?: string; tok
     setBusy(true);
     setError("");
     try {
+      if (!consumeAttemptKeyRef.current) consumeAttemptKeyRef.current = crypto.randomUUID();
       const result = await consumeSuperAdminRecovery({
         data: {
           staffId: staffId.trim(),
           token: token.trim(),
           password,
           clientKey: getOwnerLoginClientKey(),
-          attemptKey: crypto.randomUUID(),
+          attemptKey: consumeAttemptKeyRef.current,
         },
       });
+      consumeAttemptKeyRef.current = "";
       if (!result.ok) {
         setError("Token tidak valid atau sudah digunakan.");
         return;

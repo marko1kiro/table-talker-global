@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { createFileRoute, useSearch, Link } from "@tanstack/react-router";
 import { Eye, EyeOff, Loader2, Lock, Hash } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
@@ -30,6 +30,7 @@ function AcceptInvitePage() {
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const attemptKeyRef = useRef("");
 
   const canSubmit =
     staffId.trim().length >= 3 &&
@@ -43,15 +44,17 @@ function AcceptInvitePage() {
     setBusy(true);
     setError("");
     try {
+      if (!attemptKeyRef.current) attemptKeyRef.current = crypto.randomUUID();
       const result = await acceptSuperAdminInvite({
         data: {
           staffId: staffId.trim(),
           token: token.trim(),
           password,
           clientKey: getOwnerLoginClientKey(),
-          attemptKey: crypto.randomUUID(),
+          attemptKey: attemptKeyRef.current,
         },
       });
+      attemptKeyRef.current = "";
       if (!result.ok) {
         setError(
           result.code === "INVITATION_EXPIRED"

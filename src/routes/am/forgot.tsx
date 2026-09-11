@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Eye, EyeOff, Hash, Loader2, Lock } from "lucide-react";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
@@ -21,6 +21,7 @@ function AmForgotPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [notice, setNotice] = useState(false);
   const [busy, setBusy] = useState(false);
+  const attemptKeyRef = useRef("");
 
   const canSubmit =
     staffId.trim().length > 0 && password.length >= 8 && confirm.length > 0 && password === confirm;
@@ -30,13 +31,16 @@ function AmForgotPage() {
     if (!canSubmit) return;
     setBusy(true);
     try {
+      if (!attemptKeyRef.current) attemptKeyRef.current = crypto.randomUUID();
       await submitAmResetRequest({
         data: {
           staffId: staffId.trim(),
           newPassword: password,
           clientKey: getOwnerLoginClientKey(),
+          attemptKey: attemptKeyRef.current,
         },
       });
+      attemptKeyRef.current = "";
       setNotice(true);
     } catch {
       setNotice(true);

@@ -15,10 +15,11 @@ import {
 
 const GENERIC = GENERIC_AUTH_FAILURE;
 
-const submitSchema = z.object({
+export const submitResetRequestInputSchema = z.object({
   staffId: z.string().min(1).max(64),
   newPassword: z.string(),
   clientKey: z.string().min(16).max(200),
+  attemptKey: z.string().min(16).max(200),
 });
 
 export type SubmitResetResult = { ok: true } | { ok: false; message: string };
@@ -54,13 +55,13 @@ export async function submitResetRequestCore(
 }
 
 export const submitManagerResetRequest = createServerFn({ method: "POST" })
-  .validator(submitSchema)
+  .validator(submitResetRequestInputSchema)
   .handler(async ({ data }): Promise<SubmitResetResult> => {
     const client = getServiceClient();
     if (!client) return { ok: false, message: GENERIC };
     const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
       await import("./owner-login-rate-limit.server");
-    const reservationId = await reserveOwnerLoginAttempt(data.clientKey);
+    const reservationId = await reserveOwnerLoginAttempt(data.clientKey, data.attemptKey);
     if (!reservationId) return { ok: false, message: GENERIC };
     return submitResetRequestCore("submit_manager_reset_request", data, {
       rpc: async (fn, params) => client.rpc(fn, params),
@@ -69,13 +70,13 @@ export const submitManagerResetRequest = createServerFn({ method: "POST" })
   });
 
 export const submitAmResetRequest = createServerFn({ method: "POST" })
-  .validator(submitSchema)
+  .validator(submitResetRequestInputSchema)
   .handler(async ({ data }): Promise<SubmitResetResult> => {
     const client = getServiceClient();
     if (!client) return { ok: false, message: GENERIC };
     const { reserveOwnerLoginAttempt, completeOwnerLoginAttempt } =
       await import("./owner-login-rate-limit.server");
-    const reservationId = await reserveOwnerLoginAttempt(data.clientKey);
+    const reservationId = await reserveOwnerLoginAttempt(data.clientKey, data.attemptKey);
     if (!reservationId) return { ok: false, message: GENERIC };
     return submitResetRequestCore("submit_am_reset_request", data, {
       rpc: async (fn, params) => client.rpc(fn, params),

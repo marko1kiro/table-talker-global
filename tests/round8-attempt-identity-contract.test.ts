@@ -17,7 +17,12 @@ describe("R8 stable logical attempt identity contracts", () => {
   });
 
   it("requires an attempt key for invite accept and recovery", () => {
-    const accept = { staffId: "admin", token: "t".repeat(16), password: "password", clientKey: key };
+    const accept = {
+      staffId: "admin",
+      token: "t".repeat(16),
+      password: "password",
+      clientKey: key,
+    };
     expect(acceptInviteInputSchema.safeParse(accept).success).toBe(false);
     expect(acceptInviteInputSchema.safeParse({ ...accept, attemptKey: key }).success).toBe(true);
 
@@ -33,6 +38,8 @@ describe("R8 stable logical attempt identity contracts", () => {
   it("requires an attempt key for Manager and AM reset requests", () => {
     const reset = { staffId: "manager", newPassword: "password", clientKey: key };
     expect(submitResetRequestInputSchema.safeParse(reset).success).toBe(false);
-    expect(submitResetRequestInputSchema.safeParse({ ...reset, attemptKey: key }).success).toBe(true);
+    expect(submitResetRequestInputSchema.safeParse({ ...reset, attemptKey: key }).success).toBe(
+      true,
+    );
   });
 });
