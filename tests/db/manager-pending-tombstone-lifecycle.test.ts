@@ -99,7 +99,7 @@ async function waitForAdvisoryWait(c: Awaited<ReturnType<TestDb["client"]>>, pid
   throw new Error(`backend ${pid} did not wait for lifecycle advisory lock`);
 }
 
-describe("R9: authoritative pending-manager tombstone lifecycle", () => {
+describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
   test("live pending manager revoke terminates it and records manager_pending evidence", async () => {
     const c = await db.client();
     const { token, reservationId } = await mintPending("live-revoke");
@@ -340,5 +340,365 @@ describe("R9: authoritative pending-manager tombstone lifecycle", () => {
         })
       ).data,
     ).toBe(false);
+  });
+
+  test("a terminal hash cannot be reused by a different reservation", async () => {
+    const c = await db.client();
+    const first = await mintPending("hash-identity-first");
+    expect(
+      (
+        await rpc<boolean>(c, "cleanup_pending_manager_session", {
+          p_token: first.token,
+          p_reservation_id: first.reservationId,
+        })
+      ).data,
+    ).toBe(true);
+    const secondReservationId = await reserve("hash-identity-second");
+    const reused = await rpc<boolean>(c, "create_manager_session_pending", {
+      p_manager_id: MANAGER_ID,
+      p_reservation_id: secondReservationId,
+      p_token: first.token,
+    });
+    expect(reused).toMatchObject({ data: false, error: null });
+    expect((await pendingTombstone(first.token)).rows).toEqual([
+      { token_hash: sha256Hex(first.token), pending_reservation_id: first.reservationId },
+    ]);
+  });
+
+  test("confirm and account-wide revoke wait on the manager hierarchy and cannot reproduce the old cycle", async () => {
+    const c = await db.client();
+    // Promote an old bearer so confirmation would have to revoke it.
+    const old = await mintPending("cycle-old-active-confirm");
+    expect(
+      (
+        await rpc<boolean>(c, "confirm_manager_session", {
+          p_token: old.token,
+          p_reservation_id: old.reservationId,
+        })
+      ).data,
+    ).toBe(true);
+    const next = await mintPending("cycle-new-pending");
+    const blocker = await connect(db.connectionString);
+    const confirmer = await connect(db.connectionString);
+    const revoker = await connect(db.connectionString);
+    let blockerOpen = false;
+    try {
+      await blocker.query("begin");
+      blockerOpen = true;
+      await blocker.query(`select public.lock_manager_session_lifecycle($1)`, [MANAGER_ID]);
+      const confirmPid = Number(
+        (await confirmer.query(`select pg_backend_pid() as pid`)).rows[0]?.pid,
+      );
+      const revokePid = Number(
+        (await revoker.query(`select pg_backend_pid() as pid`)).rows[0]?.pid,
+      );
+      const confirming = rpc<boolean>(confirmer, "confirm_manager_session", {
+        p_token: next.token,
+        p_reservation_id: next.reservationId,
+      });
+      const revoking = rpc<number>(revoker, "revoke_manager_sessions", {
+        p_manager_id: MANAGER_ID,
+      });
+      await waitForAdvisoryWait(c, confirmPid);
+      await waitForAdvisoryWait(c, revokePid);
+      await blocker.query("commit");
+      blockerOpen = false;
+      await expect(Promise.all([confirming, revoking])).resolves.toEqual([
+        expect.objectContaining({ error: null }),
+        expect.objectContaining({ error: null }),
+      ]);
+      expect(
+        (await c.query(`select 1 from public.manager_sessions where manager_id = $1`, [MANAGER_ID]))
+          .rowCount,
+      ).toBe(0);
+    } finally {
+      if (blockerOpen) await blocker.query("rollback").catch(() => undefined);
+      await Promise.all([blocker.end(), confirmer.end(), revoker.end()]);
+    }
+  });
+
+  test("retention and account-wide revoke serialize one manager's multiple pending hashes", async () => {
+    const c = await db.client();
+    const first = await mintPending("retention-multi-1");
+    const second = await mintPending("retention-multi-2");
+    await c.query(
+      `update public.owner_login_rate_limit_reservations
+                   set expires_at = clock_timestamp() - interval '2 days'
+                   where id = any($1::uuid[])`,
+      [[first.reservationId, second.reservationId]],
+    );
+    const blocker = await connect(db.connectionString);
+    const retainer = await connect(db.connectionString);
+    const revoker = await connect(db.connectionString);
+    let blockerOpen = false;
+    try {
+      await blocker.query("begin");
+      blockerOpen = true;
+      await blocker.query(`select public.lock_manager_session_lifecycle($1)`, [MANAGER_ID]);
+      const retentionPid = Number(
+        (await retainer.query(`select pg_backend_pid() as pid`)).rows[0]?.pid,
+      );
+      const revokePid = Number(
+        (await revoker.query(`select pg_backend_pid() as pid`)).rows[0]?.pid,
+      );
+      const retaining = rpc<{ reservations_deleted?: number }>(
+        retainer,
+        "cleanup_owner_login_rate_limits",
+        {},
+      );
+      const revoking = rpc<number>(revoker, "revoke_manager_sessions", {
+        p_manager_id: MANAGER_ID,
+      });
+      await waitForAdvisoryWait(c, retentionPid);
+      await waitForAdvisoryWait(c, revokePid);
+      await blocker.query("commit");
+      blockerOpen = false;
+      await expect(Promise.all([retaining, revoking])).resolves.toEqual([
+        expect.objectContaining({ error: null }),
+        expect.objectContaining({ error: null }),
+      ]);
+      expect(
+        (
+          await c.query(`select 1 from public.manager_pending_sessions where manager_id = $1`, [
+            MANAGER_ID,
+          ])
+        ).rowCount,
+      ).toBe(0);
+      expect((await pendingTombstone(first.token)).rows[0]?.pending_reservation_id).toBe(
+        first.reservationId,
+      );
+      expect((await pendingTombstone(second.token)).rows[0]?.pending_reservation_id).toBe(
+        second.reservationId,
+      );
+    } finally {
+      if (blockerOpen) await blocker.query("rollback").catch(() => undefined);
+      await Promise.all([blocker.end(), retainer.end(), revoker.end()]);
+    }
+  });
+
+  test("concurrent confirmations for one manager wait at the same account lock and leave one active bearer", async () => {
+    const c = await db.client();
+    const first = await mintPending("confirm-same-manager-1");
+    const second = await mintPending("confirm-same-manager-2");
+    const blocker = await connect(db.connectionString);
+    const one = await connect(db.connectionString);
+    const two = await connect(db.connectionString);
+    let blockerOpen = false;
+    try {
+      await blocker.query("begin");
+      blockerOpen = true;
+      await blocker.query(`select public.lock_manager_session_lifecycle($1)`, [MANAGER_ID]);
+      const onePid = Number((await one.query(`select pg_backend_pid() as pid`)).rows[0]?.pid);
+      const twoPid = Number((await two.query(`select pg_backend_pid() as pid`)).rows[0]?.pid);
+      const firstConfirm = rpc<boolean>(one, "confirm_manager_session", {
+        p_token: first.token,
+        p_reservation_id: first.reservationId,
+      });
+      const secondConfirm = rpc<boolean>(two, "confirm_manager_session", {
+        p_token: second.token,
+        p_reservation_id: second.reservationId,
+      });
+      await waitForAdvisoryWait(c, onePid);
+      await waitForAdvisoryWait(c, twoPid);
+      await blocker.query("commit");
+      blockerOpen = false;
+      await expect(Promise.all([firstConfirm, secondConfirm])).resolves.toEqual([
+        expect.objectContaining({ error: null }),
+        expect.objectContaining({ error: null }),
+      ]);
+      expect(
+        (await c.query(`select 1 from public.manager_sessions where manager_id = $1`, [MANAGER_ID]))
+          .rowCount,
+      ).toBe(1);
+    } finally {
+      if (blockerOpen) await blocker.query("rollback").catch(() => undefined);
+      await Promise.all([blocker.end(), one.end(), two.end()]);
+    }
+  });
+
+  test("reservation cascade and confirmation both wait at the manager lock before cascade deletion", async () => {
+    const c = await db.client();
+    const pending = await mintPending("cascade-confirm-lock");
+    await c.query(
+      `update public.owner_login_rate_limit_reservations
+                   set expires_at = clock_timestamp() - interval '2 days' where id = $1`,
+      [pending.reservationId],
+    );
+    const blocker = await connect(db.connectionString);
+    const confirmer = await connect(db.connectionString);
+    const parent = await connect(db.connectionString);
+    let blockerOpen = false;
+    try {
+      await blocker.query("begin");
+      blockerOpen = true;
+      await blocker.query(`select public.lock_manager_session_lifecycle($1)`, [MANAGER_ID]);
+      const confirmPid = Number(
+        (await confirmer.query(`select pg_backend_pid() as pid`)).rows[0]?.pid,
+      );
+      const confirming = rpc<boolean>(confirmer, "confirm_manager_session", {
+        p_token: pending.token,
+        p_reservation_id: pending.reservationId,
+      });
+      // Observe confirmation queued at M before the parent DELETE begins. An FK
+      // cascade already holds its reservation/child-row locks when its trigger
+      // fires, so the trigger intentionally does not take M or H afterward.
+      await waitForAdvisoryWait(c, confirmPid);
+      const cascading = parent.query(
+        `delete from public.owner_login_rate_limit_reservations where id = $1`,
+        [pending.reservationId],
+      );
+      await expect(cascading).resolves.toEqual(expect.anything());
+      await blocker.query("commit");
+      blockerOpen = false;
+      await expect(confirming).resolves.toEqual(expect.objectContaining({ error: null }));
+      expect((await pendingTombstone(pending.token)).rows[0]?.pending_reservation_id).toBe(
+        pending.reservationId,
+      );
+    } finally {
+      if (blockerOpen) await blocker.query("rollback").catch(() => undefined);
+      await Promise.all([blocker.end(), confirmer.end(), parent.end()]);
+    }
+  });
+
+  test("explicit pending tombstone cleanup has no unsafe default and enforces its horizon", async () => {
+    const c = await db.client();
+    const pending = await mintPending("tombstone-retention");
+    await rpc<boolean>(c, "cleanup_pending_manager_session", {
+      p_token: pending.token,
+      p_reservation_id: pending.reservationId,
+    });
+    const tooRecent = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
+      p_before: new Date().toISOString(),
+    });
+    expect(tooRecent.error).toContain("TOMBSTONE_CUTOFF_TOO_RECENT");
+    await c.query(
+      `update public.revoked_session_tombstones
+                   set revoked_at = clock_timestamp() - interval '49 hours'
+                   where namespace = 'manager_pending' and token_hash = $1`,
+      [sha256Hex(pending.token)],
+    );
+    // A live exact reservation preserves reconciliation evidence even past
+    // the conservative age floor; only an operationally removed reservation
+    // permits explicit tombstone cleanup.
+    const whileReservationLives = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
+      p_before: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    });
+    expect(whileReservationLives).toMatchObject({ data: 0, error: null });
+    await c.query(`delete from public.owner_login_rate_limit_reservations where id = $1`, [
+      pending.reservationId,
+    ]);
+    const cleaned = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
+      p_before: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    });
+    expect(cleaned).toMatchObject({ data: 1, error: null });
+  });
+
+  test("every R9/R10 SECURITY DEFINER lifecycle function has the intended service-only grant", async () => {
+    const c = await db.client();
+    const rows = await c.query<{
+      name: string;
+      prosecdef: boolean;
+      anon: boolean;
+      authenticated: boolean;
+      service: boolean;
+    }>(
+      `select p.proname as name, p.prosecdef,
+          has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
+          has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated,
+          has_function_privilege('service_role', p.oid, 'EXECUTE') as service
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = any($1::text[])
+       order by p.proname`,
+      [
+        [
+          "lock_session_lifecycle_hash",
+          "lock_manager_session_lifecycle",
+          "lock_staff_session_lifecycle",
+          "tombstone_unconfirmed_manager_pending_delete",
+          "expire_manager_pending_session_hash",
+          "expire_manager_pending_sessions",
+          "revoke_manager_active_sessions",
+          "revoke_manager_sessions",
+          "create_manager_session_pending",
+          "confirm_manager_session",
+          "cleanup_pending_manager_session",
+          "revoke_manager_session_by_token",
+          "revoke_staff_sessions",
+          "revoke_staff_session_by_token",
+          "reconcile_manager_session_handoff",
+          "cleanup_owner_login_rate_limits",
+          "cleanup_manager_pending_tombstones",
+          "create_staff_session",
+        ],
+      ],
+    );
+    expect(rows.rows).toHaveLength(18);
+    for (const row of rows.rows) {
+      expect(row.prosecdef).toBe(true);
+      expect(row.anon).toBe(false);
+      expect(row.authenticated).toBe(false);
+      expect(row.service).toBe(
+        ![
+          "lock_session_lifecycle_hash",
+          "lock_manager_session_lifecycle",
+          "lock_staff_session_lifecycle",
+          "tombstone_unconfirmed_manager_pending_delete",
+          "expire_manager_pending_session_hash",
+          "revoke_manager_active_sessions",
+        ].includes(row.name),
+      );
+    }
+  });
+
+  test("full migration replay leaves lifecycle RPCs service-only", async () => {
+    const c = await db.client();
+    const permissions = await c.query<{ anon: boolean; service: boolean; table_anon: boolean }>(
+      `select
+        has_function_privilege('anon',
+          'public.create_manager_session_pending(uuid,uuid,text)'::regprocedure, 'EXECUTE') as anon,
+        has_function_privilege('service_role',
+          'public.create_manager_session_pending(uuid,uuid,text)'::regprocedure, 'EXECUTE') as service,
+        has_table_privilege('anon', 'public.manager_pending_sessions', 'SELECT') as table_anon`,
+    );
+    expect(permissions.rows[0]).toEqual({ anon: false, service: true, table_anon: false });
+  });
+
+  test("neither pending, active, nor tombstone rows store the raw bearer", async () => {
+    const c = await db.client();
+    const { token, reservationId } = await mintPending("raw-token");
+    const hash = sha256Hex(token);
+    expect(
+      await c.query(`select 1 from public.manager_pending_sessions where token_hash = $1`, [token]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await c.query(`select 1 from public.manager_pending_sessions where token_hash = $1`, [hash]),
+    ).toMatchObject({ rowCount: 1 });
+    expect(
+      (
+        await rpc<boolean>(c, "confirm_manager_session", {
+          p_token: token,
+          p_reservation_id: reservationId,
+        })
+      ).data,
+    ).toBe(true);
+    expect(
+      await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [token]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await c.query(`select 1 from public.manager_sessions where token_hash = $1`, [hash]),
+    ).toMatchObject({ rowCount: 1 });
+    expect(
+      (await rpc<Verdict>(c, "revoke_manager_session_by_token", { p_token: token })).data?.verdict,
+    ).toBe("REVOKED");
+    expect(
+      await c.query(`select 1 from public.revoked_session_tombstones where token_hash = $1`, [
+        token,
+      ]),
+    ).toMatchObject({ rowCount: 0 });
+    expect(
+      await c.query(`select 1 from public.revoked_session_tombstones where token_hash = $1`, [
+        hash,
+      ]),
+    ).toMatchObject({ rowCount: 1 });
   });
 });

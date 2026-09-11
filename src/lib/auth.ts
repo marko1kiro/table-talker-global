@@ -101,7 +101,8 @@ export type SuperAdminLoginDeps = {
     areaManagerToken: string | null;
   }>;
   /** R3-A: server-side revocation of one staff/manager bearer session.
-   * Cleanup call sites pass tolerateUnknown for client-surrendered tokens. */
+   * Role-switch handoff is mandatory: UNKNOWN_TOKEN must throw and prevent
+   * replacement credential minting. Optional logout cleanup is elsewhere. */
   revokeStaffSessionByToken?: (
     kind: "super_admin" | "area_manager",
     token: string,
@@ -159,31 +160,21 @@ export async function superAdminLoginCore(
   /**
    * R3-A: revoke every OLD credential carried by this browser context before
    * the replacement session is minted. Throws on failure so the caller can
-   * fail closed instead of leaving two usable credentials. These tokens are
-   * CLIENT-SURRENDERED (cookie bearers + the sessionStorage manager token):
-   * an UNKNOWN_TOKEN verdict proves the token was purged elsewhere without a
-   * tombstone and cannot authenticate anything, so cleanup passes tolerance
-   * instead of bricking this login for the cookie's remaining lifetime.
+   * fail closed instead of leaving two usable credentials. Although the raw
+   * values came from this browser, this is a mandatory credential handoff,
+   * not optional cleanup: UNKNOWN_TOKEN is not proof that no live credential
+   * remains and therefore aborts before any replacement is minted.
    */
   const revokePrevious = async () => {
-    const tolerateUnknown = { tolerateUnknown: true } as const;
     const cookie = deps.cookieStaffTokens ? await deps.cookieStaffTokens() : null;
     if (cookie?.superAdminToken) {
-      await deps.revokeStaffSessionByToken?.(
-        "super_admin",
-        cookie.superAdminToken,
-        tolerateUnknown,
-      );
+      await deps.revokeStaffSessionByToken?.("super_admin", cookie.superAdminToken);
     }
     if (cookie?.areaManagerToken) {
-      await deps.revokeStaffSessionByToken?.(
-        "area_manager",
-        cookie.areaManagerToken,
-        tolerateUnknown,
-      );
+      await deps.revokeStaffSessionByToken?.("area_manager", cookie.areaManagerToken);
     }
     if (deps.managerTokenToRevoke) {
-      await deps.revokeManagerSessionByToken?.(deps.managerTokenToRevoke, tolerateUnknown);
+      await deps.revokeManagerSessionByToken?.(deps.managerTokenToRevoke);
     }
   };
   try {
@@ -319,9 +310,8 @@ export const loginSuperAdmin = createServerFn({ method: "POST" })
     if (!client) return ownerLoginFailure();
     const revocationDeps = {
       cookieStaffTokens: readCookieStaffTokens,
-      // R4-B/R6 review fix: client-surrendered tokens tolerate UNKNOWN_TOKEN
-      // (purged elsewhere without a tombstone — provably dead); everything
-      // else fails closed (see revokeStaffSessionByTokenIfLive).
+      // Mandatory role handoff is strict: only REVOKED / tombstone-proven
+      // ALREADY_INACTIVE may proceed. UNKNOWN_TOKEN aborts before minting.
       revokeStaffSessionByToken: revokeStaffSessionByTokenIfLive,
       revokeManagerSessionByToken: revokeManagerSessionByTokenIfLive,
       managerTokenToRevoke: data.managerToken ?? null,
