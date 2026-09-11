@@ -1562,6 +1562,130 @@ describe("atomic Manager/AM reset reservation binding", () => {
     ).toBe(0);
   });
 
+  test("success-path retention preserves Manager and AM reset rows while clearing bindings", async () => {
+    const c = await db.client();
+    const managerActorId = atomicManagerId;
+    const amActorId = atomicAmId;
+    const reservationIds: string[] = [];
+    let managerRequestId = "";
+    let amRequestId = "";
+
+    try {
+      await ensureAtomicResetActors(c);
+      await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [
+        managerActorId,
+      ]);
+      await c.query(`delete from public.am_reset_requests where area_manager_id = $1`, [amActorId]);
+
+      const managerReservation = await reserveResetAttempt(c, "reset-retention-success-manager");
+      reservationIds.push(managerReservation.reservationId);
+      expect(
+        await rpc<boolean>(c, "submit_manager_reset_request", {
+          p_staff_id: "atomic.reset.other",
+          p_candidate_hash: await scryptHash("RetentionSuccessManager#1"),
+          p_reservation_id: managerReservation.reservationId,
+        }),
+      ).toEqual({ data: true, error: null });
+      managerRequestId = await oneText(
+        c,
+        `select id::text from public.manager_reset_requests where reservation_id = $1`,
+        [managerReservation.reservationId],
+      );
+
+      const amReservation = await reserveResetAttempt(c, "reset-retention-success-am");
+      reservationIds.push(amReservation.reservationId);
+      expect(
+        await rpc<boolean>(c, "submit_am_reset_request", {
+          p_staff_id: "atomic.reset.am",
+          p_candidate_hash: await scryptHash("RetentionSuccessAm#1"),
+          p_reservation_id: amReservation.reservationId,
+        }),
+      ).toEqual({ data: true, error: null });
+      amRequestId = await oneText(
+        c,
+        `select id::text from public.am_reset_requests where reservation_id = $1`,
+        [amReservation.reservationId],
+      );
+
+      // The immutable ledger is aged only as test scaffolding; both business
+      // rows were created through the production RPCs above.
+      await c.query(
+        `alter table public.staff_reset_attempts disable trigger staff_reset_attempts_immutable`,
+      );
+      try {
+        await c.query(
+          `update public.staff_reset_attempts
+           set created_at = clock_timestamp() - interval '3 days'
+           where reservation_id = any($1::uuid[])`,
+          [reservationIds],
+        );
+      } finally {
+        await c.query(
+          `alter table public.staff_reset_attempts enable trigger staff_reset_attempts_immutable`,
+        );
+      }
+      await c.query(
+        `update public.owner_login_rate_limit_reservations
+         set consumed_at = clock_timestamp() - interval '3 days',
+             expires_at = clock_timestamp() - interval '3 days'
+         where id = any($1::uuid[])`,
+        [reservationIds],
+      );
+
+      const retention = await rpc<Record<string, unknown>>(c, "run_owner_retention", {});
+      expect(retention.error).toBeNull();
+      expect(retention.data).toEqual(expect.any(Object));
+
+      expect(
+        await c.query(
+          `select id::text as id, reservation_id::text as reservation_id, status
+           from public.manager_reset_requests where id = $1`,
+          [managerRequestId],
+        ),
+      ).toMatchObject({
+        rows: [{ id: managerRequestId, reservation_id: null, status: "pending" }],
+      });
+      expect(
+        await c.query(
+          `select id::text as id, reservation_id::text as reservation_id, status
+           from public.am_reset_requests where id = $1`,
+          [amRequestId],
+        ),
+      ).toMatchObject({ rows: [{ id: amRequestId, reservation_id: null, status: "pending" }] });
+      expect(
+        await scalar(
+          c,
+          `select count(*) from public.staff_reset_attempts
+           where reservation_id = any($1::uuid[])`,
+          [reservationIds],
+        ),
+      ).toBe(0);
+      expect(
+        await scalar(
+          c,
+          `select count(*) from public.owner_login_rate_limit_reservations
+           where id = any($1::uuid[])`,
+          [reservationIds],
+        ),
+      ).toBe(0);
+    } finally {
+      await c.query(`delete from public.manager_reset_requests where manager_id = $1`, [
+        managerActorId,
+      ]);
+      await c.query(`delete from public.am_reset_requests where area_manager_id = $1`, [amActorId]);
+      if (reservationIds.length > 0) {
+        await c.query(
+          `delete from public.staff_reset_attempts where reservation_id = any($1::uuid[])`,
+          [reservationIds],
+        );
+        await c.query(
+          `delete from public.owner_login_rate_limit_reservations where id = any($1::uuid[])`,
+          [reservationIds],
+        );
+      }
+    }
+  });
+
   test("legacy reset overloads are absent and reset ledger is immutable and not directly exposed", async () => {
     const c = await db.client();
     await c.query(`do $$ begin
