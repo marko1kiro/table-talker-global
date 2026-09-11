@@ -17,7 +17,7 @@ import {
 } from "../src/lib/staff-password-reset.server";
 import { superAdminReauthCore } from "../src/lib/auth.server";
 import { computeAuthStatus } from "../src/lib/auth";
-import { generateStaffToken } from "../src/lib/staff-identity.server";
+import { GENERIC_AUTH_FAILURE, generateStaffToken } from "../src/lib/staff-identity.server";
 
 describe("bootstrap / invite / resend: email-first, sha256(raw) persisted", () => {
   it("persists sha256 of the RAW emailed token (not a :verify variant)", async () => {
