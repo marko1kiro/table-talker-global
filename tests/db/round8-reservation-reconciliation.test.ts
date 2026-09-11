@@ -173,4 +173,36 @@ describe("R8: reservation-bound manager handoff is authoritative and exactly-onc
       ),
     ).rejects.toThrow(/IMMUTABLE_RESERVATION_BINDING/);
   });
+
+  test("reconciles a committed activation after every confirm response is lost", async () => {
+    const c = await db.client();
+    const reservation = await reserve(c, "r8-confirm-response-loss");
+    expect(reservation.id).toBeTruthy();
+    const token = rawHexToken();
+
+    const minted = await rpc<boolean>(c, "create_manager_session_pending", {
+      p_manager_id: MANAGER_ID,
+      p_reservation_id: reservation.id,
+      p_token: token,
+    });
+    expect(minted).toMatchObject({ data: true, error: null });
+
+    const confirmed = await rpc<boolean>(c, "confirm_manager_session", {
+      p_token: token,
+      p_reservation_id: reservation.id,
+    });
+    expect(confirmed).toMatchObject({ data: true, error: null });
+
+    const reconciled = await rpc<string>(c, "reconcile_manager_session_handoff", {
+      p_token: token,
+      p_reservation_id: reservation.id,
+    });
+    expect(reconciled).toEqual({ data: "SUCCEEDED", error: null });
+
+    const wrongToken = await rpc<string>(c, "reconcile_manager_session_handoff", {
+      p_token: rawHexToken(),
+      p_reservation_id: reservation.id,
+    });
+    expect(wrongToken).toEqual({ data: "UNKNOWN", error: null });
+  });
 });

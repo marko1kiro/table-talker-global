@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   cleanupManagerPendingSessionCore,
   confirmManagerHandoffCore,
+  reconcileManagerHandoffCore,
 } from "@/lib/staff-login.server";
 
 const data = {
@@ -19,6 +20,20 @@ describe("R8 production handoff adapters", () => {
     const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
     await expect(confirmManagerHandoffCore({ rpc }, data)).resolves.toBe(false);
     expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads authoritative confirm state using the exact token and reservation pair", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: "SUCCEEDED", error: null });
+    await expect(reconcileManagerHandoffCore({ rpc }, data)).resolves.toBe("succeeded");
+    expect(rpc).toHaveBeenCalledWith("reconcile_manager_session_handoff", {
+      p_token: data.managerToken,
+      p_reservation_id: data.rateLimitReservationId,
+    });
+  });
+
+  it("treats malformed reconciliation responses as unknown", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    await expect(reconcileManagerHandoffCore({ rpc }, data)).resolves.toBe("unknown");
   });
 
   it("reports cleanup failure instead of hiding an RPC transport error", async () => {
