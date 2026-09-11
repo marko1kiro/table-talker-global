@@ -30,6 +30,25 @@ export function migrationFiles(): string[] {
     .sort();
 }
 
+export function migrationSql(file: string): string {
+  return fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
+}
+
+/** Applies every migration that sorts AFTER `afterFile`, in chain order.
+ * Used by upgrade/cutover tests which build a pre-cutover database with
+ * `stopAfter`, seed legacy state, and only then apply the remainder. Each file
+ * is sent as one simple query, i.e. one implicit transaction — the same
+ * all-or-nothing unit `supabase db push` applies. */
+export async function applyMigrationsAfter(client: Client, afterFile: string): Promise<void> {
+  for (const file of migrationFiles().filter((f) => f > afterFile)) {
+    try {
+      await client.query(migrationSql(file));
+    } catch (error) {
+      throw new Error(`migration ${file} failed: ${(error as Error).message}`);
+    }
+  }
+}
+
 export type LegacySeed = (client: Client) => Promise<void>;
 
 export type TestDb = {
@@ -97,7 +116,14 @@ async function adminClient(connectionString?: string): Promise<Client> {
 
 export async function createTestDb(
   name: string,
-  opts?: { seedLegacy?: LegacySeed; seedPost?: LegacySeed },
+  opts?: {
+    seedLegacy?: LegacySeed;
+    seedPost?: LegacySeed;
+    /** Stop the chain after this migration file (exclusive of everything that
+     * sorts later) so a test can seed a pre-cutover state and then call
+     * `applyMigrationsAfter`. */
+    stopAfter?: string;
+  },
 ): Promise<TestDb> {
   const external = process.env.TEST_DATABASE_URL;
   if (!external) await getEmbedded();
@@ -116,10 +142,13 @@ export async function createTestDb(
   await client.connect();
   await client.query(SHIM);
 
+  if (opts?.stopAfter && !migrationFiles().includes(opts.stopAfter)) {
+    await client.end();
+    throw new Error(`stopAfter migration ${opts.stopAfter} does not exist`);
+  }
   for (const file of migrationFiles()) {
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
     try {
-      await client.query(sql);
+      await client.query(migrationSql(file));
     } catch (error) {
       await client.end();
       throw new Error(`migration ${file} failed: ${(error as Error).message}`);
@@ -127,6 +156,7 @@ export async function createTestDb(
     if (file === SEED_AFTER && opts?.seedLegacy) {
       await opts.seedLegacy(client);
     }
+    if (opts?.stopAfter && file === opts.stopAfter) break;
   }
   // Seed data for tables CREATED by the migration chain itself (the legacy
   // hook above runs before Poin 2 — anything touching Poin 2 tables must go
