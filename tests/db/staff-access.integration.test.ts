@@ -1205,6 +1205,26 @@ describe("durable denial audits (review B8)", () => {
 });
 
 describe("atomic Manager/AM reset reservation binding", () => {
+  const atomicAmId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1";
+  const atomicManagerId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2";
+
+  async function ensureAtomicResetActors(c: Client): Promise<void> {
+    await c.query(
+      `insert into public.area_manager_accounts
+         (id, staff_id, full_name, password_hash, status)
+       values ($1, 'atomic.reset.am', 'Atomic Reset AM', 'salt:hash', 'aktif')
+       on conflict (id) do update set status = 'aktif'`,
+      [atomicAmId],
+    );
+    await c.query(
+      `insert into public.manager_accounts
+         (id, id_manager, full_name, restaurant_id, password_hash, status)
+       values ($1, 'atomic.reset.other', 'Atomic Reset Manager', $2, 'salt:hash', 'aktif')
+       on conflict (id) do update set status = 'aktif'`,
+      [atomicManagerId, R1],
+    );
+  }
+
   test("a definitive failure is charged and ledgered exactly once across replay", async () => {
     const c = await db.client();
     const { reservationId, clientHash, ipHash } = await reserveResetAttempt(
@@ -1345,7 +1365,7 @@ describe("atomic Manager/AM reset reservation binding", () => {
       });
       await waitForLockWait(observer, "reset-cross-role-manager");
       const amCall = rpc<boolean>(areaManager, "submit_am_reset_request", {
-        p_staff_id: "am.satu",
+        p_staff_id: "atomic.reset.am",
         p_candidate_hash: await scryptHash("CrossRoleReset#2"),
         p_reservation_id: reservationId,
       });
@@ -1378,10 +1398,11 @@ describe("atomic Manager/AM reset reservation binding", () => {
 
   test("one raw reservation globally binds cross-staff contenders in deterministic FIFO order", async () => {
     const observer = await db.client();
+    await ensureAtomicResetActors(observer);
     await observer.query(
       `delete from public.manager_reset_requests
        where manager_id in ($1, $2)`,
-      ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", managerId],
+      ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", atomicManagerId],
     );
     const { reservationId } = await reserveResetAttempt(observer, "reset-cross-staff-race");
     const holder = await freshClient();
@@ -1402,7 +1423,7 @@ describe("atomic Manager/AM reset reservation binding", () => {
       });
       await waitForLockWait(observer, "reset-cross-staff-first");
       const secondCall = rpc<boolean>(second, "submit_manager_reset_request", {
-        p_staff_id: "kasir.satgas01",
+        p_staff_id: "atomic.reset.other",
         p_candidate_hash: await scryptHash("CrossStaffReset#2"),
         p_reservation_id: reservationId,
       });
