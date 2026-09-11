@@ -242,7 +242,6 @@ describe("reset request accounting (B12)", () => {
     const cases = [
       { data: true, error: null },
       { data: false, error: null },
-      { data: null, error: { message: "database rejection" } },
     ];
     for (const response of cases) {
       const completeFailed = vi.fn();
@@ -255,16 +254,21 @@ describe("reset request accounting (B12)", () => {
   });
 
   it("does not contradict an uncertain DB transaction with a separate completion", async () => {
-    const completeFailed = vi.fn();
-    await expect(
-      submitResetRequestCore("submit_manager_reset_request", strongInput, {
-        rpc: async () => {
-          throw new Error("response unavailable");
-        },
-        completeFailed,
-      }),
-    ).rejects.toThrow("response unavailable");
-    expect(completeFailed).not.toHaveBeenCalled();
+    for (const rpc of [
+      async () => ({ data: null, error: { message: "response unavailable" } }),
+      async (): Promise<never> => {
+        throw new Error("response unavailable");
+      },
+    ]) {
+      const completeFailed = vi.fn();
+      await expect(
+        submitResetRequestCore("submit_manager_reset_request", strongInput, {
+          rpc,
+          completeFailed,
+        }),
+      ).rejects.toThrow("response unavailable");
+      expect(completeFailed).not.toHaveBeenCalled();
+    }
   });
 
   it("reconciles an already-terminal attempt when reserve returns no live reservation", async () => {
