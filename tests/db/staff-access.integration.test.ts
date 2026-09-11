@@ -1343,8 +1343,9 @@ describe("atomic Manager/AM reset reservation binding", () => {
     await observer.query(`delete from public.manager_reset_requests where manager_id = $1`, [
       "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
     ]);
+    await ensureAtomicResetActors(observer);
     await observer.query(`delete from public.am_reset_requests where area_manager_id = $1`, [
-      am1Id,
+      atomicAmId,
     ]);
     const { reservationId } = await reserveResetAttempt(observer, "reset-cross-role-race");
     const holder = await freshClient();
