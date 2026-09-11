@@ -219,53 +219,18 @@ describe("staff login: rate-limit accounting is exact (B12)", () => {
 });
 
 describe("reset request accounting (B12)", () => {
-  it("marks invalid/duplicate/error as failure, only true as success", async () => {
-    const cases: Array<{
-      rpc: () => Promise<{ data: unknown; error: { message: string } | null }>;
-      want: boolean;
-    }> = [
-      { rpc: async () => ({ data: true, error: null }), want: true },
-      { rpc: async () => ({ data: false, error: null }), want: false },
-      { rpc: async () => ({ data: null, error: { message: "boom" } }), want: false },
-    ];
-    for (const c of cases) {
-      let reported: boolean | null = null;
-      await submitResetRequestCore(
-        "submit_manager_reset_request",
-        { staffId: "mgr", newPassword: "abcdefghijkl" },
-        { rpc: async () => c.rpc(), report: async (v) => (reported = v) },
-      );
-      expect(reported).toBe(c.want);
-    }
-  });
-  it("preserves the reservation when an RPC response is uncertain", async () => {
-    const reports: boolean[] = [];
-    await expect(
-      submitResetRequestCore(
-        "submit_manager_reset_request",
-        { staffId: "mgr", newPassword: "abcdefghijkl" },
-        {
-          rpc: async () => {
-            throw new Error("response unavailable");
-          },
-          report: async (valid) => reports.push(valid),
-        },
-      ),
-    ).rejects.toThrow("response unavailable");
-    expect(reports).toEqual([]);
-  });
+  const reservationId = "11111111-1111-4111-8111-111111111111";
+  const strongInput = {
+    staffId: "mgr",
+    newPassword: "abcdefghijkl",
+    rateLimitReservationId: reservationId,
+  };
 
-  it("binds the reset mutation to the limiter reservation for idempotent retry", async () => {
-    const reservationId = "11111111-1111-4111-8111-111111111111";
+  it("forwards the limiter reservation into the reset mutation", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-    const input = {
-      staffId: "mgr",
-      newPassword: "abcdefghijkl",
-      rateLimitReservationId: reservationId,
-    };
-    await submitResetRequestCore("submit_manager_reset_request", input, {
+    await submitResetRequestCore("submit_manager_reset_request", strongInput, {
       rpc,
-      report: async () => "SUCCEEDED",
+      completeFailed: vi.fn(),
     });
     expect(rpc).toHaveBeenCalledWith(
       "submit_manager_reset_request",
@@ -273,7 +238,36 @@ describe("reset request accounting (B12)", () => {
     );
   });
 
-  it("reconciles an already-terminal attempt when the reservation response is gone", async () => {
+  it("never performs a separate completion after a valid-password DB submit", async () => {
+    const cases = [
+      { data: true, error: null },
+      { data: false, error: null },
+      { data: null, error: { message: "database rejection" } },
+    ];
+    for (const response of cases) {
+      const completeFailed = vi.fn();
+      await submitResetRequestCore("submit_manager_reset_request", strongInput, {
+        rpc: async () => response,
+        completeFailed,
+      });
+      expect(completeFailed).not.toHaveBeenCalled();
+    }
+  });
+
+  it("does not contradict an uncertain DB transaction with a separate completion", async () => {
+    const completeFailed = vi.fn();
+    await expect(
+      submitResetRequestCore("submit_manager_reset_request", strongInput, {
+        rpc: async () => {
+          throw new Error("response unavailable");
+        },
+        completeFailed,
+      }),
+    ).rejects.toThrow("response unavailable");
+    expect(completeFailed).not.toHaveBeenCalled();
+  });
+
+  it("reconciles an already-terminal attempt when reserve returns no live reservation", async () => {
     const submit = vi.fn();
     const result = await submitResetRequestAttemptCore(
       "manager",
@@ -293,8 +287,29 @@ describe("reset request accounting (B12)", () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
+  it("reconciles after the reset submit transport becomes uncertain", async () => {
+    const reconcile = vi.fn().mockResolvedValue("FAILED");
+    const result = await submitResetRequestAttemptCore(
+      "area_manager",
+      {
+        staffId: "am",
+        newPassword: "abcdefghijkl",
+        clientKey: "client-key-long-enough",
+        attemptKey: "transport-uncertain-attempt",
+      },
+      {
+        reserve: async () => reservationId,
+        reconcile,
+        submit: async () => {
+          throw new Error("response unavailable");
+        },
+      },
+    );
+    expect(result).toEqual({ ok: true });
+    expect(reconcile).toHaveBeenCalledWith("transport-uncertain-attempt", "area_manager");
+  });
+
   it("reuses a live reservation for the reset mutation", async () => {
-    const reservationId = "11111111-1111-4111-8111-111111111111";
     const submit = vi.fn().mockResolvedValue({ ok: true });
     const result = await submitResetRequestAttemptCore(
       "area_manager",
@@ -332,22 +347,21 @@ describe("reset request accounting (B12)", () => {
     expect(result).toEqual({ ok: false, message: GENERIC_AUTH_FAILURE });
   });
 
-  it("weak password is a failure and never reaches the RPC", async () => {
-    let reported: boolean | null = null;
-    let rpc = false;
-    await submitResetRequestCore(
+  it("weak password completes the reservation as failed and never reaches the reset RPC", async () => {
+    const completeFailed = vi.fn().mockResolvedValue("FAILED");
+    const rpc = vi.fn();
+    const result = await submitResetRequestCore(
       "submit_am_reset_request",
-      { staffId: "am", newPassword: "short" },
       {
-        rpc: async () => {
-          rpc = true;
-          return { data: true, error: null };
-        },
-        report: async (v) => (reported = v),
+        staffId: "am",
+        newPassword: "short",
+        rateLimitReservationId: reservationId,
       },
+      { rpc, completeFailed },
     );
-    expect(reported).toBe(false);
-    expect(rpc).toBe(false);
+    expect(result).toEqual({ ok: false, message: GENERIC_AUTH_FAILURE });
+    expect(completeFailed).toHaveBeenCalledWith(reservationId);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 
