@@ -13,7 +13,7 @@
 // needs a VC++ runtime component this dev machine cannot load.
 // Realtime (WebSocket) evidence remains DB-level only — the embedded stack
 // has no Realtime server; reported honestly in the round report.
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { TestDb } from "./harness";
 import { createTestDb, stopAll, type LegacySeed } from "./harness";
@@ -98,6 +98,32 @@ async function rpcPost(
 }
 
 const service = () => pgrst.jwt({ role: "service_role", sub: SERVICE_SUB });
+
+const sha256Hex = (value: string) => createHash("sha256").update(value).digest("hex");
+
+/** Reserves a rate-limit attempt over HTTP and returns its id.
+ * `submit_manager_reset_request` binds every submission to a reservation
+ * (20260909120000_atomic_staff_reset_attempts.sql), so each submission needs
+ * its own. Each reservation also gets its own UNIQUE bucket pair: a refused
+ * submission records a FAILED attempt, and sharing one bucket pair across
+ * calls would burn the 5-failure limit and then start refusing fresh
+ * reservations outright. Mirrors `reserveResetAttempt` in the SQL-level suite. */
+async function reserveAttempt(label: string): Promise<string> {
+  const nonce = randomBytes(8).toString("hex");
+  const r = await rpcPost(
+    "reserve_owner_login_attempt",
+    {
+      p_client_bucket_hash: sha256Hex(`${label}:client:${nonce}`),
+      p_ip_bucket_hash: sha256Hex(`${label}:ip:${nonce}`),
+      p_attempt_key: `${label}-${nonce}`,
+    },
+    service(),
+  );
+  expect(r.status).toBe(200);
+  const reservationId = (r.json as Array<{ reservation_id: string }>)[0]?.reservation_id;
+  expect(reservationId).toBeTruthy();
+  return reservationId;
+}
 
 describe.skipIf(!RUN)("R6-E: PostgREST HTTP evidence (digest-pinned, required in CI)", () => {
   it("anon: no JWT -> 401 permission denied", async () => {
@@ -203,27 +229,76 @@ describe.skipIf(!RUN)("R6-E: PostgREST HTTP evidence (digest-pinned, required in
 
   it("recovery submission over HTTP: true, then duplicate false, then unknown false", async () => {
     const hash = "a".repeat(128);
+
+    const okReservation = await reserveAttempt("http-reset-ok");
     const ok = await rpcPost(
       "submit_manager_reset_request",
-      { p_staff_id: "budi.santoso", p_candidate_hash: hash },
+      {
+        p_staff_id: "budi.santoso",
+        p_candidate_hash: hash,
+        p_reservation_id: okReservation,
+      },
       service(),
     );
     expect(ok.status).toBe(200);
     expect(ok.json).toBe(true);
 
+    // A second submission on a FRESH reservation is refused: the first request
+    // is still pending. This is the duplicate path, not a replay.
     const dup = await rpcPost(
       "submit_manager_reset_request",
-      { p_staff_id: "budi.santoso", p_candidate_hash: hash },
+      {
+        p_staff_id: "budi.santoso",
+        p_candidate_hash: hash,
+        p_reservation_id: await reserveAttempt("http-reset-dup"),
+      },
       service(),
     );
+    expect(dup.status).toBe(200);
     expect(dup.json).toBe(false);
 
+    // Unknown account is refused with the same answer shape as a duplicate —
+    // the HTTP response must not distinguish "no such account" from "already
+    // pending".
     const unknown = await rpcPost(
       "submit_manager_reset_request",
-      { p_staff_id: "ghost.user", p_candidate_hash: hash },
+      {
+        p_staff_id: "ghost.user",
+        p_candidate_hash: hash,
+        p_reservation_id: await reserveAttempt("http-reset-unknown"),
+      },
       service(),
     );
+    expect(unknown.status).toBe(200);
     expect(unknown.json).toBe(false);
+
+    // Replaying the ORIGINAL reservation — a lost HTTP response, retried by the
+    // client — reconciles to the recorded outcome instead of submitting again.
+    const replay = await rpcPost(
+      "submit_manager_reset_request",
+      {
+        p_staff_id: "budi.santoso",
+        p_candidate_hash: hash,
+        p_reservation_id: okReservation,
+      },
+      service(),
+    );
+    expect(replay.status).toBe(200);
+    expect(replay.json).toBe(true);
+
+    // ...and the replay really was idempotent: still exactly one open request,
+    // and exactly one attempt recorded against that reservation.
+    const requests = await dbClient.query(
+      `select count(*)::int as n from public.manager_reset_requests
+       where manager_id = $1 and status = 'pending'`,
+      [MANAGER_ID],
+    );
+    expect(requests.rows[0].n).toBe(1);
+    const attempts = await dbClient.query(
+      `select count(*)::int as n from public.staff_reset_attempts where reservation_id = $1`,
+      [okReservation],
+    );
+    expect(attempts.rows[0].n).toBe(1);
   });
 
   it("R6-C reservation outcomes over HTTP: verdicts, exactly-once, bucket enforcement", async () => {
