@@ -105,8 +105,10 @@ export async function readCookieStaffTokens(): Promise<{
  *                       token was really issued and revoked earlier
  *   KIND_MISMATCH     — the token belongs to a DIFFERENT namespace
  *   UNKNOWN_TOKEN     — no live row and no tombstone: the token is provably
- *                       NOT usable (junk, or purged without a tombstone by a
- *                       bulk revoke / newest-wins supersede / cutover delete)
+ *                       NOT usable (junk, or purged by one of the remaining
+ *                       tombstone-less paths — cutover / direct row delete.
+ *                       Bulk revoke and newest-wins supersede DO tombstone
+ *                       since 20260909100000, per the R7-B contract.)
  * Transport errors and malformed payloads always throw. Callers fail closed.
  *
  * Default semantics are STRICT: every verdict other than REVOKED /
@@ -212,7 +214,7 @@ async function revokeManagerSessionVerdict(token: string): Promise<RevokeVerdict
  * (the row died now) or ALREADY_INACTIVE (the hashed tombstone proves the
  * token was issued and revoked earlier). KIND_MISMATCH always throws; with
  * { tolerateUnknown: true } UNKNOWN_TOKEN also passes (cleanup of a
- * client-surrendered token that was purged elsewhere without a tombstone) —
+ * client-surrendered token purged by a still tombstone-less path) —
  * otherwise it throws: a switch must never continue on an unexplained no-op.
  */
 export async function revokeStaffSessionByTokenIfLive(

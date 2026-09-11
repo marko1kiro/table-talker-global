@@ -166,9 +166,10 @@ async function finalizeAreaManagerCompletion(deps: StaffLoginDeps): Promise<bool
  * (cookie staff bearers + the surrendered manager token). Throws on failure
  * so the caller can fail closed instead of leaving two usable credentials.
  * These tokens are CLIENT-SURRENDERED: an UNKNOWN_TOKEN verdict proves the
- * token was already purged elsewhere (newest-wins supersede, account-wide
- * revoke, cutover delete — none of which leave tombstones), so it cannot
- * authenticate anything and cleanup must NOT brick this login.
+ * token was already purged elsewhere by a still tombstone-less path (cutover
+ * or a direct row delete; newest-wins supersede and account-wide revoke do
+ * leave tombstones since 20260909100000), so it cannot authenticate anything
+ * and cleanup must NOT brick this login.
  */
 async function revokePreviousCredentials(
   deps: StaffLoginDeps,

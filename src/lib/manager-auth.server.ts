@@ -143,9 +143,10 @@ export const logoutManagerSession = createServerFn({ method: "POST" })
     // R6-B: structured verdict. REVOKED (row died now) and the
     // tombstone-proven ALREADY_INACTIVE count as logged out. UNKNOWN_TOKEN
     // also counts: the token is client-surrendered and provably not live
-    // (purged elsewhere without a tombstone — newest-wins supersede,
-    // account-wide revoke, cutover delete), so refusing would brick logout
-    // for that browser forever. KIND_MISMATCH still fails closed.
+    // (purged by a still tombstone-less path — cutover or a direct row delete;
+    // newest-wins supersede and account-wide revoke do tombstone since
+    // 20260909100000), so refusing would brick logout for that browser
+    // forever. KIND_MISMATCH still fails closed.
     const { data: verdict, error } = await client.rpc("revoke_manager_session_by_token", {
       p_token: data.managerToken,
     });
