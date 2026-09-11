@@ -17,7 +17,9 @@ type HandoffPair = { managerToken: string; rateLimitReservationId: string };
 const cleanups: HandoffPair[] = [];
 const confirmations: HandoffPair[] = [];
 const reconciliations: HandoffPair[] = [];
-const loginAttempts: Array<{ attemptKey: string; clientKey: string }> = [];
+const loginAttempts: Array<{ attemptKey: string; clientKey: string; managerToken?: string }> = [];
+// P1-3: backing store used when Storage is stubbed to reject one key.
+const mockedStore = new Map<string, string>();
 let confirmOk = true;
 // R8 contract: after a non-true confirm the browser reads authoritative DB
 // state instead of compensating blindly (src/lib/manager-login-handoff.ts).
@@ -33,8 +35,16 @@ vi.mock("@tanstack/react-router", () => ({
   Link: () => null,
 }));
 vi.mock("@/lib/staff-login.server", () => ({
-  loginStaff: async ({ data }: { data: { attemptKey: string; clientKey: string } }) => {
-    loginAttempts.push({ attemptKey: data.attemptKey, clientKey: data.clientKey });
+  loginStaff: async ({
+    data,
+  }: {
+    data: { attemptKey: string; clientKey: string; managerToken?: string };
+  }) => {
+    loginAttempts.push({
+      attemptKey: data.attemptKey,
+      clientKey: data.clientKey,
+      managerToken: data.managerToken,
+    });
     return loginResult;
   },
   confirmManagerHandoff: async ({ data }: { data: HandoffPair }) => {
@@ -230,6 +240,79 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
     expect(screen.getByRole("alert").textContent).not.toContain(managerLogin.managerToken);
     expect(document.body.textContent).not.toContain(managerLogin.managerToken);
+  });
+
+  // P1-3: the recoverable pending pair must exist before any other
+  // browser-side work. If it cannot be stored, the handoff is a hard
+  // pre-confirm failure with the exact cleanup — otherwise a later submit
+  // would perform a fresh login and surrender this newly minted pending bearer
+  // as its "old" credential to the mandatory revoker.
+  it("pending record cannot be persisted: exact cleanup, no identity, no navigation", async () => {
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation((key: string, value: string) => {
+        if (key === "table-talker.manager-pending-handoff") throw new Error("QuotaExceededError");
+        mockedStore.set(key, value);
+      });
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation((key: string) => mockedStore.get(key) ?? null);
+    const removeItem = vi
+      .spyOn(Storage.prototype, "removeItem")
+      .mockImplementation((key: string) => void mockedStore.delete(key));
+    try {
+      const user = userEvent.setup();
+      render(<StaffLoginPage />);
+      await submit(user);
+      expect(cleanups).toEqual([handoffPair]);
+      expect(confirmations).toEqual([]);
+      expect(reconciliations).toEqual([]);
+      expect(navigations).toEqual([]);
+      expect(mockedStore.get("table-talker.manager-identity")).toBeUndefined();
+      expect(mockedStore.get("table-talker.manager-pending-handoff")).toBeUndefined();
+      expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
+      expect(document.body.textContent).not.toContain(managerLogin.managerToken);
+    } finally {
+      setItem.mockRestore();
+      getItem.mockRestore();
+      removeItem.mockRestore();
+      mockedStore.clear();
+    }
+  });
+
+  // P1-3: an UNKNOWN reconciliation keeps the recovery record, so the next
+  // submit RESUMES that exact pair. It must never re-enter loginStaff, which
+  // would hand the pending bearer to the mandatory old-credential revoker.
+  it("uncertain handoff: the next submit resumes the stored pair, no fresh login", async () => {
+    confirmOk = false;
+    reconcileVerdict = "unknown";
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(loginAttempts).toHaveLength(1);
+    expect(loginAttempts[0]?.managerToken).toBeUndefined();
+    const stored = sessionStorage.getItem("table-talker.manager-pending-handoff");
+    expect(JSON.parse(stored as string)).toEqual({
+      idManager: managerLogin.idManager,
+      fullName: managerLogin.fullName,
+      restaurantId: managerLogin.restaurantId,
+      restaurantDisplayName: managerLogin.restaurantDisplayName,
+      restaurantCode: managerLogin.restaurantCode,
+      managerToken: managerLogin.managerToken,
+      rateLimitReservationId: managerLogin.rateLimitReservationId,
+    });
+
+    confirmOk = true;
+    await user.click(screen.getByRole("button", { name: /login/i }));
+    // Resumed: no second loginStaff call, the SAME pair confirmed, and the
+    // recovery record retired only after the confirmation succeeded.
+    expect(loginAttempts).toHaveLength(1);
+    expect(confirmations).toEqual([handoffPair, handoffPair, handoffPair]);
+    expect(cleanups).toEqual([]);
+    expect(sessionStorage.getItem("table-talker.manager-pending-handoff")).toBeNull();
+    expect(
+      JSON.parse(sessionStorage.getItem("table-talker.manager-identity") as string).managerToken,
+    ).toBe(managerLogin.managerToken);
   });
 
   it("AM role: cookie session made server-side; old manager identity cleared; no confirm/cleanup", async () => {

@@ -26,6 +26,7 @@ type ReconciliationDeps = ManagerHandoffDeps & {
 
 function deps(overrides: Partial<ReconciliationDeps> = {}): ReconciliationDeps {
   return {
+    persistPending: vi.fn(() => true),
     ensureAccessToken: vi.fn().mockResolvedValue("anon-access-token"),
     getStorage: vi.fn().mockReturnValue({
       getItem: vi.fn(),

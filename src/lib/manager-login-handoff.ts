@@ -17,6 +17,14 @@ export type ManagerHandoffIdentity = {
 };
 
 export type ManagerHandoffDeps = {
+  /**
+   * P1-3: persist the pending-handoff recovery record (exact bearer +
+   * reservation) BEFORE any other browser-side work. Returns false when the
+   * record could not be stored. A missing record is a hard pre-confirm
+   * failure: without it a later submit re-enters a fresh login and surrenders
+   * this newly minted pending bearer as its "old" credential.
+   */
+  persistPending: (identity: ManagerHandoffIdentity) => boolean;
   ensureAccessToken: () => Promise<string | null>;
   getStorage: () => StorageLike | null;
   writeIdentity: (storage: StorageLike | null, identity: ManagerIdentity) => ManagerIdentity | null;
@@ -55,6 +63,19 @@ export async function managerLoginHandoffCore(
       return { ok: false, reason: "cleanup_failed" };
     }
   };
+
+  // P1-3: the recovery record comes first. If it cannot be persisted, this
+  // handoff fails closed HERE with the exact pending cleanup — nothing is
+  // written, navigated, or confirmed — so no later submit can present this
+  // pending bearer to the mandatory old-credential revoker. The server-side
+  // equality guard covers the case where storage lies about succeeding.
+  let persisted = false;
+  try {
+    persisted = deps.persistPending(identity) === true;
+  } catch {
+    persisted = false;
+  }
+  if (!persisted) return cleanup();
 
   const accessToken = await deps.ensureAccessToken().catch(() => null);
   if (!accessToken) return cleanup();

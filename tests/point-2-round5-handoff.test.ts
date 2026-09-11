@@ -40,6 +40,7 @@ function handoffDeps(overrides: HandoffOverrides = {}) {
   };
   const storage = workingStorage();
   const deps: ManagerHandoffDeps = {
+    persistPending: () => true,
     ensureAccessToken: async () => "anon-access-tok",
     getStorage: () => storage,
     writeIdentity: (s, id) => {

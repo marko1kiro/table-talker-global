@@ -51,6 +51,12 @@ function StaffLoginPage() {
   async function runManagerHandoff(identity: ManagerHandoffIdentity, remindPassword = false) {
     const storage = browserManagerStorage();
     const handoff = await managerLoginHandoffCore(identity, {
+      // P1-3: persist the recoverable pending pair as the FIRST step. A
+      // failure to store it aborts the handoff with the exact cleanup instead
+      // of leaving a pending bearer that a later submit could surrender as an
+      // old credential.
+      persistPending: (pendingIdentity) =>
+        writePendingManagerHandoff(browserManagerStorage(), pendingIdentity),
       ensureAccessToken: () => ensureAnonAccessToken(getSupabaseBrowserClient()),
       getStorage: browserManagerStorage,
       writeIdentity: writeManagerIdentity,
@@ -132,10 +138,10 @@ function StaffLoginPage() {
           managerToken: result.managerToken,
           rateLimitReservationId: result.rateLimitReservationId,
         };
-        // Persist only a recoverable pending pair before browser-side work.
-        // If reconciliation is UNKNOWN, a later submit resumes this handoff
-        // rather than entering loginStaff with this token as an old session.
-        writePendingManagerHandoff(browserManagerStorage(), identity);
+        // The handoff persists the recoverable pending pair itself, before any
+        // other browser-side work, and fails closed when it cannot (P1-3). If
+        // reconciliation is UNKNOWN, a later submit resumes this handoff rather
+        // than entering loginStaff with this token as an old session.
         const handoff = await runManagerHandoff(identity, result.mustRemindPassword);
         if (!handoff.ok) {
           if (handoff.reason === "handoff_failed") attemptKeyRef.current = "";

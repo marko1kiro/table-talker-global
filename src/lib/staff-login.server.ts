@@ -7,6 +7,7 @@
 // Accounting rule (review B12): a reservation is marked SUCCESS only when a
 // usable session was actually established. Wrong password, unknown ID,
 // inactive account, and session-mint RPC errors are all failures.
+import { timingSafeEqual } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
@@ -186,6 +187,36 @@ async function revokePreviousCredentials(
   }
 }
 
+/**
+ * P1-3: server-side equality guard for the mandatory old-credential
+ * revocation.
+ *
+ * The manager bearer is deterministic per (manager, reservation), so retrying
+ * the SAME logical attempt derives the SAME bearer. A browser whose pending
+ * handoff record was lost or was never written can therefore surrender the
+ * bearer THIS attempt just minted as its "old" credential. Revoking it would
+ * either self-revoke an already confirmed session — permanently burning the
+ * bearer through the anti-reuse register — or fail closed on UNKNOWN_TOKEN
+ * while the pending row is still unconfirmed.
+ *
+ * The question is answered here, on the server, by comparing the surrendered
+ * token with the token this very call minted. It never trusts browser storage,
+ * so mandatory revocation correctness no longer depends on it. Equality is the
+ * ONLY thing skipped: any other old bearer is still revoked, and no
+ * UNKNOWN_TOKEN, malformed verdict, or RPC error handling is loosened.
+ *
+ * Compared in constant time over bytes; equal length is required, so a prefix
+ * or a differing-length token is never treated as equal. No raw bearer is
+ * logged, returned, or surfaced.
+ */
+export function isSelfMintedManagerBearer(oldToken: string, mintedToken: string): boolean {
+  if (!oldToken || !mintedToken) return false;
+  const a = Buffer.from(oldToken, "utf8");
+  const b = Buffer.from(mintedToken, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 async function compensatePendingManagerLogin(
   deps: StaffLoginDeps,
   managerToken: string,
@@ -241,7 +272,12 @@ export async function loginStaffCore(
     // unusable by construction, it expires via its 60s TTL — and the durable
     // rate-limit outcome is recorded as a failure (R6-C).
     try {
-      if (managerTokenToRevoke) {
+      if (
+        managerTokenToRevoke &&
+        // P1-3: never revoke the bearer this attempt just minted (see
+        // isSelfMintedManagerBearer). Everything else is still mandatory.
+        !isSelfMintedManagerBearer(managerTokenToRevoke, managerResult.managerToken)
+      ) {
         // The surrendered sessionStorage token is part of the mandatory
         // handoff; UNKNOWN_TOKEN remains a failure, not proof of safety.
         await deps.revokeManagerSessionByToken?.(managerTokenToRevoke);

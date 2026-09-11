@@ -16,6 +16,7 @@ const storedIdentity = { ...identity, accessToken: "anon-token" } as ManagerIden
 
 function deps(overrides: Partial<Parameters<typeof managerLoginHandoffCore>[1]> = {}) {
   return {
+    persistPending: vi.fn(() => true),
     ensureAccessToken: vi.fn(async () => "anon-token"),
     getStorage: vi.fn(() => ({ setItem: vi.fn(), getItem: vi.fn(), removeItem: vi.fn() })),
     writeIdentity: vi.fn(() => storedIdentity),

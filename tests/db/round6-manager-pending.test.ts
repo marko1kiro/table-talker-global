@@ -19,6 +19,7 @@ import {
 } from "./harness";
 import { loginManagerCore } from "../../src/lib/manager-auth.server";
 import { managerLoginHandoffCore } from "../../src/lib/manager-login-handoff";
+import { writePendingManagerHandoff } from "../../src/lib/manager-pending-handoff";
 import { verifyManagerPassword } from "../../src/lib/manager-password.server";
 
 const R1 = "11111111-1111-4111-8111-111111111111";
@@ -311,6 +312,9 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
         rateLimitReservationId: firstReservationId,
       },
       {
+        // P1-3: the real recovery-record write, so the pending pair is
+        // recoverable before any other browser-side work.
+        persistPending: (pendingIdentity) => writePendingManagerHandoff(storage, pendingIdentity),
         ensureAccessToken: async () => "anon-access-token",
         getStorage: () => storage,
         writeIdentity: (s, identity) => {
