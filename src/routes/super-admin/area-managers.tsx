@@ -329,32 +329,27 @@ function AreaManagersPage() {
                         </span>
                       );
                     })}
-                    <form
-                      className="inline-flex items-center gap-1"
-                      onSubmit={(e: FormEvent) => {
-                        e.preventDefault();
-                        const select = (e.currentTarget as HTMLFormElement).elements.namedItem(
-                          "restaurant",
-                        ) as HTMLSelectElement;
+                    {/* ponytail: assign-on-change; a11y upgrade path is an
+                        explicit "Tugaskan" button with keyboard confirmation. */}
+                    <select
+                      aria-label="Restoran"
+                      name="restaurant"
+                      className="h-6 rounded border border-slate-200 text-xs"
+                      onChange={(e) => {
+                        const select = e.currentTarget;
                         if (select.value) assign.mutate({ amId, restaurantId: select.value });
                         select.value = "";
                       }}
                     >
-                      <select
-                        aria-label="Restoran"
-                        name="restaurant"
-                        className="h-6 rounded border border-slate-200 text-xs"
-                      >
-                        <option value="">+ tugaskan…</option>
-                        {restaurantList
-                          .filter((r) => !active.includes(r.id))
-                          .map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.name}
-                            </option>
-                          ))}
-                      </select>
-                    </form>
+                      <option value="">+ tugaskan…</option>
+                      {restaurantList
+                        .filter((r) => !active.includes(r.id))
+                        .map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                    </select>
                   </div>
                 </li>
               );
