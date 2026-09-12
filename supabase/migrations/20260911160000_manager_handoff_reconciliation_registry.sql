@@ -47,6 +47,12 @@
 
 -- 1. Cutover lock for the function/trigger swap. Without it a mint running the
 --    pre-P1-5 body could create a live pending row with no registry evidence.
+-- `LOCK TABLE` only works inside a transaction block, and CI (`supabase db
+--    reset`) applies files statement-by-statement in autocommit. Delimit the
+--    whole cutover as one explicit transaction so the lock and the guard below
+--    hold under every runner: CI autocommit, the test harness (whole-file simple
+--    query) and a manual `psql --single-transaction` apply alike.
+begin;
 lock table
   public.manager_pending_sessions,
   public.manager_sessions,
@@ -417,3 +423,4 @@ end;
 $$;
 revoke all on function public.reconcile_manager_session_handoff(text, uuid) from public, anon, authenticated;
 grant execute on function public.reconcile_manager_session_handoff(text, uuid) to service_role;
+commit;
