@@ -6,16 +6,17 @@
 -- grant pattern: revoked from public/anon/service_role, granted to
 -- authenticated. Manager-bearer functions mirror get_manager_snapshot: same
 -- token-hash auth, same INVALID_SESSION raise, service_role revoked.
--- Result contract: UNAUTHORIZED / NOT_FOUND / INVALID_CODE / INVALID_NAME /
--- ALREADY_PAIRED / INTERNAL / INVALID_SESSION are RAISED (unexpected or
+-- Result contract: UNAUTHORIZED / INVALID_CODE / INVALID_NAME / ALREADY_PAIRED
+-- / INTERNAL / NOT_FOUND / INVALID_SESSION are RAISED (unexpected or
 -- pre-state failures); pairing business verdicts (EXPIRED, NOT_PENDING,
--- INVALID_OTP, TOO_MANY_ATTEMPTS, reject-NOT_FOUND) are RETURNED as
--- {ok:false,error:...} jsonb so the attempts counter and lazy-expire status
--- write-ups COMMIT with the verdict instead of rolling back with a raise
--- (same shape as the Poin 2 mutating RPCs).
+-- INVALID_OTP, TOO_MANY_ATTEMPTS, dead-resto INVALID_CODE, reject-NOT_FOUND)
+-- are RETURNED as {ok:false,error:...} jsonb so the attempts counter and
+-- lazy-expire status write-ups COMMIT with the verdict instead of rolling back
+-- with a raise (same shape as the Poin 2 mutating RPCs).
 
 -- Step 1: kode resto -> restaurant identity. The crew app shows display_name
--- before any pairing row exists.
+-- before any pairing row exists. Case-insensitive: restaurants_code_key is
+-- unique on lower(code), so the lower() lookup is collision-safe.
 create or replace function public.crew_validate_code(p_code text)
 returns jsonb
 language plpgsql
@@ -29,7 +30,7 @@ begin
   if auth.uid() is null then raise exception 'UNAUTHORIZED'; end if;
   select id, display_name into v_restaurant_id, v_display_name
   from public.restaurants
-  where code = trim(p_code) and is_active;
+  where lower(code) = lower(trim(p_code)) and is_active;
   if v_restaurant_id is null then raise exception 'INVALID_CODE'; end if;
   return jsonb_build_object('restaurant_id', v_restaurant_id, 'display_name', v_display_name);
 end;
@@ -40,11 +41,15 @@ grant execute on function public.crew_validate_code(text) to authenticated;
 -- Step 2: request pairing. The email is derived from the auth.users row of the
 -- CALLER (never trusted from the client); full_name is validated here with the
 -- same printability/length rule claim_role_session uses for display names.
--- Deterministic re-request rule (documented per brief): every previous pending
--- of this uid is expired BEFORE the insert, so the single-pending partial
--- unique index can never clash and the newest request always wins — there is
--- no PAIRING_PENDING verdict. A nonaktif account (manager reset) may re-pair;
--- only an aktif account is hard-blocked with ALREADY_PAIRED.
+-- NEWEST-WINS re-request semantics (runbook): every previous pending of this
+-- uid is expired BEFORE the insert, so the single-pending partial unique index
+-- can never clash and the newest request is always the live one. There is no
+-- PAIRING_PENDING verdict: a double-tapped crew simply replaces their pending
+-- row, and the OTP the manager must read is the one on the MOST RECENT row
+-- (get_crew_pairing_requests already orders created_at desc — top of the list;
+-- older pendings of the same uid show status 'expired' in the DB and are not
+-- listed). A nonaktif account (manager reset) may re-pair; only an aktif
+-- account is hard-blocked with ALREADY_PAIRED.
 create or replace function public.crew_request_pairing(
   p_restaurant_id uuid,
   p_full_name text,
@@ -91,7 +96,7 @@ begin
     (v_uid, p_restaurant_id, v_email, p_full_name, p_otp_hash, p_otp_encrypted,
      now() + interval '15 minutes')
   returning id into v_id;
-  return jsonb_build_object('request_id', v_id);
+  return jsonb_build_object('ok', true, 'request_id', v_id);
 end;
 $$;
 revoke all on function public.crew_request_pairing(uuid, text, text, text) from public, anon, service_role;
@@ -140,21 +145,35 @@ begin
     return jsonb_build_object('ok', false, 'error', 'INVALID_OTP');
   end if;
 
+  -- The restaurant may have died between request and confirm. Do not approve
+  -- against an inactive resto: the request is expired so it can never be
+  -- retried, and the crew account is left untouched (same generic INVALID_CODE
+  -- the client already knows how to render).
+  if not exists (
+    select 1 from public.restaurants where id = v_req.restaurant_id and is_active
+  ) then
+    update public.crew_pairing_requests set status = 'expired' where id = p_request_id;
+    return jsonb_build_object('ok', false, 'error', 'INVALID_CODE');
+  end if;
+
   update public.crew_pairing_requests
   set status = 'approved', decided_at = now()
   where id = p_request_id;
 
   -- Self-service pairing has no manager actor: paired_by stays null. An
-  -- existing (nonaktif) account is re-activated and re-pointed atomically.
+  -- existing (nonaktif) account is re-activated and re-pointed atomically,
+  -- and its active_device_hash is wiped: the device binding belongs to the
+  -- old pairing and must not survive a manager-reset re-pair.
   insert into public.crew_accounts
-    (auth_uid, restaurant_id, email, full_name, status, paired_by, paired_at)
+    (auth_uid, restaurant_id, email, full_name, status, active_device_hash, paired_by, paired_at)
   values
-    (v_uid, v_req.restaurant_id, v_req.email, v_req.full_name, 'aktif', null, now())
+    (v_uid, v_req.restaurant_id, v_req.email, v_req.full_name, 'aktif', null, null, now())
   on conflict (auth_uid) do update set
     restaurant_id = excluded.restaurant_id,
     full_name = excluded.full_name,
     email = excluded.email,
     status = 'aktif',
+    active_device_hash = null,
     paired_at = now(),
     updated_at = now();
 

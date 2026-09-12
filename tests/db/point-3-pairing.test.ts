@@ -3,13 +3,14 @@
 // the DB only ever sees the sha256 hash and an opaque AES-GCM envelope, and the
 // manager listing exposes only the envelope. auth.uid() is simulated with
 // request.jwt.claims exactly like PostgREST sets it.
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { Client } from "pg";
-import { createTestDb, rawHexToken, rpc, sha256Hex, stopAll, type TestDb } from "./harness";
+import { createTestDb, rawHexToken, rpcNamed, sha256Hex, stopAll, type TestDb } from "./harness";
 
 const R1 = "11111111-1111-4111-8111-111111111111";
 const R2 = "22222222-2222-4222-8222-222222222222";
 const R3 = "33333333-3333-4333-8333-333333333333";
+const R4 = "44444444-4444-4444-8444-444444444444";
 const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
 const OTP_HASH = "f".repeat(64);
 const WRONG_HASH = "0".repeat(64);
@@ -46,7 +47,7 @@ async function requestPairing(
   envelope = ENVELOPE,
 ) {
   await asUid(uid);
-  return rpc<{ request_id?: string }>(c, "crew_request_pairing", {
+  return rpcNamed<{ ok?: boolean; request_id?: string }>(c, "crew_request_pairing", {
     p_restaurant_id: restaurantId,
     p_full_name: name,
     p_otp_hash: otpHash,
@@ -56,7 +57,7 @@ async function requestPairing(
 
 async function confirmPairing(uid: string, requestId: string, otpHash = OTP_HASH) {
   await asUid(uid);
-  return rpc<{ ok?: boolean; error?: string }>(c, "crew_confirm_pairing", {
+  return rpcNamed<{ ok?: boolean; error?: string }>(c, "crew_confirm_pairing", {
     p_request_id: requestId,
     p_otp_hash: otpHash,
   });
@@ -84,6 +85,7 @@ beforeAll(async () => {
   await seed(R1, "RESTO-1", "Resto Satu", true);
   await seed(R2, "RESTO-2", "Resto Dua", true);
   await seed(R3, "RESTO-OFF", "Resto Off", false);
+  await seed(R4, "RESTO-4", "Resto Empat", true);
   await c.query(
     `insert into public.manager_accounts (id, id_manager, full_name, restaurant_id, password_hash, status)
      values ($1, 'p3.manager', 'P3 Manager', $2, 'oldsalt:oldhash', 'aktif')`,
@@ -102,31 +104,42 @@ afterAll(async () => {
   await stopAll();
 });
 
+// JWT claims are SESSION-scoped (set_config ..., false), so a uid set by one
+// test would leak into the next if it forgot to re-set them. Every test starts
+// from a clean unauthenticated slate and opts in via asUid().
+beforeEach(async () => {
+  await c.query(`select set_config('request.jwt.claims', $1, false)`, ['{"role":"anon"}']);
+});
+
 describe("crew_validate_code", () => {
-  test("active code resolves to restaurant identity", async () => {
+  test("active code resolves to restaurant identity, case-insensitively", async () => {
     await asUid(freshUid());
-    const r = await rpc<{ restaurant_id?: string; display_name?: string }>(
+    const r = await rpcNamed<{ restaurant_id?: string; display_name?: string }>(
       c,
       "crew_validate_code",
       { p_code: " RESTO-1 " },
     );
     expect(r.error).toBeNull();
     expect(r.data).toMatchObject({ restaurant_id: R1, display_name: "Resto Satu" });
+    const lower = await rpcNamed<{ restaurant_id?: string }>(c, "crew_validate_code", {
+      p_code: "resto-1",
+    });
+    expect(lower.data).toMatchObject({ restaurant_id: R1 });
   });
 
   test("unknown and inactive codes are INVALID_CODE", async () => {
     await asUid(freshUid());
-    expect((await rpc(c, "crew_validate_code", { p_code: "NOPE" })).error).toContain(
+    expect((await rpcNamed(c, "crew_validate_code", { p_code: "NOPE" })).error).toContain(
       "INVALID_CODE",
     );
-    expect((await rpc(c, "crew_validate_code", { p_code: "RESTO-OFF" })).error).toContain(
+    expect((await rpcNamed(c, "crew_validate_code", { p_code: "RESTO-OFF" })).error).toContain(
       "INVALID_CODE",
     );
   });
 
   test("no authenticated uid is UNAUTHORIZED", async () => {
     await asUid(null);
-    expect((await rpc(c, "crew_validate_code", { p_code: "RESTO-1" })).error).toContain(
+    expect((await rpcNamed(c, "crew_validate_code", { p_code: "RESTO-1" })).error).toContain(
       "UNAUTHORIZED",
     );
   });
@@ -138,6 +151,7 @@ describe("crew_request_pairing", () => {
     await crewUser(uid, "crew-a@example.com");
     const r = await requestPairing(uid, R1);
     expect(r.error).toBeNull();
+    expect(r.data!.ok).toBe(true);
     const id = r.data!.request_id!;
     const row = await pairingRow(id);
     expect(row).toMatchObject({
@@ -186,7 +200,7 @@ describe("crew_request_pairing", () => {
       "INVALID_CODE",
     );
     await asUid(null);
-    const unauth = await rpc(c, "crew_request_pairing", {
+    const unauth = await rpcNamed(c, "crew_request_pairing", {
       p_restaurant_id: R1,
       p_full_name: "Crew",
       p_otp_hash: OTP_HASH,
@@ -280,17 +294,49 @@ describe("crew_confirm_pairing", () => {
     expect((await confirmPairing(uid, id)).data).toEqual({ ok: false, error: "NOT_PENDING" });
     const stranger = freshUid();
     await asUid(stranger);
-    const foreign = await rpc(c, "crew_confirm_pairing", {
+    const foreign = await rpcNamed(c, "crew_confirm_pairing", {
       p_request_id: id,
       p_otp_hash: OTP_HASH,
     });
     expect(foreign.error).toContain("NOT_FOUND");
   });
+
+  test("re-pairing wipes the stale active_device_hash", async () => {
+    const uid = freshUid();
+    await crewUser(uid, "crew-n@example.com");
+    const id1 = (await requestPairing(uid, R1)).data!.request_id!;
+    await confirmPairing(uid, id1);
+    await c.query(
+      `update public.crew_accounts set active_device_hash = $2, status = 'nonaktif' where auth_uid = $1`,
+      [uid, "d".repeat(64)],
+    );
+    const id2 = (await requestPairing(uid, R2)).data!.request_id!;
+    expect(await confirmPairing(uid, id2)).toMatchObject({ data: { ok: true } });
+    const acc = await c.query(
+      `select active_device_hash, status from public.crew_accounts where auth_uid = $1`,
+      [uid],
+    );
+    expect(acc.rows[0]).toMatchObject({ active_device_hash: null, status: "aktif" });
+  });
+
+  test("restaurant deactivated after request: confirm expires, no account", async () => {
+    const uid = freshUid();
+    await crewUser(uid, "crew-o@example.com");
+    const id = (await requestPairing(uid, R4)).data!.request_id!;
+    await c.query(`update public.restaurants set is_active = false where id = $1`, [R4]);
+    expect(await confirmPairing(uid, id)).toMatchObject({
+      data: { ok: false, error: "INVALID_CODE" },
+      error: null,
+    });
+    expect((await pairingRow(id)).status).toBe("expired");
+    const acc = await c.query(`select 1 from public.crew_accounts where auth_uid = $1`, [uid]);
+    expect(acc.rowCount).toBe(0);
+  });
 });
 
 describe("manager-facing pairing RPCs", () => {
   async function listRequests(token: string) {
-    return rpc<{ id: string; otp_encrypted?: string; otp_hash?: string }[]>(
+    return rpcNamed<{ id: string; otp_encrypted?: string; otp_hash?: string }[]>(
       c,
       "get_crew_pairing_requests",
       { p_manager_token: token },
@@ -335,7 +381,7 @@ describe("manager-facing pairing RPCs", () => {
     const uid = freshUid();
     await crewUser(uid, "crew-m@example.com");
     const id = (await requestPairing(uid, R1)).data!.request_id!;
-    const r = await rpc<{ ok?: boolean; error?: string }>(c, "reject_crew_pairing_request", {
+    const r = await rpcNamed<{ ok?: boolean; error?: string }>(c, "reject_crew_pairing_request", {
       p_manager_token: managerToken,
       p_request_id: id,
     });
@@ -354,7 +400,7 @@ describe("manager-facing pairing RPCs", () => {
     // single-use + cross-restaurant scope + dead token
     expect(
       (
-        await rpc(c, "reject_crew_pairing_request", {
+        await rpcNamed(c, "reject_crew_pairing_request", {
           p_manager_token: managerToken,
           p_request_id: id,
         })
@@ -362,7 +408,7 @@ describe("manager-facing pairing RPCs", () => {
     ).toEqual({ ok: false, error: "NOT_FOUND" });
     expect(
       (
-        await rpc(c, "reject_crew_pairing_request", {
+        await rpcNamed(c, "reject_crew_pairing_request", {
           p_manager_token: managerToken,
           p_request_id: r2PendingId,
         })
@@ -370,7 +416,7 @@ describe("manager-facing pairing RPCs", () => {
     ).toEqual({ ok: false, error: "NOT_FOUND" });
     expect(
       (
-        await rpc(c, "reject_crew_pairing_request", {
+        await rpcNamed(c, "reject_crew_pairing_request", {
           p_manager_token: "nope".repeat(16),
           p_request_id: id,
         })
