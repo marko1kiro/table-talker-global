@@ -37,7 +37,7 @@
 ### 3.2 Alur Crew (halaman CREW)
 State machine sisi client (komponen baru `CrewLoginFlow`, menggantikan `RoleLoginFlow`):
 1. `bootstrap` — ada sesi auth valid + `crew_accounts.status='aktif'` di perangkat ini? → `checkin`. Tidak? → `identify`.
-2. `identify` — input **email** → `auth.requestOtp({type:'email_otp'})` → layar input kode 6 digit → `auth.verifyOtp`. Respons error selalu generik (anti-enumeration).
+2. `identify` — input **email** → `supabase.auth.signInWithOtp({ email })` (data `full_name` via `options.data` saat register pertama) → layar input kode 6 digit → `auth.verifyOtp({ email, token, type: 'email' })`. Jangan pernah kirim `shouldCreateUser: false` (422 `otp_disabled` membocorkan enumerasi). Respons error selalu generik (anti-enumeration).
 3. Cabang hasil verify (server fn `crewAfterEmailOtp`, JWT user):
    - email **belum punya pairing** → `resto` : input **Nama + Kode Resto** → server fn `crewValidateCode` (service role) cek kode aktif → UI tampilkan **nama resto + ceklis hijau** → tombol **LANJUTKAN** → `pairing` : server fn `crewRequestPairing` membuat `crew_pairing_requests` (OTP 6 digit acak, hash tersimpan, `expires_at = now()+15 min`, satu pending per uid) → layar tunggu "Hubungi Manager".
    - email **sudah punya pairing aktif** → `checkin` (device pin dirotasi → perangkat lama ditendang, lihat §5.3).
@@ -48,7 +48,7 @@ State machine sisi client (komponen baru `CrewLoginFlow`, menggantikan `RoleLogi
 - Login `/manager` tidak berubah dari sisi user: staff_id + password diverifikasi sistem kita (rate limit, tombstone lifecycle Poin 2 — utuh).
 - Setelah lolos, server fn `ensureStaffCarrier`:
   - `manager_accounts.auth_user_id` NULL → admin API `createUser({ email, email_confirm: true, password: random(256bit) })`, `app_metadata={kind:'manager', account_id}`; simpan id. (AM sama: `area_manager_accounts.auth_user_id`.)
-  - `generateLink({ type:'magiclink', email })` → token hash dikembalikan ke browser → `verifyOtp({ token_hash, type:'magiclink' })` → JWT carrier. Password GoTrue acak tidak pernah dipakai user.
+  - Mekanisme terpilih (spike §12 #2): SETIAP login, server `admin.updateUserById(id, { password: acakHex64Baru })` → response `{carrierEmail, carrierPassword}` ke browser yang sama (HTTPS, umur < 1 respons) → browser `signInWithPassword`. Bonus keamanan selaras D3: ganti password di GoTrue otomatis logout semua sesi carrier lama. Email carrier: `shadow+<kind>-<account-uuid>@lihatmeja.com`, `email_confirm: true`, tidak pernah dikirim email. (Alternatif `generateLink`+`verifyOtp(token_hash)` terbukti didukung tapi DITOLAK: menimpa recovery_token & tak revoke sesi lama.)
   - Reset password manager (alur Poin 2) tidak menyentuh carrier; carrier expire sendiri, refresh ulang saat page load (`getLiveAccessToken` pola lama, kini ke user nyata).
 - Super Admin console: TIDAK memakai carrier (semua akses via server fn service-role) — diverifikasi lewat audit §6; bila ketemu pemakai JWT, perlakukan sama seperti manager.
 
