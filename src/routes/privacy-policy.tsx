@@ -89,9 +89,9 @@ function PrivacyPolicyPage() {
                 <p className="mt-2">
                   Akses ke dashboard, katalog audio, dan panel administrasi dilindungi kredensial
                   dan sesi yang divalidasi di server. Password manager disimpan dalam bentuk hash,
-                  login Owner dibatasi jumlah percobaan untuk mencegah penyalahgunaan, dan data tiap
-                  restoran dipisahkan secara ketat per tenant. Kami menerapkan praktik keamanan yang
-                  wajar untuk melindungi data operasional restoran.
+                  login Super Admin dibatasi jumlah percobaan untuk mencegah penyalahgunaan, dan
+                  data tiap restoran dipisahkan secara ketat per tenant. Kami menerapkan praktik
+                  keamanan yang wajar untuk melindungi data operasional restoran.
                 </p>
               </section>
               <section>

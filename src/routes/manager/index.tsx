@@ -15,6 +15,7 @@ import {
   removeManagerIdentity,
   type ManagerIdentity,
 } from "@/lib/manager-session-identity";
+import { readPendingManagerHandoff } from "@/lib/manager-pending-handoff";
 import { getManagerSnapshot, getManagerCrewHistory } from "@/lib/manager-dashboard.server";
 import { getManagerDailyStats } from "@/lib/manager-stats.server";
 import { buildManagerCsv, downloadCsv } from "@/lib/manager-csv-export";
@@ -41,6 +42,9 @@ import { INSTRUCTION_MAX_LENGTH } from "@/lib/instruction-domain";
 import type { InstructionThread } from "@/lib/instruction-domain";
 import { TABLE_COUNT } from "@/lib/audio";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
+import { ChangePasswordDialog } from "@/components/dashboard/ChangePasswordDialog";
+import { changeManagerPassword, logoutManagerSession } from "@/lib/manager-auth.server";
+import { logout as logoutServer } from "@/lib/auth";
 
 export const Route = createFileRoute("/manager/")({
   head: () => ({
@@ -75,6 +79,8 @@ function ManagerDashboard() {
   const queryClient = useQueryClient();
   const [identity, setIdentity] = useState<ManagerIdentity | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [showPasswordReminder, setShowPasswordReminder] = useState(false);
   const [menu, setMenu] = useState<ManagerMenu>("tables");
   const [activeStation, setActiveStation] = useState(0);
   const [crewScope, setCrewScope] = useState<CrewScope>({ kind: "today" });
@@ -90,12 +96,19 @@ function ManagerDashboard() {
   const [msgError, setMsgError] = useState("");
 
   useEffect(() => {
-    const stored = readManagerIdentity(browserManagerStorage());
+    const storage = browserManagerStorage();
+    if (readPendingManagerHandoff(storage)) {
+      removeManagerIdentity(storage);
+      void navigate({ to: "/manager/login" });
+      return;
+    }
+    const stored = readManagerIdentity(storage);
     if (!stored) {
       void navigate({ to: "/manager/login" });
       return;
     }
     setIdentity(stored);
+    setShowPasswordReminder(sessionStorage.getItem("tt-password-reminder") === "1");
     setHydrated(true);
   }, [navigate]);
 
@@ -283,8 +296,25 @@ function ManagerDashboard() {
   }, [menu]);
 
   const logout = () => {
-    removeManagerIdentity(browserManagerStorage());
-    void navigate({ to: "/manager/login" });
+    // Review A4: also clear the shared cookie session (may hold another role
+    // from a previous login in this browser).
+    void logoutServer().catch(() => undefined);
+    const managerToken = identity?.managerToken;
+    if (!managerToken) {
+      removeManagerIdentity(browserManagerStorage());
+      void navigate({ to: "/manager/login" });
+      return;
+    }
+    // R3-A: revoke the manager bearer server-side first. If revocation fails,
+    // keep the identity (fail closed) so the session stays consistent and the
+    // user can retry logout.
+    void logoutManagerSession({ data: { managerToken } })
+      .then((result) => {
+        if (!result.ok) return;
+        removeManagerIdentity(browserManagerStorage());
+        void navigate({ to: "/manager/login" });
+      })
+      .catch(() => undefined);
   };
 
   if (!hydrated || !identity) return null;
@@ -306,6 +336,7 @@ function ManagerDashboard() {
           roleLabel="MANAGER"
           profile={{ name: identity.fullName, idManager: identity.idManager }}
           notifications={{ stale: staleNotices, feed: items, unread, onOpen: markRead }}
+          onChangePassword={() => setChangePasswordOpen(true)}
           onLogout={logout}
         />
       }
@@ -315,6 +346,47 @@ function ManagerDashboard() {
           Menunggu koneksi realtime -- data tetap diperbarui otomatis.
         </TaNotice>
       )}
+
+      {showPasswordReminder && (
+        <TaNotice role="status" tone="neutral">
+          <span className="mr-2">
+            Anda masih memakai password awal. Disarankan mengganti password.
+          </span>
+          <button
+            type="button"
+            className="font-bold text-brand-600 hover:underline"
+            onClick={() => setChangePasswordOpen(true)}
+          >
+            Ganti sekarang
+          </button>
+          <button
+            type="button"
+            aria-label="Tutup pengingat"
+            className="ml-3 font-bold text-ta-gray-400 hover:text-ta-gray-600"
+            onClick={() => {
+              sessionStorage.removeItem("tt-password-reminder");
+              setShowPasswordReminder(false);
+            }}
+          >
+            Lewati
+          </button>
+        </TaNotice>
+      )}
+
+      <ChangePasswordDialog
+        open={changePasswordOpen}
+        onOpenChange={setChangePasswordOpen}
+        onSubmit={async (oldPassword, newPassword) => {
+          const result = await changeManagerPassword({
+            data: { managerToken: identity.managerToken, oldPassword, newPassword },
+          });
+          if (result.ok) {
+            sessionStorage.removeItem("tt-password-reminder");
+            logout();
+          }
+          return result;
+        }}
+      />
 
       {menu === "tables" && (
         <>

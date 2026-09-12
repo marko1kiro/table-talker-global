@@ -62,10 +62,10 @@ function TermsOfUsePage() {
                 <p className="mt-2">
                   Aplikasi ini ditujukan untuk keperluan operasional restoran: panggilan meja,
                   pengumuman, pengelolaan status meja real-time, konfirmasi duduk pelanggan lewat
-                  QR, serta pemantauan oleh manager dan owner. Dilarang menyalahgunakan fitur untuk
-                  tujuan di luar operasional restoran, termasuk mengubah status meja tanpa dasar
-                  operasional yang nyata (misalnya memanipulasi konfirmasi QR), mengganggu sistem,
-                  atau mencoba mengakses data restoran lain.
+                  QR, serta pemantauan oleh Manager, Area Manager, dan Super Admin. Dilarang
+                  menyalahgunakan fitur untuk tujuan di luar operasional restoran, termasuk mengubah
+                  status meja tanpa dasar operasional yang nyata (misalnya memanipulasi konfirmasi
+                  QR), mengganggu sistem, atau mencoba mengakses data restoran lain.
                 </p>
               </section>
               <section>

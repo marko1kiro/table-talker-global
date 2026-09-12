@@ -33,8 +33,8 @@ function ContactPage() {
             <h1 className="text-2xl font-black leading-tight sm:text-4xl">Kontak</h1>
             <p className="mt-3 text-sm leading-relaxed text-ta-gray-500 sm:text-base dark:text-ta-gray-400">
               Ada pertanyaan, laporan bug, atau butuh bantuan setup restoran? Baik Anda crew (SS,
-              Kasir, Satgas, Clear Up), Manager, maupun Owner — hubungi kami lewat saluran di bawah
-              ini.
+              Kasir, Satgas, Clear Up), Manager, maupun Super Admin — hubungi kami lewat saluran di
+              bawah ini.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -57,9 +57,10 @@ function ContactPage() {
                 </h2>
                 <p className="mt-1.5 text-sm text-ta-gray-500 dark:text-ta-gray-400">
                   Untuk kendala login crew, kode resto, akun Manager, QR meja, sinkronisasi audio,
-                  atau dashboard Manager/Owner yang bermasalah, hubungi administrator restoran
-                  tempat Anda bertugas. Anda juga bisa memakai tombol Bantuan di aplikasi — laporan
-                  Anda (kode resto, nama, dan kendala) otomatis terkirim ke WhatsApp tim support.
+                  atau dashboard Manager/Area Manager yang bermasalah, hubungi administrator
+                  restoran tempat Anda bertugas. Anda juga bisa memakai tombol Bantuan di aplikasi —
+                  laporan Anda (kode resto, nama, dan kendala) otomatis terkirim ke WhatsApp tim
+                  support.
                 </p>
               </div>
             </div>

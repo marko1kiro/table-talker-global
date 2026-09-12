@@ -24,7 +24,7 @@ export const Route = createFileRoute("/faq")({
 const faqs = [
   {
     q: "Apa itu LIME?",
-    a: "LIME adalah sistem manajemen meja restoran berbasis web: panggilan pelanggan otomatis lewat soundboard, status meja KOSONG/TERISI yang tersinkron real-time, pemesanan mandiri pelanggan via QR di meja, serta dashboard monitoring untuk Manager dan Owner.",
+    a: "LIME adalah sistem manajemen meja restoran berbasis web: panggilan pelanggan otomatis lewat soundboard, status meja KOSONG/TERISI yang tersinkron real-time, pemesanan mandiri pelanggan via QR di meja, serta dashboard monitoring untuk Manager, Area Manager, dan Super Admin.",
   },
   {
     q: "Bagaimana cara login sebagai crew?",
@@ -60,7 +60,7 @@ const faqs = [
   },
   {
     q: "Apakah data restoran saya aman?",
-    a: "Setiap restoran memiliki data, katalog audio, dan sesi yang terpisah secara ketat per tenant. Akses crew diverifikasi lewat kode resto, sesi Manager divalidasi di server, dan login Owner dibatasi percobaan untuk mencegah penyalahgunaan.",
+    a: "Setiap restoran memiliki data, katalog audio, dan sesi yang terpisah secara ketat per tenant. Akses crew diverifikasi lewat kode resto, sesi Manager divalidasi di server, dan login Super Admin dibatasi percobaan untuk mencegah penyalahgunaan.",
   },
   {
     q: "Apakah audio yang digunakan memiliki lisensi?",

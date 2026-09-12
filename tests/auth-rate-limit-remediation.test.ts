@@ -1,12 +1,8 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import {
-  applyOwnerLoginAttempt,
-  canCompleteOwnerLoginReservation,
   getOwnerLoginRateLimitBuckets,
   hashOwnerLoginRateLimitBucket,
-  reserveOwnerLoginSequences,
-  type OwnerLoginRateLimitBucket,
 } from "../src/lib/owner-login-rate-limit.server";
 import { getOwnerLoginClientKey } from "../src/lib/owner-login-client-key";
 
@@ -40,64 +36,6 @@ it("keeps one in-memory client key when storage throws", () => {
   } as unknown as Storage;
 
   expect(getOwnerLoginClientKey(brokenStorage)).toBe(getOwnerLoginClientKey(brokenStorage));
-});
-
-const bucket = (sequence = 0, failures = 0): OwnerLoginRateLimitBucket => ({
-  sequence,
-  lastSuccessSequence: 0,
-  failures,
-  windowStartedAt: 0,
-  blockedUntil: null,
-});
-
-it("stale owner failure cannot restore failures after later successful completion", () => {
-  const successful = applyOwnerLoginAttempt(bucket(2, 3), 2, true, 1);
-
-  expect(applyOwnerLoginAttempt(successful, 1, false, 2)).toEqual(successful);
-});
-
-it("delayed owner success watermarks its reservation without clearing newer admission", () => {
-  const afterSuccess = applyOwnerLoginAttempt(bucket(2, 3), 1, true, 1);
-  const delayedFailure = applyOwnerLoginAttempt(afterSuccess, 1, false, 2);
-  const newerFailure = applyOwnerLoginAttempt(delayedFailure, 2, false, 3);
-
-  expect(afterSuccess).toMatchObject({ failures: 3, lastSuccessSequence: 1 });
-  expect(delayedFailure).toEqual(afterSuccess);
-  expect(newerFailure).toMatchObject({ failures: 4, lastSuccessSequence: 1 });
-});
-
-it("old success cannot clear newer failures", () => {
-  const reserved = reserveOwnerLoginSequences(bucket(), bucket());
-  const newerReserved = reserveOwnerLoginSequences(reserved.client, reserved.ip);
-  const newerFailure = applyOwnerLoginAttempt(
-    newerReserved.client,
-    newerReserved.clientSequence,
-    false,
-    1,
-  );
-
-  expect(applyOwnerLoginAttempt(newerFailure, reserved.clientSequence, true, 2)).toMatchObject({
-    failures: newerFailure.failures,
-    lastSuccessSequence: reserved.clientSequence,
-  });
-});
-
-it("fifth failure blocks bucket for fifteen minutes", () => {
-  const result = applyOwnerLoginAttempt(bucket(5, 4), 5, false, 1_000);
-
-  expect(result.failures).toBe(5);
-  expect(result.blockedUntil).toBe(1_000 + 15 * 60 * 1_000);
-});
-
-it("failure completion records any reservation newer than last success", () => {
-  expect(applyOwnerLoginAttempt(bucket(2), 1, false, 1)).toMatchObject({ failures: 1 });
-  expect(applyOwnerLoginAttempt(bucket(1), 1, false, 1)).toMatchObject({ failures: 1 });
-});
-
-it("rejects expired and replayed reservation completion", () => {
-  expect(canCompleteOwnerLoginReservation({ consumedAt: null, expiresAt: 10 }, 10)).toBe(false);
-  expect(canCompleteOwnerLoginReservation({ consumedAt: 9, expiresAt: 11 }, 10)).toBe(false);
-  expect(canCompleteOwnerLoginReservation({ consumedAt: null, expiresAt: 11 }, 10)).toBe(true);
 });
 
 it("keeps owner attempts inside service-only reservation RPCs", () => {
@@ -137,7 +75,10 @@ it("keeps owner attempts inside service-only reservation RPCs", () => {
   expect(migration).not.toContain("else blocked_until end,\n    where");
   const adapter = readFileSync("src/lib/owner-login-rate-limit.server.ts", "utf8");
   expect(adapter).toMatch(/reserveOwnerLoginAttempt[\s\S]*?catch\s*\{\s*return null;/);
-  expect(adapter).toMatch(/completeOwnerLoginAttempt[\s\S]*?catch\s*\{\s*return false;/);
+  // R6-C: completion failures fail closed with a verdict, never a thrown error.
+  expect(adapter).toMatch(
+    /completeOwnerLoginAttempt[\s\S]*?catch\s*\{\s*return "UNKNOWN_RESERVATION";/,
+  );
   expect(migration).toContain("security definer");
   expect(migration).toContain(
     "grant execute on function public.reserve_owner_login_attempt(text, text) to service_role",

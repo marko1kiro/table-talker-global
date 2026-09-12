@@ -1,7 +1,7 @@
 // Manager analogue of crew-session-identity.ts. Persists the manager bearer
 // token + the device's anon Supabase access token (needed for realtime) in
 // sessionStorage. Token expiry limits XSS exposure (same rationale as crew).
-type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export const MANAGER_SESSION_IDENTITY_KEY = "table-talker.manager-identity";
 

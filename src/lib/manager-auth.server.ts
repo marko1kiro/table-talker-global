@@ -1,70 +1,20 @@
+import { createHmac } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { getAuthSecret } from "./auth.server";
 import { getServiceClient } from "./remote-audio.server";
-import { hashManagerPassword, verifyManagerPassword } from "./manager-password.server";
+import { verifyManagerPassword } from "./manager-password.server";
 import type { RpcCaller } from "./role-session.server";
 
 const GENERIC = "Terjadi kesalahan. Coba lagi.";
 
 export type ManagerAuthDeps = {
   rpc: RpcCaller;
+  rateLimitReservationId?: string;
   hash?: (password: string) => Promise<string>;
   verify?: (password: string, stored: string) => Promise<boolean>;
   createSession?: (managerId: string) => Promise<{ token: string; expiresAt: string } | null>;
 };
-
-// --- register -------------------------------------------------------------
-
-export const registerManagerInputSchema = z.object({
-  idManager: z
-    .string()
-    .trim()
-    .min(3)
-    .max(32)
-    .regex(/^[a-z0-9._-]+$/, "ID Manager tidak valid."),
-  fullName: z.string().trim().min(1).max(80),
-  restaurantCode: z.string().trim().min(1).max(40),
-  password: z.string().min(8).max(200),
-});
-
-export type RegisterManagerInput = z.infer<typeof registerManagerInputSchema>;
-export type RegisterManagerResult =
-  | { ok: true }
-  | {
-      ok: false;
-      code: "WEAK_PASSWORD" | "RESTAURANT_NOT_FOUND" | "ID_MANAGER_TAKEN" | "UNAVAILABLE";
-      message?: string;
-    };
-
-export async function registerManagerCore(
-  data: RegisterManagerInput,
-  deps: ManagerAuthDeps,
-): Promise<RegisterManagerResult> {
-  if (data.password.length < 8) return { ok: false, code: "WEAK_PASSWORD" };
-  const hash = deps.hash ?? hashManagerPassword;
-  const passwordHash = await hash(data.password);
-  const { error } = await deps.rpc("register_manager", {
-    p_id_manager: data.idManager,
-    p_full_name: data.fullName,
-    p_restaurant_code: data.restaurantCode,
-    p_password_hash: passwordHash,
-  });
-  if (error) {
-    if (error.message === "RESTAURANT_NOT_FOUND")
-      return { ok: false, code: "RESTAURANT_NOT_FOUND" };
-    if (error.message === "ID_MANAGER_TAKEN") return { ok: false, code: "ID_MANAGER_TAKEN" };
-    return { ok: false, code: "UNAVAILABLE", message: GENERIC };
-  }
-  return { ok: true };
-}
-
-export const registerManager = createServerFn({ method: "POST" })
-  .validator(registerManagerInputSchema)
-  .handler(async ({ data }): Promise<RegisterManagerResult> => {
-    const client = getServiceClient();
-    if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
-    return registerManagerCore(data, { rpc: async (fn, params) => client.rpc(fn, params) });
-  });
 
 // --- login ----------------------------------------------------------------
 
@@ -77,11 +27,6 @@ type ManagerCredential = {
   restaurant_display_name: string;
   restaurant_code: string;
 };
-
-export const loginManagerInputSchema = z.object({
-  idManager: z.string().min(1),
-  password: z.string().min(1),
-});
 
 export type LoginManagerResult =
   | {
@@ -99,18 +44,37 @@ export type LoginManagerResult =
       message: string;
     };
 
-// create_manager_session returns the plaintext bearer token as a scalar string.
+// The bearer is deterministic for one manager+reservation but unforgeable
+// without AUTH_SECRET. A lost server response can therefore be retried with
+// the exact same bearer while the database persists only its SHA-256 hash.
+export function deriveManagerSessionToken(
+  managerId: string,
+  rateLimitReservationId: string,
+  secret = getAuthSecret(),
+): string {
+  return createHmac("sha256", secret)
+    .update(`manager-session:${managerId}:${rateLimitReservationId}`)
+    .digest("hex");
+}
+
 async function defaultCreateSession(
   rpc: RpcCaller,
   managerId: string,
+  rateLimitReservationId?: string,
 ): Promise<{ token: string; expiresAt: string } | null> {
-  const { data, error } = await rpc("create_manager_session", { p_manager_id: managerId });
-  if (error || typeof data !== "string" || !data) return null;
-  return { token: data, expiresAt: "" };
+  if (!rateLimitReservationId) return null;
+  const token = deriveManagerSessionToken(managerId, rateLimitReservationId);
+  const { data, error } = await rpc("create_manager_session_pending", {
+    p_manager_id: managerId,
+    p_reservation_id: rateLimitReservationId,
+    p_token: token,
+  });
+  if (error || data !== true) return null;
+  return { token, expiresAt: "" };
 }
 
 export async function loginManagerCore(
-  data: { idManager: string; password: string },
+  data: { idManager: string; password: string; rateLimitReservationId?: string },
   deps: ManagerAuthDeps,
 ): Promise<LoginManagerResult> {
   const verify = deps.verify ?? verifyManagerPassword;
@@ -135,9 +99,12 @@ export async function loginManagerCore(
   if (c.status !== "aktif") {
     return { ok: false, code: "DISABLED", message: "Akun manager ini sudah dinonaktifkan." };
   }
+  if (!deps.createSession && !data.rateLimitReservationId) {
+    return { ok: false, code: "UNAVAILABLE", message: GENERIC };
+  }
   const session = deps.createSession
     ? await deps.createSession(c.id)
-    : await defaultCreateSession(deps.rpc, c.id);
+    : await defaultCreateSession(deps.rpc, c.id, data.rateLimitReservationId as string);
   if (!session) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
   return {
     ok: true,
@@ -150,10 +117,90 @@ export async function loginManagerCore(
   };
 }
 
-export const loginManager = createServerFn({ method: "POST" })
-  .validator(loginManagerInputSchema)
-  .handler(async ({ data }): Promise<LoginManagerResult> => {
+// loginManagerCore is INTERNAL to the staff login (staff-login.server.ts) and
+// is intentionally NOT exposed as a server function: a direct endpoint would
+// bypass the shared rate-limit reservation and leak a distinct
+// "account disabled" message (enumeration oracle). The legacy `loginManager`
+// server fn and its input schema were removed in the Poin 2 review fixes;
+// /manager/login uses loginStaff, which maps every failure to the generic
+// message.
+
+// --- logout (server-authoritative, R3-A) -------------------------------------
+
+export const logoutManagerInputSchema = z.object({ managerToken: z.string().min(1).max(200) });
+
+type ManagerLogoutRpcClient = {
+  rpc: (
+    fn: string,
+    params: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+
+/**
+ * Revokes the manager bearer session server-side BEFORE the client drops its
+ * sessionStorage identity. A stolen token can no longer be replayed after
+ * logout. Returns ok:false on transport failure or an unproven verdict so the
+ * client keeps its credential (fail closed) instead of silently leaving a
+ * live bearer.
+ */
+export async function logoutManagerSessionCore(
+  client: ManagerLogoutRpcClient | null,
+  managerToken: string,
+): Promise<{ ok: boolean }> {
+  if (!client) return { ok: false };
+  // R6-B: logout is fail-closed. REVOKED means the live row was revoked
+  // now; ALREADY_INACTIVE is safe only when the hashed tombstone proves the
+  // token was issued and revoked earlier. UNKNOWN_TOKEN has no such proof:
+  // historical cutover data and tombstone deployment/history gaps can leave
+  // no durable record, so it must not be treated as successful logout.
+  try {
+    const { data: verdict, error } = await client.rpc("revoke_manager_session_by_token", {
+      p_token: managerToken,
+    });
+    if (error) return { ok: false };
+    const v = (verdict as { verdict?: string } | null)?.verdict;
+    return { ok: v === "REVOKED" || v === "ALREADY_INACTIVE" };
+  } catch {
+    // The server function is a logout safety boundary: normalize a rejected
+    // transport promise to the same fail-closed result as an RPC error.
+    return { ok: false };
+  }
+}
+
+export const logoutManagerSession = createServerFn({ method: "POST" })
+  .validator(logoutManagerInputSchema)
+  .handler(
+    async ({ data }): Promise<{ ok: boolean }> =>
+      logoutManagerSessionCore(getServiceClient(), data.managerToken),
+  );
+
+// --- change own password (while logged in) ----------------------------------
+
+export const changeManagerPasswordInputSchema = z.object({
+  managerToken: z.string().min(1),
+  oldPassword: z.string().min(1),
+  newPassword: z.string(),
+});
+
+/**
+ * Verifies the OLD password authoritatively (the manager id comes from the
+ * live bearer token, not the client), swaps the hash and revokes ALL manager
+ * sessions — including the current one — so the user must log in again.
+ */
+export const changeManagerPassword = createServerFn({ method: "POST" })
+  .validator(changeManagerPasswordInputSchema)
+  .handler(async ({ data }): Promise<{ ok: boolean; code?: string }> => {
     const client = getServiceClient();
-    if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
-    return loginManagerCore(data, { rpc: async (fn, params) => client.rpc(fn, params) });
+    if (!client) return { ok: false, code: "UNAVAILABLE" };
+    const { data: managerId, error: tokenError } = await client.rpc("get_manager_id_by_token", {
+      p_token: data.managerToken,
+    });
+    if (tokenError || typeof managerId !== "string" || !managerId) {
+      return { ok: false, code: "INVALID_SESSION" };
+    }
+    const { changeStaffPasswordCore } = await import("./super-admin-auth.server");
+    return changeStaffPasswordCore("manager", managerId, data.oldPassword, data.newPassword, {
+      rpc: async (fn, params) => client.rpc(fn, params),
+      verify: verifyManagerPassword,
+    });
   });

@@ -9,6 +9,8 @@ export function DashboardHeaderRight({
   roleLabel,
   profile,
   notifications,
+  onChangePassword,
+  onEditProfile,
   onLogout,
 }: {
   roleLabel: string;
@@ -19,6 +21,8 @@ export function DashboardHeaderRight({
     unread: number;
     onOpen: () => void;
   };
+  onChangePassword?: () => void;
+  onEditProfile?: () => void;
   onLogout: () => void;
 }) {
   return (
@@ -37,6 +41,8 @@ export function DashboardHeaderRight({
         name={profile.name}
         idManager={profile.idManager}
         canChangePassword={profile.canChangePassword}
+        onChangePassword={onChangePassword}
+        onEditProfile={onEditProfile}
         onLogout={onLogout}
       />
     </>

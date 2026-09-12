@@ -1,0 +1,42 @@
+name: CI
+
+# Runs the full quality gate (vitest incl. the disposable-Postgres staff
+# integration suite, typecheck, lint, build) on every push and PR. The staff
+# integration tests replay the ENTIRE supabase/migrations chain against a
+# throwaway service-container database — never staging/production.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Clean install from lockfile
+        run: npm ci
+
+      - name: Full quality gate (test + typecheck + lint + build)
+        run: npm run verify
