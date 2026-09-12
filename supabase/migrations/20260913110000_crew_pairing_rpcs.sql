@@ -15,8 +15,9 @@
 -- with a raise (same shape as the Poin 2 mutating RPCs).
 
 -- Step 1: kode resto -> restaurant identity. The crew app shows display_name
--- before any pairing row exists. Case-insensitive: restaurants_code_key is
--- unique on lower(code), so the lower() lookup is collision-safe.
+-- before any pairing row exists. Case-insensitive: the restaurants code CHECK
+-- (20260831000000: `^[A-Z0-9-]{6,32}$`) forces stored codes uppercase, so
+-- lower(trim(input)) against lower(code) is collision-safe.
 create or replace function public.crew_validate_code(p_code text)
 returns jsonb
 language plpgsql
