@@ -700,14 +700,14 @@ describe("R9/R10: authoritative pending-manager tombstone lifecycle", () => {
     // No operational cleanup may reopen reuse, even after the reservation is
     // gone.  The permanent minimal registry is intentionally service-private.
     const whileReservationLives = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
-      p_before: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+      p_before: new Date(Date.now() - (48 * 60 * 60 * 1000 + 5 * 60 * 1000)).toISOString(),
     });
     expect(whileReservationLives).toMatchObject({ data: 0, error: null });
     await c.query(`delete from public.owner_login_rate_limit_reservations where id = $1`, [
       pending.reservationId,
     ]);
     const retained = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
-      p_before: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+      p_before: new Date(Date.now() - (48 * 60 * 60 * 1000 + 5 * 60 * 1000)).toISOString(),
     });
     expect(retained).toMatchObject({ data: 0, error: null });
     expect(
@@ -1114,7 +1114,7 @@ describe("P1-5: durable exact reconciliation registry", () => {
       reservationId,
     ]);
     const retained = await rpc<number>(c, "cleanup_manager_pending_tombstones", {
-      p_before: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+      p_before: new Date(Date.now() - (48 * 60 * 60 * 1000 + 5 * 60 * 1000)).toISOString(),
     });
     // The helper is fail-closed: it never deletes the tombstone. Either way the
     // exact registry row is the durable evidence: it must stay terminal FAILED

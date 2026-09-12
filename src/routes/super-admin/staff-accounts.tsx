@@ -4,7 +4,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { TaCard } from "@/components/dashboard/ui";
 import {
+  bootstrapCreateSuperAdmin,
   cancelSuperAdminInvite,
+  getSuperAdminProfile,
   getSuperAdmins,
   inviteSuperAdmin,
   resendSuperAdminInvite,
@@ -21,12 +23,34 @@ export const Route = createFileRoute("/super-admin/staff-accounts")({
 function StaffAccountsPage() {
   const queryClient = useQueryClient();
   const accounts = useQuery({ queryKey: ["sa", "accounts"], queryFn: () => getSuperAdmins() });
+  const profile = useQuery({ queryKey: ["sa", "profile"], queryFn: () => getSuperAdminProfile() });
+  const individual = profile.data?.individual === true;
   const [staffId, setStaffId] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [feedback, setFeedback] = useState("");
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["sa", "accounts"] });
+
+  const bootstrapCreate = useMutation({
+    mutationFn: () =>
+      bootstrapCreateSuperAdmin({
+        data: { staffId: staffId.trim(), fullName: fullName.trim(), email: email.trim() },
+      }),
+    onSuccess: (result) => {
+      setFeedback(
+        result.ok
+          ? "Akun pertama dibuat. Link aktivasi dikirim ke email (berlaku 24 jam). Buka link itu, set password, lalu login ulang sebagai akun individual — setelah itu baru bisa mengundang."
+          : `Pembuatan akun gagal: ${result.code ?? "error"}`,
+      );
+      if (result.ok) {
+        setStaffId("");
+        setFullName("");
+        setEmail("");
+        invalidate();
+      }
+    },
+  });
 
   const invite = useMutation({
     mutationFn: () =>
@@ -90,6 +114,41 @@ function StaffAccountsPage() {
     invite.mutate();
   }
 
+  function submitBootstrapCreate(event: FormEvent) {
+    event.preventDefault();
+    bootstrapCreate.mutate();
+  }
+
+  const accountFields = (
+    <>
+      <input
+        aria-label={individual ? "ID Super Admin" : "ID Super Admin Pertama"}
+        placeholder={individual ? "ID Super Admin" : "ID Super Admin Pertama"}
+        value={staffId}
+        onChange={(e) => setStaffId(e.target.value)}
+        required
+        className="min-h-10 flex-1 rounded-xl border-2 border-slate-200 px-3 text-sm"
+      />
+      <input
+        aria-label="Nama Super Admin"
+        placeholder="Nama"
+        value={fullName}
+        onChange={(e) => setFullName(e.target.value)}
+        required
+        className="min-h-10 flex-1 rounded-xl border-2 border-slate-200 px-3 text-sm"
+      />
+      <input
+        aria-label="Email Aktivasi"
+        placeholder="Email (aktivasi & recovery)"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        required
+        className="min-h-10 flex-1 rounded-xl border-2 border-slate-200 px-3 text-sm"
+      />
+    </>
+  );
+
   return (
     <div>
       <h1 className="text-xl font-black">Akun Super Admin</h1>
@@ -97,44 +156,42 @@ function StaffAccountsPage() {
         ID permanen, tidak dapat diubah atau dipakai ulang. Tidak ada registrasi publik.
       </p>
 
-      <TaCard title="Undang Super Admin Baru" className="mt-4">
-        <form className="flex flex-wrap items-end gap-2" onSubmit={submitInvite}>
-          <input
-            aria-label="ID Super Admin"
-            placeholder="ID Super Admin"
-            value={staffId}
-            onChange={(e) => setStaffId(e.target.value)}
-            required
-            className="min-h-10 flex-1 rounded-xl border-2 border-slate-200 px-3 text-sm"
-          />
-          <input
-            aria-label="Nama"
-            placeholder="Nama"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-            className="min-h-10 flex-1 rounded-xl border-2 border-slate-200 px-3 text-sm"
-          />
-          <input
-            aria-label="Email"
-            placeholder="Email (recovery)"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="min-h-10 flex-1 rounded-xl border-2 border-slate-200 px-3 text-sm"
-          />
-          <button
-            type="submit"
-            disabled={invite.isPending}
-            className="min-h-10 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {invite.isPending && <Loader2 className="mr-1 inline size-4 animate-spin" />}
-            Kirim Undangan
-          </button>
-        </form>
-        {feedback && <p className="mt-2 text-xs font-semibold text-slate-600">{feedback}</p>}
-      </TaCard>
+      {individual ? (
+        <TaCard title="Undang Super Admin Baru" className="mt-4">
+          <form className="flex flex-wrap items-end gap-2" onSubmit={submitInvite}>
+            {accountFields}
+            <button
+              type="submit"
+              disabled={invite.isPending}
+              className="min-h-10 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {invite.isPending && <Loader2 className="mr-1 inline size-4 animate-spin" />}
+              Kirim Undangan
+            </button>
+          </form>
+          {feedback && <p className="mt-2 text-xs font-semibold text-slate-600">{feedback}</p>}
+        </TaCard>
+      ) : (
+        <TaCard title="Buat Akun Super Admin Pertama" className="mt-4">
+          <p className="mb-2 text-xs text-slate-500">
+            Sesi bootstrap (password bersama) hanya bisa membuat akun Super Admin individual PERTAMA
+            — termasuk akunmu sendiri. Undangan berikutnya baru tersedia setelah login memakai akun
+            individual yang aktif.
+          </p>
+          <form className="flex flex-wrap items-end gap-2" onSubmit={submitBootstrapCreate}>
+            {accountFields}
+            <button
+              type="submit"
+              disabled={bootstrapCreate.isPending}
+              className="min-h-10 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {bootstrapCreate.isPending && <Loader2 className="mr-1 inline size-4 animate-spin" />}
+              Buat &amp; Kirim Aktivasi
+            </button>
+          </form>
+          {feedback && <p className="mt-2 text-xs font-semibold text-slate-600">{feedback}</p>}
+        </TaCard>
+      )}
 
       <TaCard title="Daftar Akun" className="mt-4">
         {accounts.isLoading && <Loader2 className="size-4 animate-spin" />}
