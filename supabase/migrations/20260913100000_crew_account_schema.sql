@@ -25,7 +25,7 @@ create table public.crew_pairing_requests (
   email text not null,
   full_name text not null check (char_length(full_name) between 1 and 40),
   otp_hash text not null check (otp_hash ~ '^[a-f0-9]{64}$'),
-  otp_encrypted text not null check (otp_encrypted ~ '^[a-f0-9]{64}$'),
+  otp_encrypted text not null check (otp_encrypted ~ '^4c494d4551523031[a-f0-9]+$'),
   attempts integer not null default 0 check (attempts between 0 and 5),
   status text not null default 'pending'
     check (status in ('pending', 'approved', 'rejected', 'expired')),

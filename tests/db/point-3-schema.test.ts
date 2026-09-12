@@ -12,6 +12,7 @@ const R1 = "11111111-1111-4111-8111-111111111111";
 const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
 const AUTH_UID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const HEX64 = "a".repeat(64);
+const ENVELOPE = "4c494d4551523031" + "ab".repeat(21);
 
 let db: TestDb;
 
@@ -91,14 +92,14 @@ describe("Poin 3 crew account schema", () => {
     const c = await db.client();
     const pending = `insert into public.crew_pairing_requests
       (auth_uid, restaurant_id, email, full_name, otp_hash, otp_encrypted, expires_at)
-      values ($1, $2, 'crew@example.com', 'Crew Satu', $3, $3, now() + interval '15 minutes')`;
-    await c.query(pending, [AUTH_UID, R1, HEX64]);
-    await expectRejection(c, pending, [AUTH_UID, R1, HEX64]);
+      values ($1, $2, 'crew@example.com', 'Crew Satu', $3, $4, now() + interval '15 minutes')`;
+    await c.query(pending, [AUTH_UID, R1, HEX64, ENVELOPE]);
+    await expectRejection(c, pending, [AUTH_UID, R1, HEX64, ENVELOPE]);
     await c.query(
       `update public.crew_pairing_requests set status = 'approved' where auth_uid = $1`,
       [AUTH_UID],
     );
-    await c.query(pending, [AUTH_UID, R1, HEX64]);
+    await c.query(pending, [AUTH_UID, R1, HEX64, ENVELOPE]);
     await c.query(`delete from public.crew_pairing_requests`);
   });
 
@@ -108,22 +109,29 @@ describe("Poin 3 crew account schema", () => {
       c,
       `insert into public.crew_pairing_requests
          (auth_uid, restaurant_id, email, full_name, otp_hash, otp_encrypted, status, expires_at)
-       values ($1, $2, 'crew@example.com', 'Crew Satu', $3, $3, 'maybe', now() + interval '15 minutes')`,
-      [AUTH_UID, R1, HEX64],
+       values ($1, $2, 'crew@example.com', 'Crew Satu', $3, $4, 'maybe', now() + interval '15 minutes')`,
+      [AUTH_UID, R1, HEX64, ENVELOPE],
     );
     await expectRejection(
       c,
       `insert into public.crew_pairing_requests
          (auth_uid, restaurant_id, email, full_name, otp_hash, otp_encrypted, expires_at)
-       values ($1, $2, 'crew@example.com', 'Crew Satu', 'zz', $3, now() + interval '15 minutes')`,
-      [AUTH_UID, R1, HEX64],
+        values ($1, $2, 'crew@example.com', 'Crew Satu', 'zz', $3, now() + interval '15 minutes')`,
+      [AUTH_UID, R1, ENVELOPE],
+    );
+    await expectRejection(
+      c,
+      `insert into public.crew_pairing_requests
+         (auth_uid, restaurant_id, email, full_name, otp_hash, otp_encrypted, expires_at)
+       values ($1, $2, 'crew@example.com', 'Crew Satu', $3, $4, now() + interval '15 minutes')`,
+      [AUTH_UID, R1, HEX64, HEX64],
     );
     await expectRejection(
       c,
       `insert into public.crew_pairing_requests
          (auth_uid, restaurant_id, email, full_name, otp_hash, otp_encrypted, attempts, expires_at)
-       values ($1, $2, 'crew@example.com', 'Crew Satu', $3, $3, 6, now() + interval '15 minutes')`,
-      [AUTH_UID, R1, HEX64],
+       values ($1, $2, 'crew@example.com', 'Crew Satu', $3, $4, 6, now() + interval '15 minutes')`,
+      [AUTH_UID, R1, HEX64, ENVELOPE],
     );
   });
 
