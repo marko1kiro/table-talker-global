@@ -17,9 +17,15 @@ Before maintenance, create PostgreSQL logical dumps for schema plus data. Encryp
 
 Rollback is manual and only after diagnosis: restore verified backup to production under a separately approved recovery procedure. Migration failures do not trigger automatic rollback because DDL and data mutations need incident review. Login remains blocked until either forward fix or approved restore passes smoke checks.
 
+## Login maintenance gate
+
+Add a shared server guard controlled only by `MAINTENANCE_MODE=login_lock`. Every restaurant, crew, staff, Manager, Area Manager, and Super Admin login mutation calls it before validation, credential lookup, RPC, token mint, or session write. When enabled, guard returns HTTP 503 and no database mutation occurs. It does not block authenticated non-login routes, R2, or Storage.
+
+Deploy tested gate before production database work. Enable `MAINTENANCE_MODE=login_lock` in production and verify rejected login submissions before backup. Disable it only after every postflight and smoke gate passes. If any gate fails, keep it enabled for diagnosis.
+
 ## Rollout
 
-1. Enable application maintenance mode that rejects every login route before credentials/session mutation.
+1. Deploy application maintenance gate, enable `MAINTENANCE_MODE=login_lock`, and verify every login mutation rejects before credentials/session mutation.
 2. Re-read production migration inventory and confirm last version remains `20260908195839`.
 3. Capture preflight evidence: migration versions, row counts for active identity/session tables, RLS enabled state, and required function/grant presence.
 4. Apply repository migrations individually and in lexical version order from `20260909010000_staff_identity_schema.sql` through `20260911160000_manager_handoff_reconciliation_registry.sql`. Stop at first nonzero result. Record version, command output, and post-version schema check after each group.
