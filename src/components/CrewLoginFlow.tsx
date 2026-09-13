@@ -51,6 +51,12 @@ export const PAIRING_WINDOW_MS = 15 * 60 * 1000; // mirrors crew_pairing_request
 
 const OTP_EMAIL_BAD = "Kode tidak sesuai atau kedaluwarsa. Minta kode baru.";
 const PROVIDER_DOWN = "Sistem login sedang dimatikan. Hubungi Manager.";
+// Session-loss copy, unified: any place a live carrier JWT / device token
+// disappears AFTER the email was already verified, or the server reports the
+// session is gone, lands on this one string. PROVIDER_DOWN stays reserved for
+// the pre-verification email-send failure (the only path where "login is off"
+// is the honest diagnosis).
+const SESSION_LOST = "Sesi login berakhir. Kirim kode lagi.";
 const KICKED = "Akun ini dipakai login di perangkat lain.";
 const DISABLED = "Akun kamu sudah dinonaktifkan. Hubungi Manager.";
 const PAIR_STALE = "Permintaan ditolak/kedaluwarsa — mulai ulang";
@@ -126,6 +132,18 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
   // pairingStale re-read Date.now(); the value itself is not displayed.
   const [tick, setTick] = useState(0);
 
+  // Every authenticated transition needs a LIVE carrier JWT + the pinned
+  // device token. getDeviceToken is a synchronous localStorage read, so one
+  // helper replaces the six `if (!token || !device)` / `if (!token)` guards
+  // that had drifted apart (different verdicts, some leaving busy stuck).
+  // Returns null whenever the session is gone (post-verification => SESSION_LOST).
+  async function sessionAndDevice(): Promise<{ token: string; device: string } | null> {
+    const token = await refreshCarrierToken();
+    const device = getDeviceToken();
+    if (!token || !device) return null;
+    return { token, device };
+  }
+
   useEffect(() => {
     if (step !== "waiting") return;
     const id = setInterval(() => setTick((t) => t + 1), 1_000);
@@ -146,7 +164,7 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
     const me = await crewMe({ data: { accessToken, deviceToken } });
     if (!me.ok) {
       setStep("email");
-      setError(me.code === "UNAUTHORIZED" ? "Sesi login berakhir. Kirim kode lagi." : GENERIC);
+      setError(me.code === "UNAUTHORIZED" ? SESSION_LOST : GENERIC);
       return;
     }
     if (!me.paired) {
@@ -168,14 +186,13 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const token = await refreshCarrierToken();
-      const device = getDeviceToken();
+      const session = await sessionAndDevice();
       if (cancelled) return;
-      if (!token || !device) {
+      if (!session) {
         setStep("email");
         return;
       }
-      await routeSession(token, device, "email");
+      await routeSession(session.token, session.device, "email");
     })();
     return () => {
       cancelled = true;
@@ -199,7 +216,7 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
 
   async function verifyOtp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (otp.length !== 6) return;
+    if (busy || otp.length !== 6) return;
     setBusy(true);
     setError("");
     const result = await crewVerifyOtp(email.trim(), otp);
@@ -208,28 +225,32 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
       setError(OTP_EMAIL_BAD);
       return;
     }
-    const token = await refreshCarrierToken();
-    const device = getDeviceToken();
-    setBusy(false);
-    if (!token || !device) {
-      setError(PROVIDER_DOWN);
+    // busy stays true across the whole routeSession hop: a re-entrant submit
+    // while crewMe is in flight would otherwise land on a half-routed state.
+    const session = await sessionAndDevice();
+    if (!session) {
+      setBusy(false);
+      setError(SESSION_LOST);
       return;
     }
-    await routeSession(token, device, "resto");
+    await routeSession(session.token, session.device, "resto");
+    setBusy(false);
   }
 
   async function checkRestoCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!restoCode.trim()) return;
+    if (busy || !restoCode.trim()) return;
     setBusy(true);
     setError("");
-    const token = await refreshCarrierToken();
-    if (!token) {
+    const session = await sessionAndDevice();
+    if (!session) {
       setBusy(false);
-      setError(PROVIDER_DOWN);
+      setError(SESSION_LOST);
       return;
     }
-    const result = await crewValidateCode({ data: { accessToken: token, code: restoCode } });
+    const result = await crewValidateCode({
+      data: { accessToken: session.token, code: restoCode },
+    });
     setBusy(false);
     if (!result.ok) {
       setResto(null);
@@ -240,57 +261,62 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
   }
 
   async function requestPairing() {
-    if (!resto) return;
+    if (busy || !resto) return;
     const normalized = normalizeCrewName(name);
     if ("error" in normalized) {
       setError(normalized.error);
       return;
     }
-    const token = await refreshCarrierToken();
-    if (!token) {
-      setError(PROVIDER_DOWN);
-      return;
-    }
-    const result = await crewRequestPairing({
-      data: {
-        accessToken: token,
-        restaurantId: resto.restaurantId,
-        fullName: normalized.displayName,
-      },
-    });
-    if (result.ok) {
-      setInfo({
-        restaurantId: resto.restaurantId,
-        restaurantName: resto.displayName,
-        fullName: normalized.displayName,
+    setBusy(true);
+    setError("");
+    try {
+      const session = await sessionAndDevice();
+      if (!session) {
+        setError(SESSION_LOST);
+        return;
+      }
+      const result = await crewRequestPairing({
+        data: {
+          accessToken: session.token,
+          restaurantId: resto.restaurantId,
+          fullName: normalized.displayName,
+        },
       });
-      setPairing({ requestId: result.requestId, expiresAt: Date.now() + PAIRING_WINDOW_MS });
-      setShowPairingOtp(false);
-      setError("");
-      setStep("waiting");
-      return;
+      if (result.ok) {
+        setInfo({
+          restaurantId: resto.restaurantId,
+          restaurantName: resto.displayName,
+          fullName: normalized.displayName,
+        });
+        setPairing({ requestId: result.requestId, expiresAt: Date.now() + PAIRING_WINDOW_MS });
+        setShowPairingOtp(false);
+        setError("");
+        setStep("waiting");
+        return;
+      }
+      if (result.code === "ALREADY_PAIRED") {
+        await routeSession(session.token, session.device, "resto");
+        return;
+      }
+      setError(result.message);
+    } finally {
+      setBusy(false);
     }
-    if (result.code === "ALREADY_PAIRED") {
-      const device = getDeviceToken();
-      if (token && device) await routeSession(token, device, "resto");
-      return;
-    }
-    setError(result.message);
   }
 
   async function confirmPairing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!pairing || otp.length !== 6) return;
+    if (busy || !pairing || otp.length !== 6) return;
     setBusy(true);
     setError("");
-    const token = await refreshCarrierToken();
-    if (!token) {
+    const session = await sessionAndDevice();
+    if (!session) {
       setBusy(false);
-      setError(PROVIDER_DOWN);
+      setError(SESSION_LOST);
       return;
     }
     const result = await crewConfirmPairing({
-      data: { accessToken: token, requestId: pairing.requestId, otp },
+      data: { accessToken: session.token, requestId: pairing.requestId, otp },
     });
     setBusy(false);
     if (result.ok) {
@@ -315,7 +341,7 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
     }
     if (result.code === "UNAUTHORIZED") {
       setStep("email");
-      setError("Sesi login berakhir. Kirim kode lagi.");
+      setError(SESSION_LOST);
       return;
     }
     setError(result.message);
@@ -323,17 +349,17 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
 
   async function claimShift(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!role) return;
+    if (busy || !role) return;
     setBusy(true);
     setError("");
-    const accessToken = await refreshCarrierToken();
-    const deviceToken = getDeviceToken();
-    if (!accessToken || !deviceToken) {
+    const session = await sessionAndDevice();
+    if (!session) {
       setBusy(false);
       setStep("email");
-      setError("Sesi login berakhir. Kirim kode lagi.");
+      setError(SESSION_LOST);
       return;
     }
+    const { token: accessToken, device: deviceToken } = session;
     const payload = {
       data: { accessToken, role, checkedInAt: new Date().toISOString(), deviceToken },
     };
@@ -606,11 +632,12 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
           </form>
           <button
             type="button"
-            disabled={!canContinue}
+            disabled={busy || !canContinue}
             onClick={() => void requestPairing()}
             className={bigButton(canContinue)}
           >
-            Lanjutkan
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {busy ? "Mengirim..." : "Lanjutkan"}
           </button>
         </div>
       )}
@@ -634,8 +661,14 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
           {pairingStale ? (
             <>
               <Alert>{PAIR_STALE}</Alert>
-              <button type="button" onClick={() => void requestPairing()} className={primary}>
-                Minta kode baru
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void requestPairing()}
+                className={primary}
+              >
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                {busy ? "Mengirim..." : "Minta kode baru"}
               </button>
             </>
           ) : (

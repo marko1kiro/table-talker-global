@@ -208,6 +208,40 @@ describe("email + otp screens", () => {
     expect(await screen.findByText("Sistem login sedang dimatikan. Hubungi Manager.")).toBeTruthy();
   });
 
+  it("verify keeps busy pinned through routeSession; a second submit cannot re-enter", async () => {
+    renderFlow();
+    await submitField("Email", EMAIL, /kirim kode/i);
+    // Hang routeSession's crewMe (post-boot => the verify call) to expose the
+    // interactive window the busy-through-resolve fix is meant to close.
+    let releaseMe: (v: unknown) => void = () => {};
+    crewMe.mockImplementationOnce(() => new Promise((r) => (releaseMe = r)));
+    fireEvent.change(screen.getByLabelText(/kode email/i), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /verifikasi/i }));
+
+    // crewMe is still in flight yet busy never dropped: spinner persists, so the
+    // submit button is NOT re-enabled mid-route (the bug before the fix).
+    expect(await screen.findByText("Memproses...")).toBeTruthy();
+    // second submit during the in-flight hop
+    fireEvent.click(screen.getByRole("button", { name: /memproses/i }));
+    expect(crewVerifyOtp).toHaveBeenCalledTimes(1);
+    // boot + one verify route = exactly two crewMe probes, no re-entry
+    expect(crewMe).toHaveBeenCalledTimes(2);
+
+    releaseMe(pairedMe());
+    expect(await screen.findByRole("button", { name: /^masuk$/i })).toBeTruthy();
+  });
+
+  it("a token lost AFTER verification shows the unified SESSION_LOST copy, not PROVIDER_DOWN", async () => {
+    renderFlow();
+    await submitField("Email", EMAIL, /kirim kode/i);
+    // boot used the blanket token; now the carrier JWT is gone before verify routes
+    refreshCarrierToken.mockResolvedValue(null);
+    fireEvent.change(screen.getByLabelText(/kode email/i), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /verifikasi/i }));
+    expect(await screen.findByText("Sesi login berakhir. Kirim kode lagi.")).toBeTruthy();
+    expect(screen.queryByText("Sistem login sedang dimatikan. Hubungi Manager.")).toBeNull();
+  });
+
   it("verified OTP on an ALREADY-paired email skips resto straight to checkin", async () => {
     refreshCarrierToken.mockResolvedValue("crew-jwt");
     crewMe.mockResolvedValueOnce(okMe({ paired: false })).mockResolvedValueOnce(pairedMe());
@@ -258,6 +292,26 @@ describe("resto -> waiting -> pairing -> checkin happy path", () => {
     expect(await screen.findByText("Hubungi Manager untuk mendapatkan kode aktifasi")).toBeTruthy();
     expect(screen.getByText(/550E8400/)).toBeTruthy();
     expect(screen.getByText(/^\d+:\d\d$/)).toBeTruthy();
+  });
+
+  it("double-tap LANJUTKAN fires exactly one crewRequestPairing (busy guard)", async () => {
+    await toResto();
+    await fillRestoAndCheck("Budi");
+    await screen.findByText("RMuji");
+    // Pin the pairing request in flight (never settles until released) so busy
+    // stays true across the extra taps: this is the interactive window the
+    // guard must close.
+    let release: (v: unknown) => void = () => {};
+    crewRequestPairing.mockImplementationOnce(() => new Promise((r) => (release = r)));
+    const lanjut = screen.getByRole("button", { name: /lanjutkan/i });
+    fireEvent.click(lanjut);
+    await waitFor(() => expect(crewRequestPairing).toHaveBeenCalledTimes(1));
+    // button now reads "Mengirim..." (busy) — two more taps must no-op.
+    fireEvent.click(screen.getByRole("button", { name: /mengirim/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mengirim/i }));
+    expect(crewRequestPairing).toHaveBeenCalledTimes(1);
+    release({ ok: true, requestId: REQUEST_ID });
+    expect(await screen.findByText("Hubungi Manager untuk mendapatkan kode aktifasi")).toBeTruthy();
   });
 
   it("wrong resto code keeps LANJUTKAN unreachable and shows the server's generic message", async () => {
