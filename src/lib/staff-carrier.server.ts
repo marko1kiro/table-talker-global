@@ -14,6 +14,7 @@
 // is only usable by the browser that just asked, for one login window.
 // Passwords/tokens are never logged anywhere in this module.
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 const GENERIC = "Terjadi kesalahan. Coba lagi.";
@@ -94,43 +95,15 @@ export const ensureStaffCarrierInputSchema = z.object({
   sessionToken: z.string().min(16).max(512),
 });
 
-type ServiceClient = Parameters<typeof buildCarrierDeps>[0];
-
-// Exported for wiring tests: fake-client injection without a real service.
-export function buildCarrierDeps(client: {
-  rpc: (
-    fn: string,
-    params: Record<string, unknown>,
-  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
-  from: (table: string) => {
-    select: (cols: string) => {
-      eq: (
-        col: string,
-        val: unknown,
-      ) => {
-        gt: (
-          col: string,
-          val: unknown,
-        ) => { maybeSingle: () => PromiseLike<{ data: unknown; error: unknown }> };
-        maybeSingle: () => PromiseLike<{ data: unknown; error: unknown }>;
-      };
-    };
-    update: (payload: Record<string, unknown>) => {
-      eq: (col: string, val: unknown) => PromiseLike<{ data: null; error: unknown }>;
-    };
-  };
-  auth: {
-    admin: {
-      createUser: (
-        credentials: Record<string, unknown>,
-      ) => PromiseLike<{ data: { user?: { id: string } | null } | null; error: unknown }>;
-      updateUserById: (
-        uid: string,
-        attributes: Record<string, unknown>,
-      ) => PromiseLike<{ error: unknown }>;
-    };
-  };
-}): StaffCarrierDeps {
+// Exported for wiring tests: the server fn below passes the REAL service
+// client and every .rpc/.from/.auth.admin call in here is type-checked
+// against it; tests inject a fake via a never-cast. The client deliberately
+// has NO hand-modelled structural twin: comparing supabase-js's builder
+// generics against a copy trips TS2589, which previously forced the
+// `as unknown as` cast on the prod call site -- and that cast silently hid
+// a stale builder signature (update().eq() resolves { data: T | null }, not
+// { data: null }). A cast-free prod path is the point of this seam.
+export function buildCarrierDeps(client: SupabaseClient): StaffCarrierDeps {
   const ACCOUNT_TABLE: Record<StaffKind, string> = {
     manager: "manager_accounts",
     area_manager: "area_manager_accounts",
@@ -201,5 +174,5 @@ export const ensureStaffCarrier = createServerFn({ method: "POST" })
     const { getServiceClient } = await import("./remote-audio.server");
     const client = getServiceClient();
     if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
-    return ensureStaffCarrierCore(data, buildCarrierDeps(client as unknown as ServiceClient));
+    return ensureStaffCarrierCore(data, buildCarrierDeps(client));
   });

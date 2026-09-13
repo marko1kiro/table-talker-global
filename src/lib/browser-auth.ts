@@ -93,6 +93,11 @@ export function staffSignInCarrier(email: string, password: string): Promise<Bro
 // a sign-in: no session -> null. staffCarrierToken exists for the immediate
 // post-signInCarrier read; refreshCarrierToken for every later call site --
 // behaviourally identical today, split for call-site intent only.
+// Call sites pair this with `?? fallback-token` (old getLiveAccessToken
+// semantics, Task 14): a momentary network hiccup degrades to the token
+// captured at login instead of blocking the request; a genuinely EXPIRED
+// fallback then surfaces as a normal 401 from the RPC, never as a silent
+// anonymous re-mint (the pre-Poin 3 fallback is banned -- see file header).
 export async function refreshCarrierToken(): Promise<string | null> {
   const c = getSupabaseBrowserClient();
   if (!c) return null;

@@ -52,9 +52,10 @@ describe("getSupabaseBrowserClient", () => {
     const client = getSupabaseBrowserClient();
     expect(client).toBeTruthy();
     expect(getSupabaseBrowserClient()).toBe(client);
-    expect(createClient).toHaveBeenCalledTimes(1);
-    // The banned old pattern passed an auth:{storage: sessionStorage} adapter;
-    // the carrier/crew session must survive reloads via localStorage default.
+    // Singleton count is order-sensitive (module-level cache), so pin only
+    // what matters regardless of which test triggers construction first:
+    // exactly two positional args -- no third `auth:{storage:...}` override.
+    expect(createClient).toHaveBeenCalled();
     expect(vi.mocked(createClient).mock.calls[0]).toEqual([
       "https://unit.test.supabase.co",
       "unit-anon-key",
