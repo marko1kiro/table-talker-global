@@ -11,11 +11,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { DashboardHeaderRight } from "@/components/dashboard/DashboardHeaderRight";
 import {
   browserManagerStorage,
-  readManagerIdentity,
   removeManagerIdentity,
   type ManagerIdentity,
 } from "@/lib/manager-session-identity";
-import { readPendingManagerHandoff } from "@/lib/manager-pending-handoff";
+import { bootManagerDashboard } from "@/lib/manager-boot-guard";
 import { getManagerSnapshot, getManagerCrewHistory } from "@/lib/manager-dashboard.server";
 import { getManagerDailyStats } from "@/lib/manager-stats.server";
 import { buildManagerCsv, downloadCsv } from "@/lib/manager-csv-export";
@@ -99,19 +98,23 @@ function ManagerDashboard() {
 
   useEffect(() => {
     const storage = browserManagerStorage();
-    if (readPendingManagerHandoff(storage)) {
-      removeManagerIdentity(storage);
-      void navigate({ to: "/manager/login" });
-      return;
-    }
-    const stored = readManagerIdentity(storage);
-    if (!stored) {
-      void navigate({ to: "/manager/login" });
-      return;
-    }
-    setIdentity(stored);
-    setShowPasswordReminder(sessionStorage.getItem("tt-password-reminder") === "1");
-    setHydrated(true);
+    let cancelled = false;
+    void bootManagerDashboard(storage, {
+      wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    }).then((outcome) => {
+      if (cancelled) return;
+      if (outcome.removeIdentity) removeManagerIdentity(storage);
+      if (outcome.identity) {
+        setIdentity(outcome.identity);
+        setShowPasswordReminder(sessionStorage.getItem("tt-password-reminder") === "1");
+        setHydrated(true);
+      } else {
+        void navigate({ to: "/manager/login" });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   // 1s tick recomputes stale-table ages locally.

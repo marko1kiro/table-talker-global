@@ -6,7 +6,9 @@ const text = () =>
 
 describe("manager dashboard route (TailAdmin)", () => {
   it("keeps core logic intact", () => {
-    expect(text()).toContain("readManagerIdentity");
+    // Poin 3: the boot identity/pending read is delegated to the race-aware
+    // guard (tests/point-3-manager-boot-guard.test.ts pins its matrix).
+    expect(text()).toContain("bootManagerDashboard");
     expect(text()).toContain("useTableOccupancyRealtime");
     expect(text()).toContain("bind_manager_session_realtime");
     expect(text()).toContain("buildStaleNotices");
