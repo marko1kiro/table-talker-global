@@ -43,14 +43,18 @@ grant execute on function public.crew_validate_code(text) to authenticated;
 -- CALLER (never trusted from the client); full_name is validated here with the
 -- same printability/length rule claim_role_session uses for display names.
 -- NEWEST-WINS re-request semantics (runbook): every previous pending of this
--- uid is expired BEFORE the insert, so the single-pending partial unique index
--- can never clash and the newest request is always the live one. There is no
--- PAIRING_PENDING verdict: a double-tapped crew simply replaces their pending
--- row, and the OTP the manager must read is the one on the MOST RECENT row
+-- uid is expired BEFORE the insert, and the expire+insert section is
+-- serialized per uid by an advisory xact lock, so the single-pending partial
+-- unique index cannot clash even on a double-tapped request and the newest
+-- request is always the live one. There is no PAIRING_PENDING verdict. The OTP
+-- the manager must read is the one on the MOST RECENT row
 -- (get_crew_pairing_requests already orders created_at desc — top of the list;
 -- older pendings of the same uid show status 'expired' in the DB and are not
 -- listed). A nonaktif account (manager reset) may re-pair; only an aktif
--- account is hard-blocked with ALREADY_PAIRED.
+-- account is hard-blocked with ALREADY_PAIRED. NOTE for Task 5/6: a confirm
+-- racing between the aktif-check and the insert can transiently leave a
+-- pending row on an aktif account; newest-wins converges (that pending later
+-- confirms to NOT_PENDING or expires), so consumers must tolerate it.
 create or replace function public.crew_request_pairing(
   p_restaurant_id uuid,
   p_full_name text,
@@ -87,6 +91,9 @@ begin
   select email into v_email from auth.users where id = v_uid;
   if v_email is null then raise exception 'UNAUTHORIZED'; end if;
 
+  -- per-uid serialization: double-tapped requests cannot race the partial index
+  perform pg_advisory_xact_lock(hashtext('crew_pairing'), hashtext(v_uid::text));
+
   update public.crew_pairing_requests
   set status = 'expired'
   where auth_uid = v_uid and status = 'pending';
@@ -108,6 +115,8 @@ grant execute on function public.crew_request_pairing(uuid, text, text, text) to
 -- attempts is incremented BEFORE the hash comparison and the check constraint
 -- caps it at 5, so >= 5 is turned into expired + TOO_MANY_ATTEMPTS before any
 -- increment (5 wrong attempts burn the request; the 6th call reports it).
+-- Consequence: an APPROVED request may carry attempts > 0 (prior wrong tries) —
+-- readers must treat attempts on approved rows as history, not tampering.
 create or replace function public.crew_confirm_pairing(
   p_request_id uuid,
   p_otp_hash text

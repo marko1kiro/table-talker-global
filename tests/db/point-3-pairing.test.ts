@@ -19,7 +19,6 @@ const ENVELOPE = "4c494d4551523031" + "ab".repeat(21);
 let db: TestDb;
 let c: Client;
 let managerToken: string;
-let r2PendingId = "";
 let uidCounter = 0;
 
 function freshUid(): string {
@@ -349,15 +348,15 @@ describe("manager-facing pairing RPCs", () => {
     const id = (await requestPairing(uid, R1)).data!.request_id!;
     const other = freshUid();
     await crewUser(other, "crew-k@example.com");
-    r2PendingId = (await requestPairing(other, R2)).data!.request_id!;
+    const r2Id = (await requestPairing(other, R2)).data!.request_id!;
 
     const r = await listRequests(managerToken);
     expect(r.error).toBeNull();
     const mine = r.data!.find((row) => row.id === id);
     expect(mine).toMatchObject({ otp_encrypted: ENVELOPE });
     expect(mine!.otp_hash).toBeUndefined();
-    expect(r2PendingId).not.toBe("");
-    expect(r.data!.map((row) => row.id)).not.toContain(r2PendingId);
+    expect(r2Id).not.toBe("");
+    expect(r.data!.map((row) => row.id)).not.toContain(r2Id);
   });
 
   test("lazy-expire hides stale pendings and flips their status", async () => {
@@ -381,6 +380,9 @@ describe("manager-facing pairing RPCs", () => {
     const uid = freshUid();
     await crewUser(uid, "crew-m@example.com");
     const id = (await requestPairing(uid, R1)).data!.request_id!;
+    const other = freshUid();
+    await crewUser(other, "crew-r@example.com");
+    const r2Id = (await requestPairing(other, R2)).data!.request_id!;
     const r = await rpcNamed<{ ok?: boolean; error?: string }>(c, "reject_crew_pairing_request", {
       p_manager_token: managerToken,
       p_request_id: id,
@@ -410,7 +412,7 @@ describe("manager-facing pairing RPCs", () => {
       (
         await rpcNamed(c, "reject_crew_pairing_request", {
           p_manager_token: managerToken,
-          p_request_id: r2PendingId,
+          p_request_id: r2Id,
         })
       ).data,
     ).toEqual({ ok: false, error: "NOT_FOUND" });
