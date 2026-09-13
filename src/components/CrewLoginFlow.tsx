@@ -78,7 +78,14 @@ type RestoInfo = { restaurantId: string; restaurantName: string; fullName: strin
 export type CrewLoginFlowProps = {
   onSsContinue: (identity: CrewSessionIdentity) => void;
   onRoleContinue: (identity: RoleSessionIdentity) => void;
+  // Test seam (p1-3 resend cooldown): 0 disables the window.
+  resendCooldownMs?: number;
 };
+
+// 30 s between OTP emails per flow (the 13 Sep pajarhidayat double-send:
+// two /otp requests 1.8 s apart — GoTrue invalidates the first code, so the
+// user was typing a dead code from email #1).
+const RESEND_COOLDOWN_MS = 30_000;
 
 const ROLE_META: Record<CrewRole, { icon: typeof Volume2; description: string }> = {
   ss: { icon: Volume2, description: "Panggil pelanggan lewat panggilan meja" },
@@ -120,7 +127,11 @@ function RestoBadge({ name }: { name: string }) {
   );
 }
 
-export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowProps) {
+export function CrewLoginFlow({
+  onSsContinue,
+  onRoleContinue,
+  resendCooldownMs = RESEND_COOLDOWN_MS,
+}: CrewLoginFlowProps) {
   const [step, setStep] = useState<Step>("boot");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -135,6 +146,10 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
   // successful pairing confirmation; drives the checkin badge.
   const [info, setInfo] = useState<RestoInfo | null>(null);
   const [role, setRole] = useState<CrewRole | null>(null);
+  // Resend cooldown deadline (epoch ms). While Date.now() < sendUntil both OTP
+  // send doors (email-step submit + otp-screen resend) are disabled; the tick
+  // heartbeat re-renders so the countdown expires without user interaction.
+  const [sendUntil, setSendUntil] = useState(0);
   // 1s heartbeat only while waiting: re-renders so formatCountdown/
   // pairingStale re-read Date.now(); the value itself is not displayed.
   const [tick, setTick] = useState(0);
@@ -191,10 +206,11 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
   );
 
   useEffect(() => {
-    if (step !== "waiting") return;
+    const cooling = sendUntil > Date.now();
+    if (step !== "waiting" && !(cooling && (step === "email" || step === "otpEmail"))) return;
     const id = setInterval(() => setTick((t) => t + 1), 1_000);
     return () => clearInterval(id);
-  }, [step]);
+  }, [step, sendUntil]);
   void tick;
 
   /**
@@ -247,7 +263,7 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
 
   async function sendOtp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || Date.now() < sendUntil) return;
     setBusy(true);
     setError("");
     const result = await crewSignInWithOtp(email.trim());
@@ -256,6 +272,7 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
       setError(result.code === "RATE_LIMITED" ? OTP_RATE_LIMITED : PROVIDER_DOWN);
       return;
     }
+    setSendUntil(Date.now() + resendCooldownMs);
     setOtp("");
     setStep("otpEmail");
   }
@@ -474,6 +491,7 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
   const pairingLeftMs = pairing ? pairing.expiresAt - Date.now() : 0;
   const pairingStale = !pairing || pairingLeftMs <= 0;
   const canSubmitEmail = email.trim().length > 0;
+  const sendSecsLeft = Math.max(0, Math.ceil((sendUntil - Date.now()) / 1000));
   const canContinue = Boolean(resto) && name.trim().length > 0;
 
   const primary = `${taPrimaryButtonClass} w-full`;
@@ -564,11 +582,11 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
           {error && <Alert>{error}</Alert>}
           <button
             type="submit"
-            disabled={busy || !canSubmitEmail}
+            disabled={busy || !canSubmitEmail || sendSecsLeft > 0}
             className={bigButton(canSubmitEmail)}
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
-            {busy ? "Memproses..." : "Kirim Kode"}
+            {busy ? "Memproses..." : sendSecsLeft > 0 ? `Tunggu ${sendSecsLeft} dtk` : "Kirim Kode"}
           </button>
           <p className="text-center text-xs text-ta-gray-400">
             Sudah punya akun? kode dikirim ke email Anda
@@ -610,15 +628,20 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
           {error === OTP_EMAIL_BAD && (
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || Date.now() < sendUntil}
               onClick={() => {
                 setBusy(true);
                 setError("");
-                void crewSignInWithOtp(email.trim()).finally(() => setBusy(false));
+                void crewSignInWithOtp(email.trim())
+                  .then((r) => {
+                    if (r.ok) setSendUntil(Date.now() + resendCooldownMs);
+                    else setError(r.code === "RATE_LIMITED" ? OTP_RATE_LIMITED : PROVIDER_DOWN);
+                  })
+                  .finally(() => setBusy(false));
               }}
               className={`${secondary} mx-auto flex`}
             >
-              Kirim ulang kode
+              {sendSecsLeft > 0 ? `Kirim ulang kode dalam ${sendSecsLeft} dtk` : "Kirim ulang kode"}
             </button>
           )}
           <button

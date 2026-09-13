@@ -73,10 +73,16 @@ const okClaim = {
   restaurantCode: "RM01",
 };
 
-function renderFlow() {
+function renderFlow(resendCooldownMs = 0) {
   const onSsContinue = vi.fn();
   const onRoleContinue = vi.fn();
-  render(<CrewLoginFlow onSsContinue={onSsContinue} onRoleContinue={onRoleContinue} />);
+  render(
+    <CrewLoginFlow
+      onSsContinue={onSsContinue}
+      onRoleContinue={onRoleContinue}
+      resendCooldownMs={resendCooldownMs}
+    />,
+  );
   return { onSsContinue, onRoleContinue };
 }
 
@@ -246,6 +252,31 @@ describe("email + otp screens", () => {
     await submitField("Email", EMAIL, /kirim kode/i);
     expect(await screen.findByText(/terlalu sering meminta kode/i)).toBeTruthy();
     expect(screen.queryByText("Sistem login sedang dimatikan. Hubungi Manager.")).toBeNull();
+  });
+
+  it("30s cooldown: after a successful send the same email cannot knock again (double-send guard)", async () => {
+    renderFlow(30_000);
+    await submitField("Email", EMAIL, /kirim kode/i);
+    // First send landed on the otp screen; go back via "Ganti email" (mirrors
+    // the pajarhidayat 1.8s double-tap path) and try to knock again.
+    fireEvent.click(screen.getByRole("button", { name: /ganti email/i }));
+    const submit = await screen.findByRole("button", { name: /tunggu \d+ dtk/i });
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(submit);
+    await waitFor(() => expect(crewSignInWithOtp).toHaveBeenCalledTimes(1));
+  });
+
+  it("expired cooldown re-arms the submit button", async () => {
+    renderFlow(300);
+    await submitField("Email", EMAIL, /kirim kode/i);
+    fireEvent.click(screen.getByRole("button", { name: /ganti email/i }));
+    await screen.findByRole("button", { name: /tunggu \d+ dtk/i });
+    await waitFor(
+      () => expect(screen.getByRole("button", { name: /kirim kode/i }).disabled).toBe(false),
+      { timeout: 3000 },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /kirim kode/i }));
+    await waitFor(() => expect(crewSignInWithOtp).toHaveBeenCalledTimes(2));
   });
 
   it("verify keeps busy pinned through routeSession; a second submit cannot re-enter", async () => {
