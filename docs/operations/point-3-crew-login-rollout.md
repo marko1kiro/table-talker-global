@@ -17,7 +17,7 @@ Provider & policies:
 - [ ] **Anonymous sign-ins: OFF** (kondisi sekarang sudah OFF — JANGAN dinyalakan; CI test `point-3-anon-guard` gagal kalau muncul pemakaian di kode).
 - [ ] Phone / OAuth lain: **OFF**.
 - - [x] Enable signups ON (`disable_signup=false`). `/signup` password tak pernah dipanggil app.
-- - [x] SMTP PATCHED via Management API: smtp.resend.com:465, user `resend`, sender noreply@lihatmeja.com, name LIME. [ ] TES KIRIM EMAIL — tunggu hasil "Send test email" dashboard.
+- - [x] SMTP PATCHED via Management API: smtp.resend.com:465, user `resend`, sender noreply@lihatmeja.com, name LIME. [x] TES KIRIM EMAIL PASS 13 Sep via POST /auth/v1/otp -> support@lihatmeja.com: masuk, subject + 6 digit ID tanpa link.
 - - [x] OTP 6 digit, exp 3600s. Rate limit bawaan: email 2/menit, verify 30 — catatan rollout: gelombang registrasi 67 crew ≈ 35 mnt kalau serentak; naikkan bila perlu. Site URL https://lihatmeja.com.
 
 ## 2. Apply migration (urutan EKSAK, sebelum deploy app)
