@@ -22,7 +22,7 @@ export type CrewSessionIdentity = {
 export type CrewIdentity = CrewSessionIdentity & { audioReady: boolean };
 
 // Task 8: the audit-trail identity for the 3 non-SS roles (Kasir/Satgas/
-// Clear Up), created via claim_role_session. Deliberately a distinct type
+// Clear Up), created via crew_shift_claim. Deliberately a distinct type
 // and storage key from CrewSessionIdentity above -- see Option B note on
 // claim_crew_session in role-session.server.ts. accessToken is the
 // device's Supabase Auth access token (Poin 3: a real crew account session,
@@ -234,4 +234,47 @@ export function browserSessionStorage(): StorageLike | null {
   } catch {
     return null;
   }
+}
+
+// Poin 3 Task 9 HARD CUTOVER: the legacy "kode + PIN" flow persisted a
+// CrewSessionIdentity/RoleSessionIdentity in sessionStorage with no
+// auth_uid lineage, and it can no longer be revalidated (claim_role_session is
+// dropped and every pre-cutover role_session_token is revoked by
+// 20260913130000). Trusting such a row on an upgraded device would resurrect
+// the SS soundboard / a role page without any fresh account claim. So on the
+// FIRST load after deploy we clear both legacy identities, forcing every crew
+// through CrewLoginFlow. The sentinel lives in localStorage (not the
+// just-cleared sessionStorage) so it survives the wipe and runs at most once
+// per device -> it can never loop or fight a legitimately-issued Poin 3
+// identity. Storage failures degrade to a no-op (the fresh browser-auth guard
+// in CrewLoginFlow is the real authority), never a throw.
+export const POIN3_CUTOVER_KEY = "table-talker.poin3-cutover";
+
+// Pure core, injected storages so the "not trusted / runs once / no loop"
+// contract is unit-testable without a DOM. Returns true iff it cleared this run.
+export function clearLegacyCrewIdentities(
+  session: StorageLike | null,
+  local: StorageLike | null,
+): boolean {
+  if (!local) return false;
+  try {
+    if (local.getItem(POIN3_CUTOVER_KEY)) return false;
+    local.setItem(POIN3_CUTOVER_KEY, "1");
+  } catch {
+    return false;
+  }
+  removeCrewSessionIdentity(session);
+  removeRoleSessionIdentity(session);
+  return true;
+}
+
+export function runPoin3Cutover(): boolean {
+  if (typeof window === "undefined") return false;
+  let local: StorageLike | null = null;
+  try {
+    local = window.localStorage;
+  } catch {
+    local = null;
+  }
+  return clearLegacyCrewIdentities(browserSessionStorage(), local);
 }

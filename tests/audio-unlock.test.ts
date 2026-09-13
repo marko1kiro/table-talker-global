@@ -103,7 +103,7 @@ it("hydrates a same-tab crew after mount without persisting audio readiness", ()
     "\n",
   );
   const hydrationEffect = route.match(
-    /useEffect\(\(\) => \{\s*const identity = readCrewSessionIdentity\(browserSessionStorage\(\)\);[\s\S]*?\}, \[\]\);/,
+    /useEffect\(\(\) => \{[\s\S]*?const identity = readCrewSessionIdentity\(browserSessionStorage\(\)\);[\s\S]*?\}, \[\]\);/,
   );
 
   expect(route).toContain("useState<CrewIdentity | null>(null)");
@@ -128,9 +128,9 @@ it("gates the crew dialog until identity hydration completes", () => {
   // The login flow is only mounted once hydration has finished and no crew
   // identity has been established yet -- unlike an `open` prop that would
   // keep it mounted (and its internal step state alive) behind the
-  // dashboard, this guarantees a fresh RoleLoginFlow every time a crew logs
+  // dashboard, this guarantees a fresh CrewLoginFlow every time a crew logs
   // out, and that nothing is rendered while `identityHydrated` is false.
   expect(route).toContain("{identityHydrated && !crewIdentity && (");
-  expect(route).toContain("<RoleLoginFlow\n          onSsContinue={async (identity) => {");
+  expect(route).toMatch(/<CrewLoginFlow\s*\n\s*onSsContinue=\{async \(identity\) => \{/);
   expect(route).toContain("{identityHydrated && crewIdentity && (");
 });

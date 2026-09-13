@@ -1,6 +1,6 @@
-// Pure, framework-free helpers for the Task 8 revised login flow. Kept
+// Pure, framework-free helpers for the crew login flow. Kept
 // separate from role-session.server.ts (which owns the server-only
-// claim_role_session RPC wiring) so RoleLoginFlow.tsx's role picker and
+// role-session helpers) so CrewLoginFlow.tsx's role picker and
 // manual date/time input can import plain, client-safe logic without
 // pulling in a *.server.ts module (which bundles node:crypto and is
 // tree-shaken into a server-only chunk unusable from client code).
@@ -28,7 +28,7 @@ const DATETIME_LOCAL_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{
 // timezone information) into a UTC ISO timestamp, interpreting the wall
 // clock as Asia/Jakarta (UTC+7, no DST) per the design spec's "Tanggal &
 // Jam Masuk" field. Returns null for empty/malformed input rather than
-// throwing, so RoleLoginFlow can surface a validation error instead of
+// throwing, so CrewLoginFlow can surface a validation error instead of
 // crashing on an unparsable manually-typed value.
 export function jakartaCheckedInAtToIso(value: string): string | null {
   const match = DATETIME_LOCAL_PATTERN.exec(value.trim());

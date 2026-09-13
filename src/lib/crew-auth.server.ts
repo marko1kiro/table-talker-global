@@ -1,7 +1,7 @@
 // Poin 3 Task 6: crew auth server functions. Browser-facing fns forward the
 // caller's GoTrue access token and run every RPC through
-// getAnonAuthedSupabaseClient (same grant shape as claim_role_session:
-// revoked from service_role, granted to authenticated, auth.uid()-scoped) --
+// getAnonAuthedSupabaseClient (the crew account RPCs are revoked from
+// service_role, granted to authenticated, and auth.uid()-scoped) --
 // the service-role client can never call these RPCs and is never built here.
 // Manager-facing fns copy manager-dashboard.server.ts's transport exactly:
 // anon-authed client + the manager bearer token as p_manager_token (the RPC
@@ -342,9 +342,8 @@ export const crewClaimShiftInputSchema = z.object({
   deviceToken: z.string().min(16),
 });
 
-// Parsing mirrors claimRoleSessionCore (role-session.server.ts): the RPC
-// returns { session, session_token } jsonb plus the tenant token and the
-// server-derived restaurant identity.
+// crew_shift_claim returns { session, session_token } jsonb plus the tenant
+// token and the server-derived restaurant identity (Task 5).
 export async function crewClaimShiftCore(
   data: { role: CrewRole; checkedInAt: string; deviceToken: string },
   rpc: RpcCaller,

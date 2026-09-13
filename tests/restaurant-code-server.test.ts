@@ -5,30 +5,13 @@ const adminSource = readFileSync(
   new URL("../src/lib/admin-restaurants.server.ts", import.meta.url),
   "utf8",
 );
-const crewSource = readFileSync(
-  new URL("../src/lib/restaurants.server.ts", import.meta.url),
-  "utf8",
-);
 
-it("uses a direct plain-code lookup and one generic failure at crew boundary", () => {
-  expect(crewSource).toContain("validateRestaurantCode(data.code)");
-  expect(crewSource).toContain('p_code: valid ? validated.code : "\\n"');
-  expect(crewSource).not.toContain("hashRestaurantCode");
-  expect(crewSource).not.toContain("hashLegacyRestaurantCode");
-  expect(crewSource).not.toContain('.ilike("code"');
-  expect(crewSource).not.toContain("verifyLegacyRestaurantPin");
-  expect([...crewSource.matchAll(/Kode Resto salah\./g)]).toHaveLength(1);
-});
-
-// C-01 remediation (Fase 1, 2026-09-02): restaurants.pin (plaintext) was
-// replaced with restaurants.pin_hash (sha256 hex). This file's Kode Resto
-// (restaurant code) lookup above stays intentionally plain-text -- codes are
-// not treated as a secret -- but the separate "ID Resto" PIN second-factor,
-// verified in this same file, must now compare against the hashed column.
-it("verifies the ID Resto PIN second factor against the hashed column, not plaintext", () => {
-  expect(crewSource).toContain("restaurant.pin_hash !== hashOpaqueRestaurantToken(data.pin)");
-  expect(crewSource).not.toContain('.select("pin")');
-});
+// Poin 3 Task 9 (hard cutover): the crew-side "kode + PIN" lookups this file
+// used to assert (loginToRestaurant's plain-code path and verifyRestaurantPin's
+// hashed second factor) were deleted from restaurants.server.ts -- crew identity
+// now comes from the email-account pairing and crew_shift_claim mints the tenant
+// token. The login_to_restaurant_atomic RPC is still covered by its migration
+// contract tests (auth-rate-limit-remediation / plaintext-restaurant-code).
 
 it("keeps owner credential handlers server-only, audited, and no-store", () => {
   for (const name of [

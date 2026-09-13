@@ -421,6 +421,7 @@ export const recordQrScan = createServerFn({ method: "POST" })
   });
 
 // Re-exported so callers/tests only need to import from this one file for
-// the full Task 6 RPC surface, even though claim_role_session itself lives
-// in role-session.server.ts (kept separate per the plan's file split).
+// the full Task 6 RPC surface, even though the shared getAnonAuthedSupabaseClient
+// client factory lives in role-session.server.ts (kept separate per the plan's
+// file split).
 export { CREW_ROLES };

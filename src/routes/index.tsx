@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2, Square } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Loader2, Square, UserCog } from "lucide-react";
 
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -14,7 +14,7 @@ import {
   unlockBundledAudio,
 } from "@/lib/audio";
 import { createCachedAudioUrlPool } from "@/lib/audio-sync";
-import { RoleLoginFlow } from "@/components/RoleLoginFlow";
+import { CrewLoginFlow } from "@/components/CrewLoginFlow";
 import { SyncDialog } from "@/components/SyncDialog";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
 import { ANNOUNCEMENT_CATALOG, type AudioId } from "@/lib/remote-audio-domain";
@@ -23,6 +23,7 @@ import {
   browserSessionStorage,
   readCrewSessionIdentity,
   removeCrewSessionIdentity,
+  runPoin3Cutover,
   writeCrewSessionIdentity,
   writeRoleSessionIdentity,
   type CrewIdentity,
@@ -69,9 +70,9 @@ function announcementAudioId(announcementId: string): AudioId {
 
 const ACCESS_VALIDATION_INTERVAL_MS = 30_000;
 
-// Task 8: where the other 3 roles land after RoleLoginFlow's
-// claim_role_session succeeds. Their pages don't exist until Tasks 10-12;
-// this route only needs to navigate to the path string.
+// Task 8/9: where the other 3 roles land after CrewLoginFlow's crew_shift_claim
+// succeeds. Their pages don't exist until Tasks 10-12; this route only needs to
+// navigate to the path string.
 const ROLE_ROUTE_PATH: Record<RoleSessionIdentity["role"], string> = {
   ss: "/",
   kasir: "/kasir",
@@ -122,6 +123,11 @@ function SoundboardPage() {
   );
 
   useEffect(() => {
+    // Poin 3 Task 9 hard cutover: before trusting ANY persisted identity, drop
+    // a legacy "kode + PIN" crew/role session once per device (see
+    // crew-session-identity.ts). A pre-Poin-3 SS identity would otherwise
+    // resurrect the soundboard with no account-lineage claim behind it.
+    runPoin3Cutover();
     const identity = readCrewSessionIdentity(browserSessionStorage());
     setCrewIdentity(identity && { ...identity, audioReady: false });
     setIdentityHydrated(true);
@@ -200,7 +206,7 @@ function SoundboardPage() {
   }, []);
 
   // Manual sign-out, distinct from invalidateCrewSession above: no error
-  // banner, just a clean return to RoleLoginFlow, mirroring the logout
+  // banner, just a clean return to CrewLoginFlow, mirroring the logout
   // Kasir/Satgas/Clear Up already have.
   const logout = useCallback(async () => {
     // M-04/M-05: same reasoning as invalidateCrewSession above -- capture
@@ -421,33 +427,44 @@ function SoundboardPage() {
       )}
 
       {identityHydrated && !crewIdentity && (
-        // No dashboard is mounted behind this: the login screen owns the
-        // whole viewport until an identity is established below.
-        <RoleLoginFlow
-          onSsContinue={async (identity) => {
-            audioUrlPoolRef.current?.clear();
-            audioUrlPoolRef.current = null;
-            validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
-            setAudioSynced(false);
-            const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
-            setCrewIdentity({ ...(saved ?? identity), audioReady: false });
-            // Fire-and-forget: iOS audio.play() can hang indefinitely,
-            // blocking the entire login flow if awaited.
-            unlockAudio().then((ready) => {
-              setCrewIdentity((prev) => (prev ? { ...prev, audioReady: ready } : prev));
-            });
-          }}
-          onRoleContinue={(identity) => {
-            // Bug found ahead of Task 10: without this, the role session
-            // claimed by RoleLoginFlow was discarded on navigation, so
-            // Kasir/Satgas/Clear Up could never read who is logged in once
-            // they land on their own route (readRoleSessionIdentity would
-            // always return null). Persist it first, mirroring the SS
-            // (crew identity) branch above.
-            writeRoleSessionIdentity(browserSessionStorage(), identity);
-            void navigate({ to: ROLE_ROUTE_PATH[identity.role] });
-          }}
-        />
+        <div className="relative">
+          {/* Poin 3 Task 9 (spec §9): the homepage exposes two clear entries --
+              CREW is the whole email-account flow below; MANAGER is this corner
+              link. It lives at the top level (not inside CrewLoginFlow) so it
+              survives every step and never needs a router-provider in the
+              component's own jsdom tests. */}
+          <Link
+            to="/manager/login"
+            className="absolute right-4 top-4 z-50 inline-flex items-center gap-2 rounded-lg bg-ta-gray-100 px-4 py-2 text-xs font-bold text-ta-gray-700 transition hover:bg-ta-gray-200 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
+          >
+            <UserCog className="size-4" /> Login Manager
+          </Link>
+          <CrewLoginFlow
+            onSsContinue={async (identity) => {
+              audioUrlPoolRef.current?.clear();
+              audioUrlPoolRef.current = null;
+              validatedAccessRef.current = { identityKey: "", validatedAt: 0 };
+              setAudioSynced(false);
+              const saved = writeCrewSessionIdentity(browserSessionStorage(), identity);
+              setCrewIdentity({ ...(saved ?? identity), audioReady: false });
+              // Fire-and-forget: iOS audio.play() can hang indefinitely,
+              // blocking the entire login flow if awaited.
+              unlockAudio().then((ready) => {
+                setCrewIdentity((prev) => (prev ? { ...prev, audioReady: ready } : prev));
+              });
+            }}
+            onRoleContinue={(identity) => {
+              // Bug found ahead of Task 10: without this, the role session
+              // claimed by CrewLoginFlow was discarded on navigation, so
+              // Kasir/Satgas/Clear Up could never read who is logged in once
+              // they land on their own route (readRoleSessionIdentity would
+              // always return null). Persist it first, mirroring the SS
+              // (crew identity) branch above.
+              writeRoleSessionIdentity(browserSessionStorage(), identity);
+              void navigate({ to: ROLE_ROUTE_PATH[identity.role] });
+            }}
+          />
+        </div>
       )}
 
       {identityHydrated && crewIdentity && (

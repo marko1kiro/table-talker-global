@@ -36,16 +36,16 @@ import type { CrewRole } from "@/lib/role-session-domain";
 import type { CrewSessionIdentity, RoleSessionIdentity } from "@/lib/crew-session-identity";
 
 // Poin 3 Task 8 (spec §3.2): crew login on REAL email accounts. Replaces the
-// anonymous "Kode + PIN" rails once Task 9 wires the homepage; RoleLoginFlow
-// stays mounted until then. Steps: boot -> email -> otpEmail -> resto ->
+// anonymous "Kode + PIN" rails (Task 9 removed the old component and homepage
+// mount). Steps: boot -> email -> otpEmail -> resto ->
 // waiting (-> pairing input) -> checkin, plus the derived kicked/disabled
 // screens (§7 copy). Authority is unchanged: role_session_tokens minted by
 // crew_shift_claim, realtime/RPC keep refreshing the live JWT via
 // refreshCarrierToken (Task 7).
 //
 // Markup conventions (AuthLayout, IconField, taPrimaryButtonClass, step dots,
-// role cards, inline alert) are carried over from RoleLoginFlow verbatim so
-// Task 9's swap is invisible to crew tablets already styled for TailAdmin.
+// role cards, inline alert) mirror the previous crew login screen so the swap
+// stays invisible to crew tablets already styled for TailAdmin.
 
 export const PAIRING_WINDOW_MS = 15 * 60 * 1000; // mirrors crew_pairing_requests.expires_at
 

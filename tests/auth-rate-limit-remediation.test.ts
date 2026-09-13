@@ -142,7 +142,10 @@ it("uses one atomic service-only restaurant login RPC with ordered rate rows", (
   ])
     expect(migration).toContain(`drop function if exists public.${signature}`);
   expect(migration).toContain("cleanup_tenant_login_rate_limits");
-  expect(restaurants).toContain('client.rpc("login_to_restaurant_atomic"');
+  // Poin 3 Task 9: the RPC stays (historical assertions above), but its crew
+  // call-site was deleted -- restaurants.server.ts no longer invokes it, so a
+  // stale client cannot re-mint a tenant token off the legacy code+PIN path.
+  expect(restaurants).not.toContain('client.rpc("login_to_restaurant_atomic"');
   expect(restaurants).not.toContain('rpc("record_tenant_login_failure"');
   expect(restaurants).not.toContain('rpc("clear_global_tenant_login_failures"');
   expect(loginFunction.indexOf("order by bucket_hash for update")).toBeLessThan(
