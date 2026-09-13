@@ -15,6 +15,7 @@ const crewSignInWithOtp = vi.fn();
 const crewVerifyOtp = vi.fn();
 const refreshCarrierToken = vi.fn();
 const getDeviceToken = vi.fn();
+const crewSignOut = vi.fn();
 
 vi.mock("@/lib/crew-auth.server", () => ({
   crewMe: (a: unknown) => crewMe(a),
@@ -26,6 +27,7 @@ vi.mock("@/lib/crew-auth.server", () => ({
 vi.mock("@/lib/browser-auth", () => ({
   crewSignInWithOtp: (email: string) => crewSignInWithOtp(email),
   crewVerifyOtp: (email: string, otp: string) => crewVerifyOtp(email, otp),
+  crewSignOut: () => crewSignOut(),
   refreshCarrierToken: () => refreshCarrierToken(),
   getDeviceToken: () => getDeviceToken(),
 }));
@@ -98,6 +100,7 @@ beforeEach(() => {
     crewClaimShift,
     crewSignInWithOtp,
     crewVerifyOtp,
+    crewSignOut,
     refreshCarrierToken,
     getDeviceToken,
   ])
@@ -110,6 +113,7 @@ beforeEach(() => {
   crewMe.mockResolvedValue(okMe());
   crewSignInWithOtp.mockResolvedValue({ ok: true });
   crewVerifyOtp.mockResolvedValue({ ok: true });
+  crewSignOut.mockResolvedValue({ ok: true });
   crewValidateCode.mockResolvedValue({ ok: true, restaurantId: REST, displayName: "RMuji" });
   crewRequestPairing.mockResolvedValue({ ok: true, requestId: REQUEST_ID });
   crewConfirmPairing.mockResolvedValue({ ok: true });
@@ -178,6 +182,34 @@ describe("boot", () => {
     renderFlow();
     expect(await screen.findByText(/dinonaktifkan/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^masuk$/i })).toBeNull();
+  });
+});
+
+describe("Keluar akun (spec §12#5 shared-tablet escape)", () => {
+  it("kick screen: signs the account out and lands on a clean email step", async () => {
+    crewMe.mockResolvedValue(pairedMe({ deviceCurrent: false }));
+    renderFlow();
+    expect(await screen.findByText("Akun ini dipakai login di perangkat lain.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /keluar akun/i }));
+    await waitFor(() => expect(crewSignOut).toHaveBeenCalledTimes(1));
+    expect(await screen.findByLabelText(/email/i)).toBeTruthy();
+    // no stale identity left on screen: neither the account greeting nor its
+    // restaurant badge may survive into the next crew's session.
+    expect(screen.queryByText(/Halo Budi/)).toBeNull();
+    expect(screen.queryByText("RMuji")).toBeNull();
+    expect((screen.getByLabelText(/email/i) as HTMLInputElement).value).toBe("");
+  });
+
+  it("checkin screen: the 'Bukan <nama>?' affordance signs out back to email", async () => {
+    crewMe.mockResolvedValue(pairedMe());
+    renderFlow();
+    await screen.findByRole("button", { name: /^masuk$/i });
+    expect(screen.getByText(/Halo Budi/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /bukan budi/i }));
+    await waitFor(() => expect(crewSignOut).toHaveBeenCalledTimes(1));
+    expect(await screen.findByLabelText(/email/i)).toBeTruthy();
+    expect(screen.queryByText(/Halo Budi/)).toBeNull();
+    expect(screen.queryByText("RMuji")).toBeNull();
   });
 });
 

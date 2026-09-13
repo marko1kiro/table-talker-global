@@ -17,8 +17,8 @@
 -- Device binding is sha256 of an opaque client device token; a device change
 -- revokes every role_session_token for this uid's sessions. An advisory xact
 -- lock + FOR UPDATE on the account row serialize device rotation; the pairing
--- confirm re-pins the account via the SAME row lock (it does not take the
--- advisory key), so a concurrent re-pair and re-claim cannot interleave.
+-- confirm takes the SAME per-uid advisory key and wipes the pin while holding
+-- it, so a concurrent re-pair and re-claim cannot interleave.
 
 -- Step 1: shift claim. auth.uid()-scoped (like claim_role_session): revoked
 -- from public/anon/service_role, granted to authenticated.
@@ -53,8 +53,9 @@ begin
   v_device_hash := encode(extensions.digest(p_device_token, 'sha256'), 'hex');
 
   -- serialize device rotation against a concurrent re-pair, then lock the
-  -- account row before reading/kicking the device. crew_confirm_pairing re-pins
-  -- via the same row lock (its ON CONFLICT DO UPDATE), not this advisory key.
+  -- account row before reading/kicking the device. crew_confirm_pairing takes
+  -- this exact advisory key too (and revokes every role_session_token of the uid
+  -- while holding it), so a (re)pair can never leave a stale device authorized.
   perform pg_advisory_xact_lock(hashtext('crew_pairing'), hashtext(v_uid::text));
   select * into v_acc from public.crew_accounts where auth_uid = v_uid for update;
   if not found then raise exception 'NOT_PAIRED'; end if;

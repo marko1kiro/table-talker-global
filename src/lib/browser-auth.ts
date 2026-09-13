@@ -61,6 +61,9 @@ export function crewVerifyOtp(email: string, token: string): Promise<BrowserAuth
   return attempt(() => c.auth.verifyOtp({ type: "email", email, token }));
 }
 
+// The spec §12#5 escape hatch: CrewLoginFlow's "Keluar akun" (kick + checkin
+// screens). Role-page logout deliberately does NOT call this -- one login = one
+// logged-in device -- so this is the only way off a shared tablet's account.
 export function crewSignOut(): Promise<BrowserAuthResult> {
   const c = getSupabaseBrowserClient();
   if (!c) return Promise.resolve({ ok: false, code: "UNAVAILABLE" });

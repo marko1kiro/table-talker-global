@@ -276,6 +276,52 @@ describe("crew_confirm_pairing", () => {
     expect(acc.rows[0]).toMatchObject({ active_device_hash: null, status: "aktif" });
   });
 
+  test("confirm revokes every live role_session_token of the uid (device-pin bypass)", async () => {
+    // The shift claim's device-kick only fires when active_device_hash is
+    // non-null, and confirm wipes that pin. Without an unconditional revoke
+    // here, a stale pending that survives onto an already-aktif account
+    // (crew_request_pairing's ALREADY_PAIRED check runs before its advisory
+    // lock) would leave the PREVIOUS device's 9h role tokens live.
+    const uid = freshUid();
+    await crewUser(uid, "crew-p@example.com");
+    const session = await c.query(
+      `insert into public.crew_role_sessions (restaurant_id, role, display_name, checked_in_at, auth_uid)
+       values ($1, 'kasir', 'Crew Pai', now(), $2) returning id`,
+      [R1, uid],
+    );
+    const token = await c.query(
+      `insert into public.role_session_tokens
+         (token_hash, restaurant_id, role_session_id, role, expires_at, code_version)
+       values ($1, $2, $3, 'kasir', now() + interval '9 hours',
+               (select code_version from public.restaurants where id = $2))
+       returning token_hash`,
+      ["b".repeat(64), R1, session.rows[0].id],
+    );
+    expect(token.rowCount).toBe(1);
+
+    const id = (await requestPairing(uid, R2, "Crew Pai")).data!.request_id!;
+    expect(await confirmPairing(uid, id)).toMatchObject({ data: { ok: true } });
+    expect(
+      (
+        await c.query(`select 1 from public.role_session_tokens where token_hash = $1`, [
+          "b".repeat(64),
+        ])
+      ).rowCount,
+    ).toBe(0);
+  });
+
+  test("first-time pair with no prior sessions is unaffected by the revoke", async () => {
+    const uid = freshUid();
+    await crewUser(uid, "crew-q@example.com");
+    const id = (await requestPairing(uid, R1)).data!.request_id!;
+    expect(await confirmPairing(uid, id)).toMatchObject({ data: { ok: true } });
+    const acc = await c.query(
+      `select status, active_device_hash from public.crew_accounts where auth_uid = $1`,
+      [uid],
+    );
+    expect(acc.rows[0]).toMatchObject({ status: "aktif", active_device_hash: null });
+  });
+
   test("restaurant deactivated after request: confirm expires, no account", async () => {
     const uid = freshUid();
     await crewUser(uid, "crew-o@example.com");

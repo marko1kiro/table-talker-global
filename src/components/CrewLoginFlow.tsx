@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Loader2,
+  LogOut,
   Mail,
   ShieldCheck,
   Sparkles,
@@ -27,6 +28,7 @@ import {
 import {
   getDeviceToken,
   crewSignInWithOtp,
+  crewSignOut,
   crewVerifyOtp,
   refreshCarrierToken,
 } from "@/lib/browser-auth";
@@ -39,9 +41,11 @@ import type { CrewSessionIdentity, RoleSessionIdentity } from "@/lib/crew-sessio
 // anonymous "Kode + PIN" rails (Task 9 removed the old component and homepage
 // mount). Steps: boot -> email -> otpEmail -> resto ->
 // waiting (-> pairing input) -> checkin, plus the derived kicked/disabled
-// screens (§7 copy). Authority is unchanged: role_session_tokens minted by
-// crew_shift_claim, realtime/RPC keep refreshing the live JWT via
-// refreshCarrierToken (Task 7).
+// screens (§7 copy). "Keluar akun" on the kick + checkin screens drops the
+// GoTrue session (spec §12#5: role-session logout deliberately KEEPS it, so
+// this is the only escape on a shared tablet). Authority is unchanged:
+// role_session_tokens minted by crew_shift_claim, realtime/RPC keep refreshing
+// the live JWT via refreshCarrierToken (Task 7).
 //
 // Markup conventions (AuthLayout, IconField, taPrimaryButtonClass, step dots,
 // role cards, inline alert) mirror the previous crew login screen so the swap
@@ -143,6 +147,45 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
     if (!token || !device) return null;
     return { token, device };
   }
+
+  // Spec §12#5 escape hatch. Logging out of a ROLE page deliberately keeps the
+  // email session (one login = one logged-in device), so on a shared tablet the
+  // next crew would otherwise be greeted as the previous one and their shift
+  // audited to the wrong account. This drops the GoTrue session AND every piece
+  // of in-memory identity, landing on a blank email step. A failed sign-out is
+  // not surfaced: the local state is cleared regardless, and the boot guard
+  // re-routes on the next load if the session actually survived.
+  async function signOutAccount(): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await crewSignOut();
+    } finally {
+      setBusy(false);
+    }
+    setEmail("");
+    setOtp("");
+    setName("");
+    setRestoCode("");
+    setResto(null);
+    setPairing(null);
+    setShowPairingOtp(false);
+    setInfo(null);
+    setRole(null);
+    setError("");
+    setStep("email");
+  }
+
+  const signOutButton = (label: string) => (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => void signOutAccount()}
+      className={`${secondary} mx-auto mt-4 flex`}
+    >
+      <LogOut className="size-3.5" /> {label}
+    </button>
+  );
 
   useEffect(() => {
     if (step !== "waiting") return;
@@ -455,6 +498,7 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
         <button type="button" onClick={() => setStep("checkin")} className={`${primary} mt-6`}>
           <Unlock className="size-4" /> Lanjut di perangkat ini
         </button>
+        {signOutButton("Keluar akun")}
         <Footer className="mt-6" />
       </AuthLayout>
     );
@@ -765,6 +809,7 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
               )}
             </button>
           </form>
+          {signOutButton(`Bukan ${info?.fullName ?? "kamu"}? Keluar`)}
         </div>
       )}
 

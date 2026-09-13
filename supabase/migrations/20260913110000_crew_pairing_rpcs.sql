@@ -51,10 +51,15 @@ grant execute on function public.crew_validate_code(text) to authenticated;
 -- (get_crew_pairing_requests already orders created_at desc — top of the list;
 -- older pendings of the same uid show status 'expired' in the DB and are not
 -- listed). A nonaktif account (manager reset) may re-pair; only an aktif
--- account is hard-blocked with ALREADY_PAIRED. NOTE for Task 5/6: a confirm
--- racing between the aktif-check and the insert can transiently leave a
--- pending row on an aktif account; newest-wins converges (that pending later
--- confirms to NOT_PENDING or expires), so consumers must tolerate it.
+-- account is hard-blocked with ALREADY_PAIRED. NOTE for Task 5/6: the ALREADY_PAIRED
+-- check below runs BEFORE this function takes the per-uid advisory lock, so a
+-- confirm racing between that check and the insert can transiently leave a
+-- pending row on an aktif account. That stale pending is harmless because
+-- crew_confirm_pairing (1) takes the SAME per-uid advisory key as this function
+-- and crew_shift_claim, so the three serialize per uid, and (2) revokes every
+-- live role_session_token of the uid before re-pinning, so a (re)pair can never
+-- leave a previous device authorized. Consumers must still tolerate a transient
+-- pending row on an aktif account (it simply confirms to a fresh revocation).
 create or replace function public.crew_request_pairing(
   p_restaurant_id uuid,
   p_full_name text,
@@ -117,6 +122,11 @@ grant execute on function public.crew_request_pairing(uuid, text, text, text) to
 -- increment (5 wrong attempts burn the request; the 6th call reports it).
 -- Consequence: an APPROVED request may carry attempts > 0 (prior wrong tries) —
 -- readers must treat attempts on approved rows as history, not tampering.
+-- A successful confirm takes the same per-uid advisory lock as
+-- crew_request_pairing / crew_shift_claim and revokes every live
+-- role_session_token of that uid before re-pinning the account, so approving a
+-- pairing is itself a full device authorization reset (see 20260913120000's
+-- device-kick, which is conditional on the pin being set).
 create or replace function public.crew_confirm_pairing(
   p_request_id uuid,
   p_otp_hash text
@@ -132,6 +142,13 @@ declare
 begin
   if v_uid is null then raise exception 'UNAUTHORIZED'; end if;
   if p_otp_hash is null or p_otp_hash !~ '^[a-f0-9]{64}$' then raise exception 'INTERNAL'; end if;
+
+  -- SAME per-uid key as crew_request_pairing and crew_shift_claim, taken before
+  -- any row lock so all three serialize on it in the same order (advisory first,
+  -- then the pairing-request / account row) and can never deadlock against each
+  -- other. v_uid is exactly the request's auth_uid: the lookup below is scoped
+  -- to auth_uid = v_uid.
+  perform pg_advisory_xact_lock(hashtext('crew_pairing'), hashtext(v_uid::text));
 
   select * into v_req from public.crew_pairing_requests
   where id = p_request_id and auth_uid = v_uid
@@ -169,6 +186,18 @@ begin
   update public.crew_pairing_requests
   set status = 'approved', decided_at = now()
   where id = p_request_id;
+
+  -- (Re)pairing ALWAYS revokes every live role session token this uid holds, on
+  -- both branches: a first-time pair simply matches zero rows. This is the
+  -- unconditional half of the device-pin guarantee -- the upsert below wipes
+  -- active_device_hash, and crew_shift_claim's device-kick delete only fires
+  -- when that pin is non-null, so relying on the claim (or on
+  -- reset_crew_account) alone would let a stale pending that survives onto an
+  -- aktif account leave the previous device fully authorized for up to 9h.
+  delete from public.role_session_tokens
+  where role_session_id in (
+    select id from public.crew_role_sessions where auth_uid = v_uid
+  );
 
   -- Self-service pairing has no manager actor: paired_by stays null. An
   -- existing (nonaktif) account is re-activated and re-pointed atomically,
