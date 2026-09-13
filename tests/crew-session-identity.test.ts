@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  createSessionStorageAdapter,
   readCrewSessionIdentity,
   readRoleSessionIdentity,
   removeCrewSessionIdentity,
@@ -82,22 +81,13 @@ describe("crew session identity", () => {
     ).toBeNull();
     expect(() => removeCrewSessionIdentity(unavailable)).not.toThrow();
   });
-
-  it("keeps each session adapter isolated", () => {
-    const first = createSessionStorageAdapter(storage());
-    const second = createSessionStorageAdapter(storage());
-
-    first.setItem("supabase.auth.token", "same-tab-user");
-    expect(first.getItem("supabase.auth.token")).toBe("same-tab-user");
-    expect(second.getItem("supabase.auth.token")).toBeNull();
-  });
 });
 
 // Task 8: a distinct, separately-keyed identity for the 3 non-SS roles
-// (Kasir/Satgas/Clear Up), created via the new claim_role_session RPC.
-// Deliberately never conflated with CrewSessionIdentity's crewSessionId/
-// crewSessionToken fields (the SS-only, permanently-empty claim_crew_session
-// fields, per Option B) -- kept as a fully separate storage key/shape.
+// (Kasir/Satgas/Clear Up), created via crew_shift_claim. Deliberately never
+// conflated with CrewSessionIdentity's crewSessionId/crewSessionToken fields
+// (SS-only and permanently empty per Option B) -- a fully separate storage
+// key/shape.
 describe("role session identity", () => {
   const roleFields = {
     restaurantId: "test-restaurant-id",

@@ -115,9 +115,10 @@ describe("crew-only legacy server paths removed (main never references dropped R
     const text = read("../src/lib/role-session.server.ts");
     expect(text).not.toContain("claim_role_session");
     expect(text).not.toContain("claimRoleSession");
-    // the shared helpers crews/manager reads still rely on remain exported
+    // the shared client factory crews/manager reads still rely on remains exported
     expect(text).toContain("export function getAnonAuthedSupabaseClient");
-    expect(text).toContain("export async function verifyRoleSessionToken");
+    // its dead role-token verifier was deleted with the claim path
+    expect(text).not.toContain("verifyRoleSessionToken");
   });
 
   it("restaurants.server.ts no longer wraps the crew-only code+PIN path", () => {

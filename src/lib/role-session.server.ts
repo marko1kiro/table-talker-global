@@ -7,8 +7,10 @@ import { CREW_ROLES, type CrewRole } from "./role-session-domain";
 // flow, and the RPC it invoked is dropped by
 // supabase/migrations/20260913130000_crew_legacy_cutover.sql. Crew authority now
 // flows through crew_shift_claim (see crew-auth.server.ts). What remains is the
-// shared, still-used client factory + the role-token verifier that the occupancy
-// / realtime RPCs depend on.
+// shared client factory + the two types the server modules are typed against;
+// the old role-token verifier went with the claim path (its last caller was the
+// deleted wrapper, and the occupancy / realtime RPCs verify tokens inside the
+// database themselves).
 
 // getAnonAuthedSupabaseClient builds a per-request client authenticated as the
 // CALLER (never the service role), forwarding the browser carrier JWT as a
@@ -29,9 +31,9 @@ export function getAnonAuthedSupabaseClient(accessToken: string): SupabaseClient
   });
 }
 
-// Re-exported for backward compatibility with existing Task 6 imports
-// (table-occupancy.server.ts, tests/role-session-server.test.ts); canonical
-// definition now lives in role-session-domain.ts (see import above).
+// Re-exported for backward compatibility with the existing Task 6 import in
+// table-occupancy.server.ts; the canonical definition lives in
+// role-session-domain.ts (see import above).
 export { CREW_ROLES };
 export type { CrewRole };
 
@@ -41,38 +43,3 @@ export type RpcCaller = (
   fn: string,
   params: Record<string, unknown>,
 ) => Promise<{ data: unknown; error: { message: string } | null }>;
-
-// Verification helper mirroring verifyActiveTenantSession/
-// verifyCrewSessionToken in restaurant-session.server.ts: role_session_tokens
-// only has table-level revokes against public/anon/authenticated (Task 5's
-// migration), never against service_role, so a plain service-role client is
-// valid here for a direct table read -- the revoke that blocks a service-role
-// *RPC* call does not apply to this table *select*.
-export async function verifyRoleSessionToken(
-  client: SupabaseClient,
-  token: string,
-  restaurantId: string,
-  role?: CrewRole,
-) {
-  // Dynamic import (not a top-level `import ... from "node:crypto"`) so this
-  // module stays safe to import from client code: crew-auth.server.ts (a client
-  // import, via CrewLoginFlow.tsx) re-uses getAnonAuthedSupabaseClient from this
-  // file, and a static node:crypto import at the top gets pulled into the client
-  // bundle by Vite even though this specific function is server-only (see
-  // tests/restaurant-login-build.test.ts).
-  const { createHash } = await import("node:crypto");
-  let query = client
-    .from("role_session_tokens")
-    .select("role_session_id, restaurant_id, role, expires_at")
-    .eq("token_hash", createHash("sha256").update(token).digest("hex"))
-    .eq("restaurant_id", restaurantId)
-    .gt("expires_at", new Date().toISOString());
-  if (role) query = query.eq("role", role);
-  const { data, error } = await query.maybeSingle();
-  if (error || !data) return null;
-  return {
-    roleSessionId: data.role_session_id as string,
-    restaurantId: data.restaurant_id as string,
-    role: data.role as CrewRole,
-  };
-}

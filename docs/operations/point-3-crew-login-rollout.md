@@ -2,7 +2,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-13-poin-3-crew-account-login-design.md`
 **Plan:** `docs/superpowers/plans/2026-09-13-poin-3-crew-account-login.md`
-**Project:** Supabase `kjzxtmxdbcanvkgqqdow` · App `https://lihatmeja.com` (Vercel `gacoan1/lihat-meja`)
+**Project:** Supabase `kjzxtmxdbcanvkgqqdow` · App pilot `https://qris-order.lihatmeja.com` (Vercel `gacoan1/lihat-meja`; alias `https://lihatmeja.com` menunjuk deployment yang sama — pakai host pilot di bawah untuk konsistensi)
 **Model perubahan:** HARD CUTOVER — semua perangkat crew login ulang sekali setelah deploy.
 
 ## 0. Prasyarat (cek dulu, jangan skip)
@@ -38,14 +38,14 @@ Prosedur = playbook Poin 2:
 - [ ] Postflight: keempat obyek ada; `select count(*) from role_session_tokens` = 0; `claim_role_session` hilang dari `pg_proc`.
 
 ## 3. Deploy
-- [ ] Merge PR → Vercel production build (alias `https://lihatmeja.com`).
-- [ ] Sentinel cutover client (`lm.poin3.cutover` di localStorage) otomatis membersihkan identitas sessionStorage lawas per tab — tidak ada langkah server.
+- [ ] Merge PR → Vercel production build (alias `https://qris-order.lihatmeja.com`, sama-sama menunjuk deployment ini sebagai `https://lihatmeja.com`).
+- [ ] Sentinel cutover client (`table-talker.poin3-cutover` di localStorage, konstanta `POIN3_CUTOVER_KEY`) otomatis membersihkan identitas sessionStorage lawas sekali per tab — tidak ada langkah server.
 
 ## 4. Smoke test lapangan (urutan)
-1. **Perangkat crew baru (browser bersih):** `https://qris-order.lihatmeja.com/` → tombol CREW → email → terima OTP 6 digit via email (≤60 detik) → verify → layar Nama + Kode Resto → kode benar → ceklis hijau + nama resto → LANJUTKAN → layar tunggu.
+1. **Perangkat crew baru (browser bersih):** buka `https://qris-order.lihatmeja.com/` — seluruh halaman pre-login MEMANG alur crew (tidak ada tombol CREW); tautan **"Login Manager"** ada di pojok kanan atas. → email → terima OTP 6 digit via email (≤60 detik) → verify → layar Nama + Kode Resto → kode benar → ceklis hijau + nama resto → LANJUTKAN → layar tunggu.
 2. **Manager:** login `/manager/login` (di browser yang belum pernah: harus lancar — carrier bayangan dibuat saat login) → tab Crew → kartu **Permintaan Crew** menampilkan email+OTP besar.
 3. Crew input OTP → **REGISTER DEVICE** → pilih role → masuk dashboard role → audio/soundboard SS / status meja real-time berfungsi (cek 1 event).
-4. **Device kedua email sama:** ulangi login email di browser lain → HP pertama: operasi berikutnya gagal sesi (kick) → layar "perangkat lain" muncul saat buka ulang.
+4. **Device kedua email sama:** ulangi login email di browser lain → HP pertama: operasi berikutnya gagal sesi (kick) → layar "perangkat lain" muncul saat buka ulang → cek **"Keluar akun"** di layar itu: harus kembali ke langkah email kosong (tidak ada sapaan nama crew lama). Cek juga affordance "Bukan <nama>? Keluar" di layar pilih station.
 5. **Reset:** Manager → kartu Akun Crew → Reset (double-tap) → crew tsb tidak bisa klaim shift (ACCOUNT_DISABLED); daftar ulang → OTP Manager baru → aktif lagi.
 6. **Anti-lintas-resto:** crew ter-pair Resto A coba kode Resto B saat register → ALREADY_PAIRED, tetap Resto A.
 7. Pairing kadaluarsa (15 mnt) → layar restart "Minta kode baru" works.

@@ -23,12 +23,14 @@ export type CrewIdentity = CrewSessionIdentity & { audioReady: boolean };
 
 // Task 8: the audit-trail identity for the 3 non-SS roles (Kasir/Satgas/
 // Clear Up), created via crew_shift_claim. Deliberately a distinct type
-// and storage key from CrewSessionIdentity above -- see Option B note on
-// claim_crew_session in role-session.server.ts. accessToken is the
+// and storage key from CrewSessionIdentity above, because the two stations are
+// authorized differently: SS keeps the "Option B" shape (crewSessionId/Token
+// empty -- its tenant token alone authorizes the soundboard), while these 3
+// roles act on the role_session_token minted for them. accessToken is the
 // device's Supabase Auth access token (Poin 3: a real crew account session,
 // previously a per-device carrier), persisted here so
-// table-occupancy.server.ts's authenticated-only RPCs (Task 9+) can reuse
-// it without a fresh sign-in call on every page load.
+// table-occupancy.server.ts's authenticated-only RPCs can reuse it without a
+// fresh sign-in call on every page load.
 export type RoleSessionIdentity = {
   restaurantId: string;
   restaurantDisplayName: string;
@@ -122,32 +124,6 @@ export function removeCrewSessionIdentity(storage: StorageLike | null) {
   }
 }
 
-export function createSessionStorageAdapter(storage: StorageLike | null): StorageLike {
-  return {
-    getItem: (key) => {
-      try {
-        return storage?.getItem(key) ?? null;
-      } catch {
-        return null;
-      }
-    },
-    setItem: (key, value) => {
-      try {
-        storage?.setItem(key, value);
-      } catch {
-        return;
-      }
-    },
-    removeItem: (key) => {
-      try {
-        storage?.removeItem(key);
-      } catch {
-        return;
-      }
-    },
-  };
-}
-
 export function readRoleSessionIdentity(storage: StorageLike | null): RoleSessionIdentity | null {
   if (!storage) return null;
   try {
@@ -227,7 +203,12 @@ export function removeRoleSessionIdentity(storage: StorageLike | null) {
 }
 
 export function browserSessionStorage(): StorageLike | null {
-  // sessionStorage survives reloads but is readable by XSS; token expiry limits exposure.
+  // Only the WORK identities (tenant/role/session tokens) live in sessionStorage:
+  // short-lived, gone on tab close. The Supabase Auth session itself -- refresh
+  // token included -- is deliberately NOT here: browser-auth.ts lets supabase-js
+  // persist it to localStorage so a crew shift survives reloads (Poin 3 §3.3).
+  // That is XSS-readable and outlives the tab, the accepted cost of "one login =
+  // one device"; the crew-side escape is CrewLoginFlow's "Keluar akun".
   if (typeof window === "undefined") return null;
   try {
     return window.sessionStorage;

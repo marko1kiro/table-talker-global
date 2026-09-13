@@ -7,10 +7,10 @@
 // anon-authed client + the manager bearer token as p_manager_token (the RPC
 // hashes and validates it; INVALID_SESSION on failure).
 //
-// node:crypto and the envelope codec are imported dynamically (see
-// role-session.server.ts's verifyRoleSessionToken comment): UI routes import
-// these createServerFn exports and a static node:crypto import would get
-// pulled into the client bundle by Vite.
+// node:crypto and the envelope codec are imported dynamically, never at the
+// top: UI routes (CrewLoginFlow.tsx) import these createServerFn exports, and a
+// static node:crypto import on the module graph gets pulled into the client
+// bundle by Vite (guarded by tests/restaurant-login-build.test.ts).
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { CREW_ROLES, type CrewRole } from "./role-session-domain";

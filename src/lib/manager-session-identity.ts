@@ -1,6 +1,12 @@
 // Manager analogue of crew-session-identity.ts. Persists the manager bearer
-// token + the device's anon Supabase access token (needed for realtime) in
-// sessionStorage. Token expiry limits XSS exposure (same rationale as crew).
+// token + the device's Supabase Auth access token (needed for realtime) in
+// sessionStorage. Post-Poin-3 that access token is the rotating shadow-carrier
+// JWT from staff-carrier.server.ts, never an anonymous one. Same caveat as crew:
+// the work tokens die with the tab, while the carrier's GoTrue session is
+// persisted to localStorage by browser-auth.ts -- it is XSS-readable and
+// outlives the tab, bounded by logout revoking the bearer (fail-closed
+// revoke_manager_session_by_token) and by the next staff login rotating the
+// carrier password, which kills every older carrier session in GoTrue.
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export const MANAGER_SESSION_IDENTITY_KEY = "table-talker.manager-identity";
