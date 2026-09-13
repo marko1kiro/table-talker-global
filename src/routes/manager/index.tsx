@@ -43,6 +43,8 @@ import type { InstructionThread } from "@/lib/instruction-domain";
 import { TABLE_COUNT } from "@/lib/audio";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { ChangePasswordDialog } from "@/components/dashboard/ChangePasswordDialog";
+import { CrewPairingCard } from "@/components/manager/CrewPairingCard";
+import { CrewAccountsCard } from "@/components/manager/CrewAccountsCard";
 import { changeManagerPassword, logoutManagerSession } from "@/lib/manager-auth.server";
 import { logout as logoutServer } from "@/lib/auth";
 
@@ -656,6 +658,12 @@ function ManagerDashboard() {
                 );
               })()}
           </TaCard>
+
+          {/* Poin 3 Task 10: crew pairing approvals + account management live on
+              the crew tab, below the active-crew history. Both self-poll (10s,
+              only while the dashboard is visible) and take the manager identity. */}
+          <CrewPairingCard identity={identity} />
+          <CrewAccountsCard identity={identity} />
         </>
       )}
 
