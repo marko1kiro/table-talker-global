@@ -55,11 +55,14 @@ export const PAIRING_WINDOW_MS = 15 * 60 * 1000; // mirrors crew_pairing_request
 
 const OTP_EMAIL_BAD = "Kode tidak sesuai atau kedaluwarsa. Minta kode baru.";
 const PROVIDER_DOWN = "Sistem login sedang dimatikan. Hubungi Manager.";
+// GoTrue 429 (over_email_send_rate_limit): the user just knocked too often.
+// The 13 Sep 2026 incident proved this must NOT wear the PROVIDER_DOWN suit.
+const OTP_RATE_LIMITED = "Terlalu sering meminta kode. Tunggu 1 menit, lalu coba lagi.";
 // Session-loss copy, unified: any place a live carrier JWT / device token
 // disappears AFTER the email was already verified, or the server reports the
 // session is gone, lands on this one string. PROVIDER_DOWN stays reserved for
-// the pre-verification email-send failure (the only path where "login is off"
-// is the honest diagnosis).
+// a pre-verification email-send failure that is not a plain rate-limit (the
+// only path where "login is off" is the honest diagnosis).
 const SESSION_LOST = "Sesi login berakhir. Kirim kode lagi.";
 const KICKED = "Akun ini dipakai login di perangkat lain.";
 const DISABLED = "Akun kamu sudah dinonaktifkan. Hubungi Manager.";
@@ -250,7 +253,7 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
     const result = await crewSignInWithOtp(email.trim());
     setBusy(false);
     if (!result.ok) {
-      setError(PROVIDER_DOWN);
+      setError(result.code === "RATE_LIMITED" ? OTP_RATE_LIMITED : PROVIDER_DOWN);
       return;
     }
     setOtp("");

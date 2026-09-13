@@ -240,6 +240,14 @@ describe("email + otp screens", () => {
     expect(await screen.findByText("Sistem login sedang dimatikan. Hubungi Manager.")).toBeTruthy();
   });
 
+  it("GoTrue 429 rate-limit on send gets the slow-down copy, not the disabled message", async () => {
+    crewSignInWithOtp.mockResolvedValue({ ok: false, code: "RATE_LIMITED" });
+    renderFlow();
+    await submitField("Email", EMAIL, /kirim kode/i);
+    expect(await screen.findByText(/terlalu sering meminta kode/i)).toBeTruthy();
+    expect(screen.queryByText("Sistem login sedang dimatikan. Hubungi Manager.")).toBeNull();
+  });
+
   it("verify keeps busy pinned through routeSession; a second submit cannot re-enter", async () => {
     renderFlow();
     await submitField("Email", EMAIL, /kirim kode/i);

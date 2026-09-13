@@ -150,6 +150,27 @@ describe("crew OTP wrappers", () => {
     });
   });
 
+  it("GoTrue email-throttle errors map to RATE_LIMITED, never plain UNAVAILABLE", async () => {
+    auth.signInWithOtp.mockResolvedValue({
+      data: null,
+      error: { status: 429, code: "over_email_send_rate_limit", message: "Too Many Requests" },
+    });
+    expect(await crewSignInWithOtp("crew@example.com")).toEqual({
+      ok: false,
+      code: "RATE_LIMITED",
+    });
+    auth.signInWithOtp.mockRejectedValue(new Error("Too Many Requests, please try again later"));
+    expect(await crewSignInWithOtp("crew@example.com")).toEqual({
+      ok: false,
+      code: "RATE_LIMITED",
+    });
+    auth.signInWithOtp.mockResolvedValue({
+      data: null,
+      error: { status: 500, message: "smtp down" },
+    });
+    expect(await crewSignInWithOtp("crew@example.com")).toEqual({ ok: false, code: "UNAVAILABLE" });
+  });
+
   it("crewSignOut and crewGetSession stay thin and non-throwing", async () => {
     auth.signOut.mockResolvedValue({ error: null });
     expect(await crewSignOut()).toEqual({ ok: true });

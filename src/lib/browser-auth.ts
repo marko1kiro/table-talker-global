@@ -36,14 +36,30 @@ export function getDeviceToken(): string | null {
   }
 }
 
-export type BrowserAuthResult = { ok: true } | { ok: false; code: "UNAVAILABLE" };
+export type BrowserAuthResult = { ok: true } | { ok: false; code: "UNAVAILABLE" | "RATE_LIMITED" };
+
+// GoTrue's email throttle answers HTTP 429 with `over_email_send_rate_limit`
+// (AuthApiError carries `status` + code/message). The UI must not label a
+// "slow down" the same way as a dead provider — the 2/menit misconfig incident
+// of 13 Sep 2026 proved users read PROVIDER_DOWN as a system outage.
+function classifyAuthFailure(error: unknown): "UNAVAILABLE" | "RATE_LIMITED" {
+  const e = error as { status?: number; code?: string; message?: string } | null;
+  if (
+    e?.status === 429 ||
+    (typeof e?.code === "string" && e.code.includes("rate_limit")) ||
+    /too many requests|rate limit/i.test(typeof e?.message === "string" ? e.message : "")
+  ) {
+    return "RATE_LIMITED";
+  }
+  return "UNAVAILABLE";
+}
 
 async function attempt(run: () => Promise<{ error: unknown }>): Promise<BrowserAuthResult> {
   try {
     const { error } = await run();
-    return error ? { ok: false, code: "UNAVAILABLE" } : { ok: true };
-  } catch {
-    return { ok: false, code: "UNAVAILABLE" };
+    return error ? { ok: false, code: classifyAuthFailure(error) } : { ok: true };
+  } catch (err) {
+    return { ok: false, code: classifyAuthFailure(err) };
   }
 }
 
