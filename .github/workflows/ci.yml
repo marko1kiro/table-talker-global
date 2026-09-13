@@ -38,5 +38,8 @@ jobs:
       - name: Clean install from lockfile
         run: npm ci
 
+      - name: Edge function typecheck (owner-retention)
+        run: npm run check:edge
+
       - name: Full quality gate (test + typecheck + lint + build)
         run: npm run verify
