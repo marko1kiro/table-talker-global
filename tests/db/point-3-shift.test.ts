@@ -7,14 +7,22 @@
 // rather than driving a downstream PIN-gated RPC.
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { Client } from "pg";
-import { createTestDb, rawHexToken, rpcNamed, sha256Hex, stopAll, type TestDb } from "./harness";
+import { createTestDb, rpcNamed, sha256Hex, stopAll, type TestDb } from "./harness";
+import {
+  MANAGER_ID,
+  R1,
+  R2,
+  R3,
+  asUid as setClaims,
+  confirmPairing as hConfirmPairing,
+  freshUid,
+  crewUser as hCrewUser,
+  requestPairing as hRequestPairing,
+  seedManager,
+  seedManagerSession,
+  seedRestaurant,
+} from "./point-3-helpers";
 
-const R1 = "11111111-1111-4111-8111-111111111111";
-const R2 = "22222222-2222-4222-8222-222222222222";
-const R3 = "33333333-3333-4333-8333-333333333333";
-const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
-const OTP_HASH = "f".repeat(64);
-const ENVELOPE = "4c494d4551523031" + "ab".repeat(21);
 const DEVICE_A = "device-A-" + "a".repeat(24);
 const DEVICE_B = "device-B-" + "b".repeat(24);
 
@@ -30,42 +38,13 @@ type ClaimResult = {
 let db: TestDb;
 let c: Client;
 let managerToken: string;
-let uidCounter = 0;
 
-function freshUid(): string {
-  uidCounter += 1;
-  const h = uidCounter.toString(16).padStart(8, "0");
-  return `${h}-${h.slice(0, 4)}-4${h.slice(0, 3)}-8${h.slice(0, 3)}-${h}${h.slice(0, 4)}`;
-}
-
-async function asUid(uid: string | null): Promise<void> {
-  const claims = uid
-    ? JSON.stringify({ sub: uid, role: "authenticated" })
-    : JSON.stringify({ role: "anon" });
-  await c.query(`select set_config('request.jwt.claims', $1, false)`, [claims]);
-}
-
-async function crewUser(uid: string, email: string): Promise<void> {
-  await c.query(`insert into auth.users (id, email) values ($1, $2)`, [uid, email]);
-}
-
-async function requestPairing(uid: string, restaurantId: string, name = "Crew Satu") {
-  await asUid(uid);
-  return rpcNamed<{ ok?: boolean; request_id?: string }>(c, "crew_request_pairing", {
-    p_restaurant_id: restaurantId,
-    p_full_name: name,
-    p_otp_hash: OTP_HASH,
-    p_otp_encrypted: ENVELOPE,
-  });
-}
-
-async function confirmPairing(uid: string, requestId: string) {
-  await asUid(uid);
-  return rpcNamed<{ ok?: boolean; error?: string }>(c, "crew_confirm_pairing", {
-    p_request_id: requestId,
-    p_otp_hash: OTP_HASH,
-  });
-}
+// Thin call-throughs binding the shared helpers to this suite's client.
+const asUid = (uid: string | null) => setClaims(c, uid);
+const crewUser = (uid: string, email: string) => hCrewUser(c, uid, email);
+const requestPairing = (uid: string, restaurantId: string, name = "Crew Satu") =>
+  hRequestPairing(c, uid, restaurantId, name);
+const confirmPairing = (uid: string, requestId: string) => hConfirmPairing(c, uid, requestId);
 
 // Pair + confirm a fresh crew account and return its uid (aktif, resto R1).
 async function pairedCrew(email: string, name = "Crew One", restaurantId = R1): Promise<string> {
@@ -121,26 +100,11 @@ function liveTokenCount(uid: string) {
 beforeAll(async () => {
   db = await createTestDb("lime_p3_shift");
   c = await db.client();
-  const seed = (id: string, code: string, name: string, active: boolean) =>
-    c.query(
-      `insert into public.restaurants (id, code, display_name, pin_hash, credential_rotated_at, is_active)
-       values ($1, $2, $3, encode(extensions.digest('pin-' || $2, 'sha256'), 'hex'), now(), $4)`,
-      [id, code, name, active],
-    );
-  await seed(R1, "RESTO-1", "Resto Satu", true);
-  await seed(R2, "RESTO-2", "Resto Dua", true);
-  await seed(R3, "RESTO-OFF", "Resto Off", false);
-  await c.query(
-    `insert into public.manager_accounts (id, id_manager, full_name, restaurant_id, password_hash, status)
-     values ($1, 'p3s.manager', 'P3S Manager', $2, 'oldsalt:oldhash', 'aktif')`,
-    [MANAGER_ID, R1],
-  );
-  managerToken = rawHexToken();
-  await c.query(
-    `insert into public.manager_sessions (manager_id, restaurant_id, token_hash, expires_at)
-     values ($1, $2, $3, now() + interval '12 hours')`,
-    [MANAGER_ID, R1, sha256Hex(managerToken)],
-  );
+  await seedRestaurant(c, R1, "RESTO-1", "Resto Satu");
+  await seedRestaurant(c, R2, "RESTO-2", "Resto Dua");
+  await seedRestaurant(c, R3, "RESTO-OFF", "Resto Off", false);
+  await seedManager(c, MANAGER_ID, R1, "p3s.manager", "P3S Manager");
+  managerToken = await seedManagerSession(c, MANAGER_ID, R1);
 }, 600_000);
 
 afterAll(async () => {
@@ -148,8 +112,10 @@ afterAll(async () => {
   await stopAll();
 });
 
+// JWT claims are SESSION-scoped, so every test starts from a clean anon slate
+// (asUid(null)) and opts in via asUid(uid).
 beforeEach(async () => {
-  await c.query(`select set_config('request.jwt.claims', $1, false)`, ['{"role":"anon"}']);
+  await asUid(null);
 });
 
 describe("crew_shift_claim", () => {
@@ -216,7 +182,6 @@ describe("crew_shift_claim", () => {
     // same device -> no deletion, both A-issued tokens still alive
     expect((await tokenRowFor(a1.session_token!)).rowCount).toBe(1);
     expect((await tokenRowFor(a2.session_token!)).rowCount).toBe(1);
-    expect(await liveTokenCount(uid)).toBeTruthy();
     expect((await liveTokenCount(uid)).rows[0].n).toBe(2);
 
     const b = (await claim(uid, "ss", DEVICE_B)).data!;
@@ -239,8 +204,7 @@ describe("crew_me", () => {
     expect(before.data).toMatchObject({ paired: true, status: "aktif", full_name: "Shift Me" });
     expect(before.data!.device_current).toBe(false); // hash is null, not equal
 
-    const claimed = (await claim(uid, "ss", DEVICE_A)).data!;
-    void claimed;
+    await claim(uid, "ss", DEVICE_A);
     await asUid(uid);
     const afterA = await rpcNamed<Record<string, unknown>>(c, "crew_me", {
       p_device_token: DEVICE_A,
@@ -272,6 +236,7 @@ describe("get_crew_accounts", () => {
     await claim(uidA, "kasir", DEVICE_A); // 1 live token
     await claim(uidA, "ss", DEVICE_A); // 2 live tokens (same device, no kick)
     const uidOff = await pairedCrew("shift-list-off@example.com", "List Off", R2); // other resto
+    const uidIdle = await pairedCrew("shift-list-idle@example.com", "List Idle"); // paired, never claimed
     const r = await rpcNamed<Record<string, unknown>[]>(c, "get_crew_accounts", {
       p_manager_token: managerToken,
     });
@@ -282,6 +247,9 @@ describe("get_crew_accounts", () => {
     const a = r.data!.find((row) => row.auth_uid === uidA)!;
     expect(a).toMatchObject({ full_name: "List A", status: "aktif", has_active_device: true });
     expect(a.active_sessions).toBe(2);
+    const idle = r.data!.find((row) => row.auth_uid === uidIdle)!;
+    expect(idle).toMatchObject({ full_name: "List Idle", has_active_device: false });
+    expect(idle.active_sessions).toBe(0);
     const off = r.data!.find((row) => row.auth_uid === uidOff);
     expect(off).toBeUndefined();
 
@@ -294,8 +262,7 @@ describe("get_crew_accounts", () => {
 describe("reset_crew_account / end_active_crew_sessions", () => {
   test("reset disables account, wipes device + tokens, audits, allows re-pair", async () => {
     const uid = await pairedCrew("shift-reset@example.com", "Shift Reset");
-    const claimData = (await claim(uid, "ss", DEVICE_A)).data!;
-    void claimData;
+    await claim(uid, "ss", DEVICE_A);
     const r = await rpcNamed<{ ok?: boolean; error?: string }>(c, "reset_crew_account", {
       p_manager_token: managerToken,
       p_auth_uid: uid,

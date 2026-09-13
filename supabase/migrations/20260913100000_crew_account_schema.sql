@@ -47,6 +47,9 @@ alter table public.area_manager_accounts add column auth_user_id uuid;
 
 -- jejak identitas pada sesi kerja (row historis tetap null = alur lama)
 alter table public.crew_role_sessions add column auth_uid uuid;
+-- device-kick/reset lookups filter role_session_tokens via crew_role_sessions
+-- by auth_uid; without this the delete is a seq scan over every session.
+create index crew_role_sessions_auth_uid_idx on public.crew_role_sessions (auth_uid);
 
 -- dead code dari 20260907210000: satu sumber kebenaran provider = config GoTrue
 drop function if exists public.is_anonymous_signup_enabled();

@@ -5,97 +5,55 @@
 // request.jwt.claims exactly like PostgREST sets it.
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { Client } from "pg";
-import { createTestDb, rawHexToken, rpcNamed, sha256Hex, stopAll, type TestDb } from "./harness";
-
-const R1 = "11111111-1111-4111-8111-111111111111";
-const R2 = "22222222-2222-4222-8222-222222222222";
-const R3 = "33333333-3333-4333-8333-333333333333";
-const R4 = "44444444-4444-4444-8444-444444444444";
-const MANAGER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
-const OTP_HASH = "f".repeat(64);
-const WRONG_HASH = "0".repeat(64);
-const ENVELOPE = "4c494d4551523031" + "ab".repeat(21);
+import { createTestDb, rpcNamed, stopAll, type TestDb } from "./harness";
+import {
+  ENVELOPE,
+  MANAGER_ID,
+  OTP_HASH,
+  R1,
+  R2,
+  R3,
+  R4,
+  WRONG_HASH,
+  asUid as setClaims,
+  confirmPairing as hConfirmPairing,
+  crewUser as hCrewUser,
+  freshUid,
+  pairingRow as hPairingRow,
+  requestPairing as hRequestPairing,
+  seedManager,
+  seedManagerSession,
+  seedRestaurant,
+} from "./point-3-helpers";
 
 let db: TestDb;
 let c: Client;
 let managerToken: string;
-let uidCounter = 0;
 
-function freshUid(): string {
-  uidCounter += 1;
-  const h = uidCounter.toString(16).padStart(8, "0");
-  return `${h}-${h.slice(0, 4)}-4${h.slice(0, 3)}-8${h.slice(0, 3)}-${h}${h.slice(0, 4)}`;
-}
-
-async function asUid(uid: string | null): Promise<void> {
-  const claims = uid
-    ? JSON.stringify({ sub: uid, role: "authenticated" })
-    : JSON.stringify({ role: "anon" });
-  await c.query(`select set_config('request.jwt.claims', $1, false)`, [claims]);
-}
-
-async function crewUser(uid: string, email: string): Promise<void> {
-  await c.query(`insert into auth.users (id, email) values ($1, $2)`, [uid, email]);
-}
-
-async function requestPairing(
+// Thin call-throughs binding the shared helpers to this suite's client. The
+// full-arg pairing helpers live in point-3-helpers; these just inject `c`.
+const asUid = (uid: string | null) => setClaims(c, uid);
+const crewUser = (uid: string, email: string) => hCrewUser(c, uid, email);
+const requestPairing = (
   uid: string,
   restaurantId: string,
-  name = "Crew Satu",
-  otpHash = OTP_HASH,
-  envelope = ENVELOPE,
-) {
-  await asUid(uid);
-  return rpcNamed<{ ok?: boolean; request_id?: string }>(c, "crew_request_pairing", {
-    p_restaurant_id: restaurantId,
-    p_full_name: name,
-    p_otp_hash: otpHash,
-    p_otp_encrypted: envelope,
-  });
-}
-
-async function confirmPairing(uid: string, requestId: string, otpHash = OTP_HASH) {
-  await asUid(uid);
-  return rpcNamed<{ ok?: boolean; error?: string }>(c, "crew_confirm_pairing", {
-    p_request_id: requestId,
-    p_otp_hash: otpHash,
-  });
-}
-
-async function pairingRow(id: string) {
-  const r = await c.query(
-    `select status, email, restaurant_id, otp_hash, otp_encrypted, attempts,
-            expires_at, decided_by, decided_at
-       from public.crew_pairing_requests where id = $1`,
-    [id],
-  );
-  return r.rows[0] as Record<string, unknown>;
-}
+  name?: string,
+  otpHash?: string,
+  envelope?: string,
+) => hRequestPairing(c, uid, restaurantId, name, otpHash, envelope);
+const confirmPairing = (uid: string, requestId: string, otpHash?: string) =>
+  hConfirmPairing(c, uid, requestId, otpHash);
+const pairingRow = (id: string) => hPairingRow(c, id);
 
 beforeAll(async () => {
   db = await createTestDb("lime_p3_pairing");
   c = await db.client();
-  const seed = (id: string, code: string, name: string, active: boolean) =>
-    c.query(
-      `insert into public.restaurants (id, code, display_name, pin_hash, credential_rotated_at, is_active)
-       values ($1, $2, $3, encode(extensions.digest('pin-' || $2, 'sha256'), 'hex'), now(), $4)`,
-      [id, code, name, active],
-    );
-  await seed(R1, "RESTO-1", "Resto Satu", true);
-  await seed(R2, "RESTO-2", "Resto Dua", true);
-  await seed(R3, "RESTO-OFF", "Resto Off", false);
-  await seed(R4, "RESTO-4", "Resto Empat", true);
-  await c.query(
-    `insert into public.manager_accounts (id, id_manager, full_name, restaurant_id, password_hash, status)
-     values ($1, 'p3.manager', 'P3 Manager', $2, 'oldsalt:oldhash', 'aktif')`,
-    [MANAGER_ID, R1],
-  );
-  managerToken = rawHexToken();
-  await c.query(
-    `insert into public.manager_sessions (manager_id, restaurant_id, token_hash, expires_at)
-     values ($1, $2, $3, now() + interval '12 hours')`,
-    [MANAGER_ID, R1, sha256Hex(managerToken)],
-  );
+  await seedRestaurant(c, R1, "RESTO-1", "Resto Satu");
+  await seedRestaurant(c, R2, "RESTO-2", "Resto Dua");
+  await seedRestaurant(c, R3, "RESTO-OFF", "Resto Off", false);
+  await seedRestaurant(c, R4, "RESTO-4", "Resto Empat");
+  await seedManager(c, MANAGER_ID, R1, "p3.manager", "P3 Manager");
+  managerToken = await seedManagerSession(c, MANAGER_ID, R1);
 }, 600_000);
 
 afterAll(async () => {
@@ -107,7 +65,7 @@ afterAll(async () => {
 // test would leak into the next if it forgot to re-set them. Every test starts
 // from a clean unauthenticated slate and opts in via asUid().
 beforeEach(async () => {
-  await c.query(`select set_config('request.jwt.claims', $1, false)`, ['{"role":"anon"}']);
+  await asUid(null);
 });
 
 describe("crew_validate_code", () => {

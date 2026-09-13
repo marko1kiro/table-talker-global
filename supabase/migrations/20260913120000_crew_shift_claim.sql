@@ -15,9 +15,10 @@
 -- nothing to persist); manager out-of-scope / unknown target collapses to one
 -- generic {ok:false,error:'NOT_FOUND'} (no existence leak across restaurants).
 -- Device binding is sha256 of an opaque client device token; a device change
--- revokes every role_session_token for this uid's sessions (the account row is
--- locked FOR UPDATE + a per-uid advisory xact lock, the SAME key as the pairing
--- file, serializes device rotation against re-pairing).
+-- revokes every role_session_token for this uid's sessions. An advisory xact
+-- lock + FOR UPDATE on the account row serialize device rotation; the pairing
+-- confirm re-pins the account via the SAME row lock (it does not take the
+-- advisory key), so a concurrent re-pair and re-claim cannot interleave.
 
 -- Step 1: shift claim. auth.uid()-scoped (like claim_role_session): revoked
 -- from public/anon/service_role, granted to authenticated.
@@ -51,8 +52,9 @@ begin
 
   v_device_hash := encode(extensions.digest(p_device_token, 'sha256'), 'hex');
 
-  -- serialize against a concurrent re-pair (same advisory key as the pairing
-  -- RPCs) and lock the account row before reading/kicking the device.
+  -- serialize device rotation against a concurrent re-pair, then lock the
+  -- account row before reading/kicking the device. crew_confirm_pairing re-pins
+  -- via the same row lock (its ON CONFLICT DO UPDATE), not this advisory key.
   perform pg_advisory_xact_lock(hashtext('crew_pairing'), hashtext(v_uid::text));
   select * into v_acc from public.crew_accounts where auth_uid = v_uid for update;
   if not found then raise exception 'NOT_PAIRED'; end if;
@@ -65,7 +67,16 @@ begin
   if not found then raise exception 'ACCOUNT_DISABLED'; end if;
 
   -- device kick: a different device revokes every role_session_token this uid
-  -- ever accumulated, so the old browser stops working immediately.
+  -- ever accumulated, so the old browser's ROLE actions stop immediately. The
+  -- tenant token minted alongside them (restaurant_access_tokens, which has no
+  -- owner/auth_uid column) is NOT revoked here: it survives orphaned until its
+  -- natural <=1h expiry, during which the old device keeps read-only audio /
+  -- event-ingest access. Acceptable for a 1h window; if a device must be locked
+  -- out of tenant access instantly, record a per-device owner on the tenant row
+  -- or add a token registry keyed by auth_uid.
+  -- ponytail: ceiling = tenant-token revocation lags the role-token kick by up
+  --   to 1h; upgrade path = owner column on restaurant_access_tokens (or a
+  --   auth_uid->token registry) so this delete also purges the tenant rows.
   if v_acc.active_device_hash is not null and v_acc.active_device_hash <> v_device_hash then
     delete from public.role_session_tokens
     where role_session_id in (
