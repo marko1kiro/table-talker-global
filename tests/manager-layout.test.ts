@@ -12,6 +12,22 @@ describe("ManagerLayout (TailAdmin)", () => {
     expect(text).toContain("LIHAT CREW AKTIF");
     expect(text).toContain("LOG AKTIVITAS CREW");
   });
+  it("revisi 13 Sep: OTP CREW menu sits directly under the table-status menu", () => {
+    const text = source();
+    const tables = text.indexOf("LIHAT STATUS MEJA LIVE");
+    const otp = text.indexOf("OTP CREW");
+    const crew = text.indexOf("LIHAT CREW AKTIF");
+    expect(otp).toBeGreaterThan(tables);
+    expect(otp).toBeLessThan(crew);
+    expect(text).toContain('"tables" | "otp"');
+  });
+  it("revisi 13 Sep: mobile header swaps the DASHBOARD wordmark for the app logo", () => {
+    const brand = source().match(/function Brand\(\)[\s\S]*?\n}/)?.[0] ?? "";
+    expect(brand).toContain("/lime-logo.webp");
+    expect(brand).toContain("md:hidden");
+    expect(brand).toContain("md:inline");
+    expect(brand).toContain("DASHBOARD");
+  });
   it("keeps the RGB neon DASHBOARD brand", () => {
     const text = source();
     expect(text).toContain("DASHBOARD");

@@ -466,6 +466,17 @@ function ManagerDashboard() {
         </>
       )}
 
+      {/* Poin 3 Task 10 → revisi UI 13 Sep: pairing approvals + account management
+          get their own "OTP CREW" menu, right under the table status. Both
+          self-poll (10s, only while the dashboard is visible) and take the
+          manager identity. */}
+      {menu === "otp" && (
+        <>
+          <CrewPairingCard identity={identity} />
+          <CrewAccountsCard identity={identity} />
+        </>
+      )}
+
       {menu === "crew" && (
         <>
           <TaCard>
@@ -661,12 +672,6 @@ function ManagerDashboard() {
                 );
               })()}
           </TaCard>
-
-          {/* Poin 3 Task 10: crew pairing approvals + account management live on
-              the crew tab, below the active-crew history. Both self-poll (10s,
-              only while the dashboard is visible) and take the manager identity. */}
-          <CrewPairingCard identity={identity} />
-          <CrewAccountsCard identity={identity} />
         </>
       )}
 
