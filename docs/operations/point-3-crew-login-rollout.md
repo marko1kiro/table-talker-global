@@ -6,16 +6,16 @@
 **Model perubahan:** HARD CUTOVER — semua perangkat crew login ulang sekali setelah deploy.
 
 ## 0. Prasyarat (cek dulu, jangan skip)
-- [ ] `npm run verify` hijau di branch ini (Task 12).
-- [ ] Env Production Vercel sudah berisi: `QR_EXPORT_ENCRYPTION_KEY` (dipakai envelope OTP pairing — sudah ada sejak fitur QR export), `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Tanpa `QR_EXPORT_ENCRYPTION_KEY`, `crewPairingList` selalu UNAVAILABLE (fail-closed).
-- [ ] Domain `lihatmeja.com` verified di Resend (sudah, dipakai Poin 2).
-- [ ] Backup DB playbook Poin 2 siap dipakai (pg_dump via Session Pooler + enkripsi; lihat `docs/operations/evidence/production-point-2-upgrade-2026-09-12.md` bagian prosedur).
+- [x] `npm run verify` hijau di branch ini (Task 12).
+- [x] Env Production Vercel sudah berisi: `QR_EXPORT_ENCRYPTION_KEY` (dipakai envelope OTP pairing — sudah ada sejak fitur QR export), `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Tanpa `QR_EXPORT_ENCRYPTION_KEY`, `crewPairingList` selalu UNAVAILABLE (fail-closed).
+- [x] Domain `lihatmeja.com` verified di Resend (sudah, dipakai Poin 2).
+- [x] Backup DB playbook Poin 2 siap dipakai (pg_dump via Session Pooler + enkripsi; lihat `docs/operations/evidence/production-point-2-upgrade-2026-09-12.md` bagian prosedur).
 
 ## 1. Konfigurasi Supabase Auth (Dashboard → Authentication)
 Provider & policies:
-- [ ] **Sign In / Up → Providers → Email: ON.** "Confirm email": **ON**. (OTP email = mekanisme konfirmasi.)
-- [ ] **Anonymous sign-ins: OFF** (kondisi sekarang sudah OFF — JANGAN dinyalakan; CI test `point-3-anon-guard` gagal kalau muncul pemakaian di kode).
-- [ ] Phone / OAuth lain: **OFF**.
+- [x] **Sign In / Up → Providers → Email: ON.** "Confirm email": **ON**. (OTP email = mekanisme konfirmasi.)
+- [x] **Anonymous sign-ins: OFF** (kondisi sekarang sudah OFF — JANGAN dinyalakan; CI test `point-3-anon-guard` gagal kalau muncul pemakaian di kode).
+- [x] Phone / OAuth lain: **OFF**.
 - - [x] Enable signups ON (`disable_signup=false`). `/signup` password tak pernah dipanggil app.
 - - [x] SMTP PATCHED via Management API: smtp.resend.com:465, user `resend`, sender noreply@lihatmeja.com, name LIME. [x] TES KIRIM EMAIL PASS 13 Sep via POST /auth/v1/otp -> support@lihatmeja.com: masuk, subject + 6 digit ID tanpa link.
 - - [x] OTP 6 digit, exp 3600s. Rate limit bawaan: email 2/menit, verify 30 — catatan rollout: gelombang registrasi 67 crew ≈ 35 mnt kalau serentak; naikkan bila perlu. Site URL https://lihatmeja.com.
@@ -28,16 +28,16 @@ File baru di `supabase/migrations/`:
 4. `20260913130000_crew_legacy_cutover.sql`  ← **DESTRUCTIVE**: `delete from public.role_session_tokens;` (matikan semua sesi crew aktif) + drop `claim_role_session`.
 
 Prosedur = playbook Poin 2:
-- [ ] Backup penuh (pg_dump) + verifikasi restore-check lokal (DB `restore_check` port 5499).
-- [ ] Simpan SHA-256 backup.
-- [ ] Apply per file `psql --single-transaction` via Session Pooler (`aws-0-ap-southeast-1.pooler.supabase.com:5432`, user `postgres.kjzxtmxdbcanvkgqqdow`, netrc `.pgpass`).
-- [ ] Per file sukses: `supabase migration repair --status applied <versi>` (CLI supabase@2.117.0, `--workdir repo`).
-- [ ] Preflight: `select count(*) from role_session_tokens;` (catat), `select count(*) from crew_accounts;` (harus 0), `select count(*) from auth.users;` (catat baseline).
-- [ ] Postflight: keempat obyek ada; `select count(*) from role_session_tokens` = 0; `claim_role_session` hilang dari `pg_proc`.
+- [x] Backup penuh (pg_dump) + verifikasi restore-check lokal (DB `restore_check` port 5499).
+- [x] Simpan SHA-256 backup.
+- [x] Apply per file `psql --single-transaction` via Session Pooler (`aws-0-ap-southeast-1.pooler.supabase.com:5432`, user `postgres.kjzxtmxdbcanvkgqqdow`, netrc `.pgpass`).
+- [x] Per file sukses: `supabase migration repair --status applied <versi>` (CLI supabase@2.117.0, `--workdir repo`).
+- [x] Preflight: `select count(*) from role_session_tokens;` (catat), `select count(*) from crew_accounts;` (harus 0), `select count(*) from auth.users;` (catat baseline).
+- [x] Postflight: keempat obyek ada; `select count(*) from role_session_tokens` = 0; `claim_role_session` hilang dari `pg_proc`.
 
 ## 3. Deploy
-- [ ] Merge PR → Vercel production build (alias `https://qris-order.lihatmeja.com`, sama-sama menunjuk deployment ini sebagai `https://lihatmeja.com`).
-- [ ] Sentinel cutover client (`table-talker.poin3-cutover` di localStorage, konstanta `POIN3_CUTOVER_KEY`) otomatis membersihkan identitas sessionStorage lawas sekali per tab — tidak ada langkah server.
+- [x] Merge PR → Vercel production build (alias `https://qris-order.lihatmeja.com`, sama-sama menunjuk deployment ini sebagai `https://lihatmeja.com`).
+- [x] Sentinel cutover client (`table-talker.poin3-cutover` di localStorage, konstanta `POIN3_CUTOVER_KEY`) otomatis membersihkan identitas sessionStorage lawas sekali per tab — tidak ada langkah server.
 
 ## 4. Smoke test lapangan (urutan)
 1. **Perangkat crew baru (browser bersih):** buka `https://qris-order.lihatmeja.com/` — seluruh halaman pre-login MEMANG alur crew (tidak ada tombol CREW); tautan **"Login Manager"** ada di pojok kanan atas. → email → terima OTP 6 digit via email (≤60 detik) → verify → layar Nama + Kode Resto → kode benar → ceklis hijau + nama resto → LANJUTKAN → layar tunggu.
@@ -55,6 +55,6 @@ Prosedur = playbook Poin 2:
 3. Provider Anonymous TETAP OFF: alur crew lama akan GAGAL di perangkat baru (bug lama) — rollback = mengembalikan kondisi rusak-sementara, bukan solusi; gunakan hanya bila app baru corrupt-total.
 
 ## 6. Pasca-rollout (evidence)
-- [ ] Tulis `docs/operations/evidence/production-point-3-crew-login-<tanggal>.md`: hasil smoke, timestamp apply per migration, pre/post counts (role_session_tokens, auth.users), nilai rate limit, SHA backup.
-- [ ] Update `MASTER-ROADMAP.md`: Poin 3 status; Poin 5 menyusut (lihat §10 spec).
-- [ ] Cek Supabase advisories (`supabase_get_advisors`) setelah schema baru.
+- [x] Tulis `docs/operations/evidence/production-point-3-crew-login-<tanggal>.md`: hasil smoke, timestamp apply per migration, pre/post counts (role_session_tokens, auth.users), nilai rate limit, SHA backup.
+- [x] Update `MASTER-ROADMAP.md`: Poin 3 status; Poin 5 menyusut (lihat §10 spec).
+- [x] Cek Supabase advisories (`supabase_get_advisors`) setelah schema baru.
