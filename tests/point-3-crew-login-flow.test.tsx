@@ -402,4 +402,41 @@ describe("claim failure mapping", () => {
     fireEvent.click(screen.getByRole("button", { name: /^masuk$/i }));
     expect(await screen.findByText(/dinonaktifkan/i)).toBeTruthy();
   });
+
+  it("network-failed claim gets exactly one silent retry and then succeeds (§7)", async () => {
+    crewMe.mockResolvedValue(pairedMe());
+    crewClaimShift
+      .mockResolvedValueOnce({
+        ok: false,
+        code: "UNAVAILABLE",
+        message: "Gagal memulai sesi kerja.",
+      })
+      .mockResolvedValueOnce(okClaim);
+    const { onRoleContinue } = renderFlow();
+    await screen.findByRole("button", { name: /^masuk$/i });
+    fireEvent.click(screen.getByRole("button", { name: /kasir/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^masuk$/i }));
+    await waitFor(() => expect(onRoleContinue).toHaveBeenCalled());
+    expect(crewClaimShift).toHaveBeenCalledTimes(2);
+    // Same payload both times: the shift clock must not drift on retry.
+    expect(crewClaimShift.mock.calls[0]).toEqual(crewClaimShift.mock.calls[1]);
+  });
+
+  it("persistent UNAVAILABLE stops after the single retry with the generic inline error", async () => {
+    crewMe.mockResolvedValue(pairedMe());
+    crewClaimShift.mockResolvedValue({
+      ok: false,
+      code: "UNAVAILABLE",
+      message: "Gagal memulai sesi kerja.",
+    });
+    renderFlow();
+    await screen.findByRole("button", { name: /^masuk$/i });
+    fireEvent.click(screen.getByRole("button", { name: /kasir/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^masuk$/i }));
+    expect(await screen.findByText("Gagal memulai sesi kerja.")).toBeTruthy();
+    expect(crewClaimShift).toHaveBeenCalledTimes(2);
+    // Stayed on checkin (no navigation): the role grid + MASUK are still there.
+    expect(screen.getByRole("button", { name: /^masuk$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /satgas/i })).toBeTruthy();
+  });
 });

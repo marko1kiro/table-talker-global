@@ -334,9 +334,19 @@ export function CrewLoginFlow({ onSsContinue, onRoleContinue }: CrewLoginFlowPro
       setError("Sesi login berakhir. Kirim kode lagi.");
       return;
     }
-    const result = await crewClaimShift({
+    const payload = {
       data: { accessToken, role, checkedInAt: new Date().toISOString(), deviceToken },
-    });
+    };
+    let result = await crewClaimShift(payload);
+    // §7: a network/transport failure surfaces as UNAVAILABLE (the core
+    // maps thrown RPC errors to it) and gets exactly ONE silent retry; a
+    // persistent failure then shows the generic message inline, keeping the
+    // crew on the checkin screen. Deterministic-checkedInAt: the retry
+    // reuses the SAME payload, so the shift start never drifts between
+    // attempts.
+    if (!result.ok && result.code === "UNAVAILABLE") {
+      result = await crewClaimShift(payload);
+    }
     setBusy(false);
     if (!result.ok) {
       if (result.code === "ACCOUNT_DISABLED") {
