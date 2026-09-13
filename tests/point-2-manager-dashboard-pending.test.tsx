@@ -20,10 +20,9 @@ vi.mock("@tanstack/react-router", () => ({
     },
   Link: () => null,
 }));
-vi.mock("@/lib/supabase-browser", () => ({
+vi.mock("@/lib/browser-auth", () => ({
   getSupabaseBrowserClient: () => ({}),
-  getLiveAccessToken: async () => "anon-tok",
-  ensureAnonAccessToken: async () => "anon-tok",
+  refreshCarrierToken: async () => "carrier-tok",
 }));
 // Realtime + notification wiring is not the subject of this mount test; stub
 // the two hooks so mounting the dashboard exercises only the identity effect.

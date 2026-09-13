@@ -13,7 +13,7 @@ import {
   Volume2,
   Wifi,
 } from "lucide-react";
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { getSupabaseBrowserClient } from "@/lib/browser-auth";
 import { getOwnerDashboardSnapshot } from "@/lib/owner-dashboard.server";
 import { mergeDashboardHealth, type HealthStatus } from "@/lib/owner-dashboard-domain";
 import {

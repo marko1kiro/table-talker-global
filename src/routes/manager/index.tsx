@@ -32,7 +32,7 @@ import {
   wibDateKey,
   type CrewScope,
 } from "@/lib/crew-history-scope";
-import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { getSupabaseBrowserClient, refreshCarrierToken } from "@/lib/browser-auth";
 import {
   sendManagerInstruction,
   getInstructionThread,
@@ -125,7 +125,7 @@ function ManagerDashboard() {
       getManagerSnapshot({
         data: {
           managerToken: identity!.managerToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
         },
       }),
     enabled: Boolean(identity),
@@ -137,7 +137,7 @@ function ManagerDashboard() {
       getManagerCrewHistory({
         data: {
           managerToken: identity!.managerToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
           ...scopeToParams(crewScope),
         },
       }),
@@ -151,7 +151,7 @@ function ManagerDashboard() {
       getManagerDailyStats({
         data: {
           managerToken: identity!.managerToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
           date: scopeToParams(statsScope).date ?? wibDateKey(),
         },
       }),
@@ -165,7 +165,7 @@ function ManagerDashboard() {
       getManagerCrewHistory({
         data: {
           managerToken: identity!.managerToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
           ...scopeToParams(statsScope),
         },
       }),
@@ -179,7 +179,7 @@ function ManagerDashboard() {
       getInstructionThread({
         data: {
           managerToken: identity!.managerToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
         },
       }),
     enabled: Boolean(identity) && menu === "messages",
@@ -192,7 +192,7 @@ function ManagerDashboard() {
       getActiveCrewForMessaging({
         data: {
           managerToken: identity!.managerToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
         },
       }),
     enabled: Boolean(identity) && menu === "messages",
@@ -203,7 +203,7 @@ function ManagerDashboard() {
       sendManagerInstruction({
         data: {
           managerToken: identity!.managerToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
           targetType: msgTarget === "all" ? "all" : "individual",
           targetRoleSessionId: msgTarget === "all" ? null : msgTarget,
           message: msgText,
@@ -216,7 +216,7 @@ function ManagerDashboard() {
         void queryClient.invalidateQueries({ queryKey: ["instruction-thread", restaurantId] });
         const client = getSupabaseBrowserClient();
         if (client && restaurantId && identity) {
-          const token = await getLiveAccessToken(client, identity.accessToken);
+          const token = (await refreshCarrierToken()) ?? identity.accessToken;
           if (token) client.realtime.setAuth(token);
           const ch = client.channel(`table-occupancy:${restaurantId}`, {
             config: { private: true },

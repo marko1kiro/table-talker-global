@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Megaphone, Loader2 } from "lucide-react";
 import { ackInstruction } from "@/lib/crew-instructions.server";
-import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { refreshCarrierToken } from "@/lib/browser-auth";
 import { REPLY_MAX_LENGTH } from "@/lib/instruction-domain";
 import type { PendingInstruction } from "@/lib/instruction-domain";
 import { formatWibClock } from "@/lib/manager-crew-groups";
@@ -54,8 +54,7 @@ function BannerCard({
 
   const ack = useMutation({
     mutationFn: async (reply: string | null) => {
-      const client = getSupabaseBrowserClient();
-      const token = await getLiveAccessToken(client, accessToken);
+      const token = (await refreshCarrierToken()) ?? accessToken;
       return ackInstruction({
         data: {
           roleSessionToken,

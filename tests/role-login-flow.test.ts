@@ -98,14 +98,10 @@ describe("RoleLoginFlow: step 5 - claim session and hand off to caller", () => {
     expect(text).toMatch(/checkedInAt:\s*iso/);
   });
 
-  it("obtains a per-device anonymous-auth access token before calling claimRoleSession", () => {
+  it("obtains a live browser-carrier access token before calling claimRoleSession (Poin 3: no anonymous sign-in)", () => {
     const text = source();
-    expect(text).toMatch(
-      /import\s*\{\s*\n?\s*ensureAnonAccessToken,\s*\n?\s*getSupabaseBrowserClient,?\s*\n?\s*\}\s*from\s*"@\/lib\/supabase-browser"/,
-    );
-    expect(text).toMatch(
-      /ensureAnonAccessToken\(\s*\n?\s*getSupabaseBrowserClient\(\),?\s*\n?\s*\)/,
-    );
+    expect(text).toContain('import { refreshCarrierToken } from "@/lib/browser-auth"');
+    expect(text).toMatch(/refreshCarrierToken\(\)/);
     expect(text).toMatch(/\baccessToken,/);
   });
 

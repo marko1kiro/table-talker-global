@@ -11,8 +11,9 @@ import userEvent from "@testing-library/user-event";
 
 const navigations: string[] = [];
 let loginResult: unknown = { ok: false, message: "Login gagal." };
-let anonToken: string | null = null;
-let anonThrows = false;
+let carrierToken: string | null = null;
+let carrierFails = false;
+const carrierCalls: Array<{ staffKind: string; sessionToken: string }> = [];
 type HandoffPair = { managerToken: string; rateLimitReservationId: string };
 const cleanups: HandoffPair[] = [];
 const confirmations: HandoffPair[] = [];
@@ -63,12 +64,16 @@ vi.mock("@/lib/staff-login.server", () => ({
     return { ok: cleanupOk };
   },
 }));
-vi.mock("@/lib/supabase-browser", () => ({
-  getSupabaseBrowserClient: () => ({}),
-  ensureAnonAccessToken: async () => {
-    if (anonThrows) throw new Error("network down");
-    return anonToken;
+vi.mock("@/lib/staff-carrier.server", () => ({
+  ensureStaffCarrier: async ({ data }: { data: { staffKind: string; sessionToken: string } }) => {
+    carrierCalls.push(data);
+    if (carrierFails) return { ok: false, code: "INVALID_SESSION", message: "Terjadi kesalahan." };
+    return { ok: true, carrierEmail: "shadow+m-1@lihatmeja.com", carrierPassword: "rotated-pw" };
   },
+}));
+vi.mock("@/lib/browser-auth", () => ({
+  staffSignInCarrier: async () => ({ ok: true }),
+  staffCarrierToken: async () => carrierToken,
 }));
 
 import * as loginRoute from "../src/routes/manager/login";
@@ -106,9 +111,10 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     reconcileVerdict = "pending";
     navigateRejects = false;
     cleanupOk = true;
-    anonThrows = false;
+    carrierFails = false;
+    carrierCalls.length = 0;
     loginResult = { ...managerLogin };
-    anonToken = "anon-tok";
+    carrierToken = "carrier-tok";
   });
 
   afterEach(() => {
@@ -132,12 +138,13 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw as string);
     expect(parsed.managerToken).toBe("minted-tok");
-    expect(parsed.accessToken).toBe("anon-tok");
+    expect(parsed.accessToken).toBe("carrier-tok");
+    expect(carrierCalls).toEqual([{ staffKind: "manager", sessionToken: "minted-tok" }]);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("anon token failure: pending session cleaned up, no navigation, no identity", async () => {
-    anonToken = null;
+  it("carrier minting failure: pending session cleaned up, no navigation, no identity", async () => {
+    carrierFails = true;
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);
@@ -148,8 +155,8 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
   });
 
-  it("anon token TRANSPORT failure: same pending cleanup", async () => {
-    anonThrows = true;
+  it("carrier sign-in token TRANSPORT failure: same pending cleanup", async () => {
+    carrierToken = null;
     const user = userEvent.setup();
     render(<StaffLoginPage />);
     await submit(user);

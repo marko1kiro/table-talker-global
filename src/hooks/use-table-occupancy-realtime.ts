@@ -2,7 +2,7 @@
 // Realtime is an invalidation hint only: snapshots remain authorized by the
 // role-session RPC, and visible pages keep the 12-second polling safety net.
 import { useEffect, useRef, useState } from "react";
-import { ensureAnonAccessToken, getSupabaseBrowserClient } from "../lib/supabase-browser";
+import { getSupabaseBrowserClient } from "../lib/browser-auth";
 import { parseOccupancyBroadcast, type OccupancyBroadcast } from "../lib/occupancy-notice";
 
 export type TableOccupancyRealtimeStatus =

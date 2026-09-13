@@ -25,9 +25,10 @@ export type CrewIdentity = CrewSessionIdentity & { audioReady: boolean };
 // Clear Up), created via claim_role_session. Deliberately a distinct type
 // and storage key from CrewSessionIdentity above -- see Option B note on
 // claim_crew_session in role-session.server.ts. accessToken is the
-// device's anonymous-auth Supabase access token, persisted here so
+// device's Supabase Auth access token (Poin 3: a real crew account session,
+// previously a per-device carrier), persisted here so
 // table-occupancy.server.ts's authenticated-only RPCs (Task 9+) can reuse
-// it without a fresh signInAnonymously() call on every page load.
+// it without a fresh sign-in call on every page load.
 export type RoleSessionIdentity = {
   restaurantId: string;
   restaurantDisplayName: string;

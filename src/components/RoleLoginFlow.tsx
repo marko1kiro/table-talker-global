@@ -24,7 +24,7 @@ import { normalizeCrewName } from "@/lib/remote-audio-domain";
 import { CREW_ROLE_LABELS, CREW_ROLE_ORDER } from "@/lib/role-session-domain";
 import type { CrewRole } from "@/lib/role-session-domain";
 import { claimRoleSession } from "@/lib/role-session.server";
-import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { refreshCarrierToken } from "@/lib/browser-auth";
 import type { CrewSessionIdentity, RoleSessionIdentity } from "@/lib/crew-session-identity";
 
 // Dedicated full-page login flow ("Login Khusus"), superseding the old
@@ -48,7 +48,7 @@ import type { CrewSessionIdentity, RoleSessionIdentity } from "@/lib/crew-sessio
 //
 // Option B (unchanged from the previous flow): SS's session continues to
 // be created with crewSessionId/crewSessionToken as empty strings;
-// signInAnonymously() here only satisfies claim_role_session's
+// the browser carrier token here only satisfies claim_role_session's
 // `auth.uid() is not null` check and runs for all 4 roles.
 
 type Step = "code" | "pin" | "role" | "identity";
@@ -187,7 +187,7 @@ export function RoleLoginFlow({ onSsContinue, onRoleContinue }: RoleLoginFlowPro
     const iso = new Date().toISOString();
     setSubmittingIdentity(true);
     try {
-      const accessToken = await ensureAnonAccessToken(getSupabaseBrowserClient());
+      const accessToken = await refreshCarrierToken();
       if (!accessToken) {
         setIdentityError("Gagal memulai sesi peran. Coba lagi.");
         setSubmittingIdentity(false);

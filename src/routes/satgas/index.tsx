@@ -47,7 +47,7 @@ import { usePendingInstructions } from "@/hooks/use-pending-instructions";
 import { InstructionBanner } from "@/components/InstructionBanner";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
-import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { refreshCarrierToken } from "@/lib/browser-auth";
 import {
   cancelEscortIntent,
   confirmEscortIntent,
@@ -138,7 +138,7 @@ function SatgasRoute() {
         data: {
           restaurantId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
         },
       }),
     enabled: Boolean(identity),
@@ -226,7 +226,7 @@ function SatgasRoute() {
           restaurantId,
           tableNumber,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
         },
       });
       return { result, tableNumber };
@@ -264,7 +264,7 @@ function SatgasRoute() {
         data: {
           intentId: entry.intentId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
         },
       });
       return { result, entry };
@@ -300,7 +300,7 @@ function SatgasRoute() {
         data: {
           intentId: target.intentId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
         },
       });
       return { result, target };
