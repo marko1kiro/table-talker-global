@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   crewAccountListCore,
   crewAccountResetCore,
+  crewActivityListCore,
   crewClaimShiftCore,
   crewConfirmPairingCore,
   crewMeCore,
@@ -164,6 +165,16 @@ describe("crewRequestPairingCore", () => {
         rpc,
       ),
     ).toMatchObject({ ok: false, code: "UNAVAILABLE" });
+  });
+
+  it("maps the returned PAIRING_THROTTLED verdict (Poin 5 G4)", async () => {
+    const { rpc } = rpcReturning({ data: { ok: false, error: "PAIRING_THROTTLED" }, error: null });
+    expect(
+      await crewRequestPairingCore(
+        { restaurantId: RESTAURANT_ID, fullName: "Budi", otp: "123456" },
+        rpc,
+      ),
+    ).toMatchObject({ ok: false, code: "PAIRING_THROTTLED" });
   });
 });
 

@@ -2,22 +2,47 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { TaCard, TaEmpty, TaNotice } from "@/components/dashboard/ui";
-import { crewAccountList, crewAccountReset, crewSessionsEnd } from "@/lib/crew-auth.server";
+import {
+  crewAccountList,
+  crewAccountReset,
+  crewActivityList,
+  crewSessionsEnd,
+} from "@/lib/crew-auth.server";
 import { refreshCarrierToken } from "@/lib/browser-auth";
 import type { ManagerIdentity } from "@/lib/manager-session-identity";
 
 const POLL_MS = 10_000;
+const ACTIVITY_POLL_MS = 30_000;
 // How long the "Yakin?" confirmation stays armed before falling back.
 const CONFIRM_MS = 4_000;
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  "crew.pairing.approve": "Pairing disetujui",
+  "crew.pairing.reject": "Pairing ditolak",
+  "crew.account.reset": "Akun direset",
+  "crew.sessions.end": "Sesi dicabut",
+};
+
+function activityLabel(action: string): string {
+  return ACTIVITY_LABELS[action] ?? action;
+}
+
+function formatWib(iso: string): string {
+  return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short" }).format(
+    new Date(iso),
+  );
+}
 
 function accountsKey(restaurantId: string) {
   return ["manager-crew-accounts", restaurantId] as const;
 }
 
-function visiblePoll() {
-  return typeof document !== "undefined" && document.visibilityState === "visible"
-    ? POLL_MS
-    : false;
+function activityKey(restaurantId: string) {
+  return ["manager-crew-activity", restaurantId] as const;
+}
+
+function visiblePoll(ms: number) {
+  return typeof document !== "undefined" && document.visibilityState === "visible" ? ms : false;
 }
 
 function badgeClass(active: boolean) {
@@ -55,8 +80,26 @@ export function CrewAccountsCard({ identity }: { identity: ManagerIdentity }) {
         },
       }),
     enabled: Boolean(identity),
-    refetchInterval: visiblePoll,
+    refetchInterval: visiblePoll(POLL_MS),
   });
+
+  const activity = useQuery({
+    queryKey: activityKey(restaurantId),
+    queryFn: async () =>
+      crewActivityList({
+        data: {
+          managerToken: identity.managerToken,
+          accessToken: (await refreshCarrierToken()) ?? identity.accessToken,
+        },
+      }),
+    enabled: Boolean(identity),
+    refetchInterval: visiblePoll(ACTIVITY_POLL_MS),
+  });
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: accountsKey(restaurantId) });
+    void queryClient.invalidateQueries({ queryKey: activityKey(restaurantId) });
+  };
 
   const endSessions = useMutation({
     mutationFn: async (authUid: string) =>
@@ -68,7 +111,7 @@ export function CrewAccountsCard({ identity }: { identity: ManagerIdentity }) {
         },
       }),
     onSuccess: (result) => {
-      if (result.ok) void queryClient.invalidateQueries({ queryKey: accountsKey(restaurantId) });
+      if (result.ok) refresh();
     },
   });
 
@@ -83,7 +126,7 @@ export function CrewAccountsCard({ identity }: { identity: ManagerIdentity }) {
       }),
     onSuccess: (result) => {
       clearConfirm();
-      if (result.ok) void queryClient.invalidateQueries({ queryKey: accountsKey(restaurantId) });
+      if (result.ok) refresh();
     },
   });
 
@@ -177,6 +220,36 @@ export function CrewAccountsCard({ identity }: { identity: ManagerIdentity }) {
           })}
         </ul>
       )}
+      <div className="mt-2 border-t border-ta-gray-200 pt-3 dark:border-ta-gray-700">
+        <p className="text-[10px] font-black uppercase tracking-wide text-ta-gray-400">
+          Riwayat aktivitas
+        </p>
+        {activity.data?.ok && activity.data.activities.length === 0 && (
+          <p className="mt-1 text-xs text-ta-gray-400">Belum ada aktivitas.</p>
+        )}
+        {activity.data && !activity.data.ok && (
+          <p className="mt-1 text-xs text-ta-gray-400">{activity.data.message}</p>
+        )}
+        {activity.data?.ok && activity.data.activities.length > 0 && (
+          <ul className="mt-1 space-y-1">
+            {activity.data.activities.map((a, i) => (
+              <li
+                key={`${a.createdAt}-${a.action}-${a.crewName}-${i}`}
+                className="flex flex-wrap items-baseline gap-x-2 text-xs"
+              >
+                <span className="font-bold text-ta-gray-700 dark:text-ta-gray-200">
+                  {a.crewName}
+                </span>
+                <span className="text-ta-gray-500 dark:text-ta-gray-400">
+                  {activityLabel(a.action)}
+                  {a.actorLabel ? ` oleh ${a.actorLabel}` : ""}
+                </span>
+                <span className="text-ta-gray-400">{formatWib(a.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </TaCard>
   );
 }

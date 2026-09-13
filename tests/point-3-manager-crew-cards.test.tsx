@@ -16,6 +16,7 @@ import type { ManagerIdentity } from "@/lib/manager-session-identity";
 import type {
   CrewAccountRow,
   CrewAccountListResult,
+  CrewActivityListResult,
   CrewPairingListResult,
   CrewVerdictResult,
 } from "@/lib/crew-auth.server";
@@ -27,6 +28,7 @@ const crewPairingReject = vi.fn<[], Promise<CrewVerdictResult>>();
 const crewAccountList = vi.fn<[], Promise<CrewAccountListResult>>();
 const crewAccountReset = vi.fn<[], Promise<CrewVerdictResult>>();
 const crewSessionsEnd = vi.fn<[], Promise<CrewVerdictResult>>();
+const crewActivityList = vi.fn<[], Promise<CrewActivityListResult>>();
 const refreshCarrierToken = vi.fn<[], Promise<string>>();
 
 vi.mock("@/lib/crew-auth.server", () => ({
@@ -35,6 +37,7 @@ vi.mock("@/lib/crew-auth.server", () => ({
   crewAccountList: (a: unknown) => crewAccountList(a),
   crewAccountReset: (a: unknown) => crewAccountReset(a),
   crewSessionsEnd: (a: unknown) => crewSessionsEnd(a),
+  crewActivityList: (a: unknown) => crewActivityList(a),
 }));
 vi.mock("@/lib/browser-auth", () => ({
   refreshCarrierToken: () => refreshCarrierToken(),
@@ -85,6 +88,7 @@ beforeEach(() => {
   crewPairingReject.mockResolvedValue({ ok: true });
   crewAccountReset.mockResolvedValue({ ok: true });
   crewSessionsEnd.mockResolvedValue({ ok: true });
+  crewActivityList.mockResolvedValue({ ok: true, activities: [] });
 });
 
 afterEach(() => {
@@ -264,5 +268,34 @@ describe("CrewAccountsCard", () => {
     renderCard(<CrewAccountsCard identity={IDENTITY} />);
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("kaboom");
+  });
+
+  it("renders the crew activity feed with Indonesian labels and actor", async () => {
+    crewActivityList.mockResolvedValue({
+      ok: true,
+      activities: [
+        {
+          createdAt: new Date().toISOString(),
+          action: "crew.account.reset",
+          actorLabel: "p3.manager",
+          crewName: "Andi",
+        },
+        {
+          createdAt: new Date().toISOString(),
+          action: "crew.pairing.approve",
+          actorLabel: null,
+          crewName: "Bini",
+        },
+      ],
+    });
+    renderCard(<CrewAccountsCard identity={IDENTITY} />);
+    expect(await screen.findByText("Riwayat aktivitas")).toBeTruthy();
+    expect(await screen.findByText("Akun direset oleh p3.manager")).toBeTruthy();
+    expect(screen.getByText("Pairing disetujui")).toBeTruthy();
+    expect(screen.getByText("Andi")).toBeTruthy();
+    expect(screen.getByText("Bini")).toBeTruthy();
+    expect(crewActivityList).toHaveBeenCalledWith({
+      data: { managerToken: "minted-tok", accessToken: "carrier-tok" },
+    });
   });
 });

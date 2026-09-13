@@ -58,6 +58,9 @@ const PROVIDER_DOWN = "Sistem login sedang dimatikan. Hubungi Manager.";
 // GoTrue 429 (over_email_send_rate_limit): the user just knocked too often.
 // The 13 Sep 2026 incident proved this must NOT wear the PROVIDER_DOWN suit.
 const OTP_RATE_LIMITED = "Terlalu sering meminta kode. Tunggu 1 menit, lalu coba lagi.";
+// Poin 5 G4: DB caps pairing requests at 5/uid/hour (crew_request_pairing).
+const PAIRING_THROTTLED =
+  "Terlalu sering meminta pairing. Tunggu sekitar satu jam atau hubungi Manager.";
 // Session-loss copy, unified: any place a live carrier JWT / device token
 // disappears AFTER the email was already verified, or the server reports the
 // session is gone, lands on this one string. PROVIDER_DOWN stays reserved for
@@ -359,6 +362,10 @@ export function CrewLoginFlow({
       }
       if (result.code === "ALREADY_PAIRED") {
         await routeSession(session.token, session.device, "resto");
+        return;
+      }
+      if (result.code === "PAIRING_THROTTLED") {
+        setError(PAIRING_THROTTLED);
         return;
       }
       setError(result.message);

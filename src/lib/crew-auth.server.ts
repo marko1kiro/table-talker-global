@@ -91,7 +91,11 @@ const REQUEST_PAIRING_RAISED = [
 
 export type CrewRequestPairingResult =
   | { ok: true; requestId: string }
-  | { ok: false; code: (typeof REQUEST_PAIRING_RAISED)[number] | "UNAVAILABLE"; message: string };
+  | {
+      ok: false;
+      code: (typeof REQUEST_PAIRING_RAISED)[number] | "PAIRING_THROTTLED" | "UNAVAILABLE";
+      message: string;
+    };
 
 export const crewRequestPairingInputSchema = z.object({
   accessToken: z.string().min(1),
@@ -127,7 +131,10 @@ export async function crewRequestPairingCore(
         message: GENERIC_REQUEST_PAIRING,
       };
     }
-    const raw = result as { ok?: unknown; request_id?: unknown } | null;
+    const raw = result as { ok?: unknown; request_id?: unknown; error?: unknown } | null;
+    if (raw && raw.ok === false && raw.error === "PAIRING_THROTTLED") {
+      return { ok: false, code: "PAIRING_THROTTLED", message: GENERIC_REQUEST_PAIRING };
+    }
     if (!raw || raw.ok !== true || typeof raw.request_id !== "string") {
       return { ok: false, code: "UNAVAILABLE", message: GENERIC_REQUEST_PAIRING };
     }
@@ -698,4 +705,74 @@ export const crewSessionsEnd = createServerFn({ method: "POST" })
     const rpc = managerClientFn(data.accessToken);
     if (!rpc) return managerFail("UNAVAILABLE", GENERIC_END_SESSIONS);
     return crewSessionsEndCore({ managerToken: data.managerToken, authUid: data.authUid }, rpc);
+  });
+
+// ---------------------------------------------------------------------------
+// crewActivityList (Poin 5 G2): 30 aksi crew terakhir resto sang manager.
+// ---------------------------------------------------------------------------
+
+const GENERIC_LIST_ACTIVITY = "Gagal memuat riwayat aktivitas crew.";
+
+export type CrewActivityRow = {
+  createdAt: string;
+  action: string;
+  actorLabel: string | null;
+  crewName: string;
+};
+
+export type CrewActivityListResult =
+  | { ok: true; activities: CrewActivityRow[] }
+  | { ok: false; code: "INVALID_SESSION" | "UNAVAILABLE"; message: string };
+
+export const crewActivityListInputSchema = z.object({
+  accessToken: z.string().min(1),
+  managerToken: z.string().min(1),
+});
+
+export async function crewActivityListCore(
+  data: { managerToken: string },
+  rpc: RpcCaller,
+): Promise<CrewActivityListResult> {
+  try {
+    const { data: result, error } = await rpc("get_crew_activity", {
+      p_manager_token: data.managerToken,
+    });
+    if (error) {
+      return managerFail(
+        knownRaisedCode(MANAGER_RAISED, error.message) ?? "UNAVAILABLE",
+        GENERIC_LIST_ACTIVITY,
+      );
+    }
+    if (!Array.isArray(result)) return managerFail("UNAVAILABLE", GENERIC_LIST_ACTIVITY);
+    const activities: CrewActivityRow[] = [];
+    for (const item of result) {
+      const row = item as Record<string, unknown> | null;
+      if (
+        !row ||
+        typeof row.created_at !== "string" ||
+        typeof row.action !== "string" ||
+        typeof row.crew_name !== "string" ||
+        !(row.actor_label === null || typeof row.actor_label === "string")
+      ) {
+        return managerFail("UNAVAILABLE", GENERIC_LIST_ACTIVITY);
+      }
+      activities.push({
+        createdAt: row.created_at,
+        action: row.action,
+        actorLabel: (row.actor_label as string | null) ?? null,
+        crewName: row.crew_name,
+      });
+    }
+    return { ok: true, activities };
+  } catch {
+    return managerFail("UNAVAILABLE", GENERIC_LIST_ACTIVITY);
+  }
+}
+
+export const crewActivityList = createServerFn({ method: "POST" })
+  .validator(crewActivityListInputSchema)
+  .handler(async ({ data }): Promise<CrewActivityListResult> => {
+    const rpc = managerClientFn(data.accessToken);
+    if (!rpc) return managerFail("UNAVAILABLE", GENERIC_LIST_ACTIVITY);
+    return crewActivityListCore({ managerToken: data.managerToken }, rpc);
   });
