@@ -38,6 +38,11 @@ jobs:
       - name: Clean install from lockfile
         run: npm ci
 
+      - name: Install Deno (for edge typecheck)
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Edge function typecheck (owner-retention)
         run: npm run check:edge
 
