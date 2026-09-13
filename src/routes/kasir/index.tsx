@@ -39,7 +39,7 @@ import { usePendingInstructions } from "@/hooks/use-pending-instructions";
 import { InstructionBanner } from "@/components/InstructionBanner";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
-import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { refreshCarrierToken } from "@/lib/browser-auth";
 import {
   getTableOccupancySnapshot,
   setTableOccupiedKasir,
@@ -106,7 +106,7 @@ function KasirRoute() {
         data: {
           restaurantId,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
         },
       }),
     enabled: Boolean(identity),
@@ -134,7 +134,7 @@ function KasirRoute() {
           restaurantId,
           tableNumber,
           sessionToken: identity!.roleSessionToken,
-          accessToken: await getLiveAccessToken(getSupabaseBrowserClient(), identity!.accessToken),
+          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
         },
       }),
     onSuccess: (result) => {

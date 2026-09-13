@@ -184,7 +184,7 @@ it("historically got localStorage client key outside dialog render (removed with
   // NOTE: getClientKey()/the login-client-key localStorage pattern was removed
   // when tenant/restaurant-code login rate limiting was eliminated in favor of
   // plain-text restaurant codes (see 20260831000000_plaintext_restaurant_code.sql).
-  const dialog = source("../src/components/RoleLoginFlow.tsx");
+  const dialog = source("../src/components/CrewLoginFlow.tsx");
   expect(dialog).not.toContain("function getClientKey()");
   expect(dialog).not.toContain('const clientKey = typeof window === "undefined"');
   expect(dialog).not.toContain("const clientKey = getClientKey();");

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getPendingInstructions } from "@/lib/crew-instructions.server";
-import { getLiveAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { getSupabaseBrowserClient, refreshCarrierToken } from "@/lib/browser-auth";
 import type { PendingInstruction } from "@/lib/instruction-domain";
 
 type BroadcastCh = {
@@ -24,8 +24,7 @@ export function usePendingInstructions(
   const fetchPending = useCallback(async () => {
     if (!roleSessionToken || !accessToken) return;
     try {
-      const client = getSupabaseBrowserClient();
-      const token = await getLiveAccessToken(client, accessToken);
+      const token = (await refreshCarrierToken()) ?? accessToken;
       const result = await getPendingInstructions({
         data: { roleSessionToken, accessToken: token },
       });
@@ -50,7 +49,7 @@ export function usePendingInstructions(
     let cancelled = false;
 
     void (async () => {
-      const liveToken = await getLiveAccessToken(client, accessToken);
+      const liveToken = (await refreshCarrierToken()) ?? accessToken;
       if (cancelled) return;
       if (liveToken) client.realtime.setAuth(liveToken);
 

@@ -26,25 +26,14 @@ it("initializes every required restaurant credential field before auditing creat
   );
 });
 
-it("delegates restaurant login atomically through service-role RPC with a plain code, no rate limiting", () => {
+it("Poin 3 cutover: the crew code+PIN login fns are gone, getRestaurantManifest stays", () => {
   const source = crewServer();
-  expect(source).toContain("loginToRestaurant");
-  expect(source).toContain("createOpaqueRestaurantToken");
-  expect(source).toContain('client.rpc("login_to_restaurant_atomic"');
-  expect(source).toContain("p_code:");
-  expect(source).toContain("p_token_hash:");
-  expect(source).toContain("p_expires_at:");
-  expect(source).not.toContain("p_lookup_hash");
-  expect(source).not.toContain("p_client_bucket_hash");
-  expect(source).not.toContain("p_ip_bucket_hash");
-  expect(source).not.toContain("getLoginRateLimitBuckets");
-  expect(source).not.toContain("check_tenant_login_rate_limit");
+  // loginToRestaurant / verifyRestaurantPin had zero src consumers once
+  // RoleLoginFlow was deleted (crew_shift_claim mints the tenant token now), so
+  // the hard cutover removed them. The SS soundboard still needs the manifest.
+  expect(source).not.toContain("loginToRestaurant");
+  expect(source).not.toContain("verifyRestaurantPin");
   expect(source).not.toContain('from("restaurant_sessions").upsert');
-  expect(source).toContain("Kode Resto salah.");
-});
-
-it("exports getRestaurantManifest that queries active audio_manifests", () => {
-  const source = crewServer();
   expect(source).toContain("getRestaurantManifest");
   expect(source).toContain('from("audio_manifests")');
   expect(source).toContain("content_hash");

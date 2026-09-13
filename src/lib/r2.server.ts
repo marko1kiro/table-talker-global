@@ -1,4 +1,3 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -20,9 +19,6 @@ export const R2_UPLOAD_MIN_BYTES = 1024;
 const R2_UPLOAD_CONTENT_TYPE = "audio/mpeg";
 const R2_UPLOAD_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const R2_HEALTHCHECK_KEY = "healthcheck";
-const QR_EXPORT_MAGIC = Buffer.from("LIMEQR01", "ascii");
-const QR_EXPORT_IV_BYTES = 12;
-const QR_EXPORT_TAG_BYTES = 16;
 const QR_EXPORT_KEY_PATTERN =
   /^qr-exports\/[0-9a-f-]+\/[0-9a-f-]+\/qr-codes\.(pdf|xlsx|csv|docx)$/i;
 
@@ -78,44 +74,15 @@ export async function readFromR2(key: string): Promise<Uint8Array> {
   return object.Body.transformToByteArray();
 }
 
-function qrExportEncryptionKey(encodedKey = process.env.QR_EXPORT_ENCRYPTION_KEY ?? ""): Buffer {
-  const key = Buffer.from(encodedKey, "base64");
-  if (key.byteLength !== 32 || key.toString("base64") !== encodedKey) {
-    throw new Error("Kunci enkripsi export QR belum dikonfigurasi dengan benar.");
-  }
-  return key;
-}
+// The AES-256-GCM envelope codec (keyed by env QR_EXPORT_ENCRYPTION_KEY)
+// moved to app-envelope-crypto.server.ts (Poin 3 Task 6) so crew pairing
+// OTPs share one implementation; re-exported under the QR-export names.
+import {
+  decryptEnvelope as decryptPrivateQrExport,
+  encryptEnvelope as encryptPrivateQrExport,
+} from "./app-envelope-crypto.server";
 
-export function encryptPrivateQrExport(body: Uint8Array | string, encodedKey?: string): Uint8Array {
-  const plaintext = typeof body === "string" ? Buffer.from(body, "utf8") : Buffer.from(body);
-  const iv = randomBytes(QR_EXPORT_IV_BYTES);
-  const cipher = createCipheriv("aes-256-gcm", qrExportEncryptionKey(encodedKey), iv);
-  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  return new Uint8Array(Buffer.concat([QR_EXPORT_MAGIC, iv, cipher.getAuthTag(), ciphertext]));
-}
-
-export function decryptPrivateQrExport(body: Uint8Array, encodedKey?: string): Uint8Array {
-  const envelope = Buffer.from(body);
-  const headerBytes = QR_EXPORT_MAGIC.byteLength + QR_EXPORT_IV_BYTES + QR_EXPORT_TAG_BYTES;
-  if (
-    envelope.byteLength < headerBytes ||
-    !envelope.subarray(0, QR_EXPORT_MAGIC.byteLength).equals(QR_EXPORT_MAGIC)
-  ) {
-    throw new Error("Arsip QR terenkripsi tidak valid.");
-  }
-  const ivStart = QR_EXPORT_MAGIC.byteLength;
-  const tagStart = ivStart + QR_EXPORT_IV_BYTES;
-  const dataStart = tagStart + QR_EXPORT_TAG_BYTES;
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    qrExportEncryptionKey(encodedKey),
-    envelope.subarray(ivStart, tagStart),
-  );
-  decipher.setAuthTag(envelope.subarray(tagStart, dataStart));
-  return new Uint8Array(
-    Buffer.concat([decipher.update(envelope.subarray(dataStart)), decipher.final()]),
-  );
-}
+export { decryptPrivateQrExport, encryptPrivateQrExport };
 
 function validateQrExportKey(key: string): void {
   if (!QR_EXPORT_KEY_PATTERN.test(key)) throw new Error("Key export QR tidak valid.");

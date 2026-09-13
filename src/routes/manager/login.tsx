@@ -10,7 +10,8 @@ import {
   reconcileManagerHandoff,
   cleanupManagerPendingSession,
 } from "@/lib/staff-login.server";
-import { ensureAnonAccessToken, getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { ensureStaffCarrier } from "@/lib/staff-carrier.server";
+import { staffCarrierToken, staffSignInCarrier } from "@/lib/browser-auth";
 import {
   readPendingManagerHandoff,
   removePendingManagerHandoff,
@@ -57,7 +58,18 @@ function StaffLoginPage() {
       // old credential.
       persistPending: (pendingIdentity) =>
         writePendingManagerHandoff(browserManagerStorage(), pendingIdentity),
-      ensureAccessToken: () => ensureAnonAccessToken(getSupabaseBrowserClient()),
+      ensureAccessToken: async () => {
+        // Poin 3 §3.3: swap the banned anonymous JWT for the staff carrier —
+        // shadow-account sign-in with the freshly rotated password. The
+        // pending manager bearer is accepted server-side (handoff fallback).
+        const carrier = await ensureStaffCarrier({
+          data: { staffKind: "manager", sessionToken: identity.managerToken },
+        });
+        if (!carrier || !carrier.ok) return null;
+        const signed = await staffSignInCarrier(carrier.carrierEmail, carrier.carrierPassword);
+        if (!signed.ok) return null;
+        return staffCarrierToken();
+      },
       getStorage: browserManagerStorage,
       writeIdentity: writeManagerIdentity,
       removeIdentity: () => removeManagerIdentity(storage),

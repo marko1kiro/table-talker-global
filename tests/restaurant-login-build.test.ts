@@ -85,3 +85,17 @@ it("bundles tenant session imports into every SSR server function", () => {
   expect(serverSource).not.toContain('import("./tenant-session.server")');
   expect(serverSource).not.toContain("@vite-ignore");
 });
+
+// Poin 3 Task 7: the anonymous provider is banned forever. This guard rides
+// the build above (no second npm build). CI has no VITE_SUPABASE_URL, so
+// supabase-js itself is tree-shaken out of client chunks; if a future build
+// ships the library with env present, the src-level ban in
+// tests/point-3-anon-guard.test.ts remains the load-bearing check.
+it("ships no anonymous auth pathway in client assets", () => {
+  const clientSource = globSync("static/assets/*.js", { cwd: output })
+    .map((file) => readFileSync(new URL(file, output), "utf8"))
+    .join("\n");
+
+  expect(clientSource).not.toContain("signInAnonymously");
+  expect(clientSource).not.toContain("grant_type=anonymous");
+});
