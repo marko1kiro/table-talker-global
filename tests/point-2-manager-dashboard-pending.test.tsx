@@ -57,11 +57,6 @@ vi.mock("@/lib/manager-dashboard.server", () => ({
 vi.mock("@/lib/manager-stats.server", () => ({
   getManagerDailyStats: async () => ({ ok: false }),
 }));
-vi.mock("@/lib/manager-instructions.server", () => ({
-  sendManagerInstruction: async () => ({ ok: false }),
-  getInstructionThread: async () => ({ ok: false, threads: [] }),
-  getActiveCrewForMessaging: async () => ({ ok: false, crew: [] }),
-}));
 vi.mock("@/lib/manager-auth.server", () => ({
   changeManagerPassword: async () => ({ ok: false }),
   logoutManagerSession: async () => ({ ok: true }),

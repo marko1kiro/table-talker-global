@@ -35,8 +35,6 @@ import {
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
 import { useNotificationCenter } from "@/hooks/use-notification-center";
-import { usePendingInstructions } from "@/hooks/use-pending-instructions";
-import { InstructionBanner } from "@/components/InstructionBanner";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
 import { refreshCarrierToken } from "@/lib/browser-auth";
@@ -78,12 +76,6 @@ function KasirRoute() {
   const [actionError, setActionError] = useState("");
   const { layoutPreference, setLayoutPreference } = useLayoutPreference("kasir");
   const { items, unread, push, markRead } = useNotificationCenter();
-  const { pending: pendingInstructions, dismiss: dismissInstruction } = usePendingInstructions(
-    identity?.roleSessionToken ?? "",
-    identity?.accessToken ?? "",
-    identity?.restaurantId ?? "",
-    identity?.roleSessionId ?? "",
-  );
 
   // Client-only hydration, same pattern as src/routes/index.tsx: reading
   // sessionStorage during SSR would always return null and mismatch the
@@ -180,12 +172,6 @@ function KasirRoute() {
 
   return (
     <>
-      <InstructionBanner
-        instructions={pendingInstructions}
-        roleSessionToken={identity.roleSessionToken}
-        accessToken={identity.accessToken}
-        onDismiss={dismissInstruction}
-      />
       <AppShell
         brand={brand}
         navItems={navItems}

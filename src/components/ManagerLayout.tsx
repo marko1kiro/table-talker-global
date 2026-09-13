@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import { Table2, Users, ScrollText, BarChart3, MessageSquare, KeyRound } from "lucide-react";
+import { Table2, Users, ScrollText, BarChart3, KeyRound } from "lucide-react";
 import { AppShell, type AppShellNavItem } from "@/components/dashboard/AppShell";
 import { Footer } from "@/components/Footer";
 
-export type ManagerMenu = "tables" | "otp" | "crew" | "log" | "stats" | "messages";
+export type ManagerMenu = "tables" | "otp" | "crew" | "log" | "stats";
 
 const ICONS = {
   tables: Table2,
@@ -11,13 +11,11 @@ const ICONS = {
   crew: Users,
   log: ScrollText,
   stats: BarChart3,
-  messages: MessageSquare,
 } as const;
 const LABELS: { id: ManagerMenu; label: string }[] = [
   { id: "tables", label: "LIHAT STATUS MEJA LIVE" },
   { id: "otp", label: "OTP CREW" },
   { id: "crew", label: "LIHAT CREW AKTIF" },
-  { id: "messages", label: "KIRIM INSTRUKSI" },
   { id: "stats", label: "STATISTIK" },
   { id: "log", label: "LOG AKTIVITAS CREW" },
 ];
