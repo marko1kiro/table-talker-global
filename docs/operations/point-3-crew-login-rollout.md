@@ -16,11 +16,9 @@ Provider & policies:
 - [ ] **Sign In / Up → Providers → Email: ON.** "Confirm email": **ON**. (OTP email = mekanisme konfirmasi.)
 - [ ] **Anonymous sign-ins: OFF** (kondisi sekarang sudah OFF — JANGAN dinyalakan; CI test `point-3-anon-guard` gagal kalau muncul pemakaian di kode).
 - [ ] Phone / OAuth lain: **OFF**.
-- [ ] **Enable signups: TETAP ON.** (Spike §12: mematikan ini ikut memblokir pembuatan user via OTP. `/signup` password tidak pernah dipanggil app; tidak ada form password di UI. Monitor user sampah bila kena rate limit.)
-- [ ] **SMTP** (Authentication → Emails → SMTP settings): Host `smtp.resend.com`, Port `465`, User `resend`, Password = nilai `RESEND_API_KEY`, Sender email `noreply@lihatmeja.com`. Save + **Send test email** ke alamat sendiri.
-- [ ] Template **Verify OTP** / Confirmation (Authentication → Emails): subject `Kode login LIME`, body ID-only + 6 digit `{{ .Token }}`, HAPUS tombol magic link (`{{ .ConfirmationURL }}`) supaya OTP-only.
-- [ ] Rate limits (Authentication → Rate Limits): "Enter code" min 60s; Email OTP per jam sesuai default pilot; catat nilai akhir di evidence.
-- [ ] Session: biarkan TTL bawaan (access 1h; refresh rotation ON).
+- - [x] Enable signups ON (`disable_signup=false`). `/signup` password tak pernah dipanggil app.
+- - [x] SMTP PATCHED via Management API: smtp.resend.com:465, user `resend`, sender noreply@lihatmeja.com, name LIME. [ ] TES KIRIM EMAIL — tunggu hasil "Send test email" dashboard.
+- - [x] OTP 6 digit, exp 3600s. Rate limit bawaan: email 2/menit, verify 30 — catatan rollout: gelombang registrasi 67 crew ≈ 35 mnt kalau serentak; naikkan bila perlu. Site URL https://lihatmeja.com.
 
 ## 2. Apply migration (urutan EKSAK, sebelum deploy app)
 File baru di `supabase/migrations/`:
