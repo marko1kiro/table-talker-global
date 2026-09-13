@@ -403,6 +403,19 @@ describe("resto -> waiting -> pairing -> checkin happy path", () => {
     );
   });
 
+  it("PAIRING_THROTTLED shows a dedicated message and stays short of the waiting screen (Poin 5 G4)", async () => {
+    crewRequestPairing.mockResolvedValueOnce({
+      ok: false,
+      code: "PAIRING_THROTTLED",
+      message: "Gagal mengajukan permintaan pairing.",
+    });
+    await toResto();
+    await fillRestoAndCheck("Budi");
+    fireEvent.click(screen.getByRole("button", { name: /lanjutkan/i }));
+    expect(await screen.findByText(/Terlalu sering meminta pairing/i)).toBeTruthy();
+    expect(screen.queryByText("Hubungi Manager untuk mendapatkan kode aktifasi")).toBeNull();
+  });
+
   it("waiting -> pairing input: wrong OTP retries inline; EXPIRED shows the §7 restart screen", async () => {
     await toResto();
     await fillRestoAndCheck("Budi");
