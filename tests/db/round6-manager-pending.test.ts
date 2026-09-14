@@ -117,7 +117,7 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
     expect(resolved.data).toBeNull();
   });
 
-  test("pending token yields no dashboard snapshot, stats, thread, instructions, crew, realtime bind", async () => {
+  test("pending token yields no dashboard snapshot, stats, crew history, realtime bind", async () => {
     const c = await db.client();
     const { token } = await mintPending(c, "pending-invisible-aaaa");
 
@@ -129,23 +129,6 @@ describe("R6-A: pending sessions are invisible to every manager-token consumer",
       p_date: null,
     });
     expect(stats.data).toBeNull();
-
-    const thread = await rpc(c, "get_instruction_thread", {
-      p_manager_token: token,
-      p_date: null,
-    });
-    expect(thread.data).toBeNull();
-
-    const sent = await rpc(c, "send_manager_instruction", {
-      p_manager_token: token,
-      p_target_type: "all",
-      p_target_role_session_id: null,
-      p_message: "hello",
-    });
-    expect(sent.data).toBeNull();
-
-    const crew = await rpcRows(c, "get_manager_active_crew", { p_manager_token: token });
-    expect(crew.rows).toHaveLength(0);
 
     const history = await rpcRows(c, "get_manager_crew_history", {
       p_manager_token: token,

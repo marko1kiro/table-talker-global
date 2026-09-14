@@ -379,14 +379,13 @@ describe("recordQrScanCore", () => {
 });
 
 describe("table-occupancy.server.ts source contract", () => {
-  it("uses getAnonAuthedSupabaseClient (not the service client) for the five authenticated-only RPCs", () => {
+  it("uses getAnonAuthedSupabaseClient (not the service client) for the four mutation-only RPCs", () => {
     const text = source();
     for (const fn of [
       "setTableOccupiedKasir",
       "setTableEmptyCleanup",
       "createEscortIntent",
       "confirmEscortIntent",
-      "getTableOccupancySnapshot",
     ]) {
       const start = text.indexOf(`export const ${fn} = createServerFn`);
       expect(start, `${fn} should be exported as a createServerFn`).toBeGreaterThan(-1);

@@ -42,17 +42,15 @@ import {
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
 import { useNotificationCenter } from "@/hooks/use-notification-center";
-import { usePendingInstructions } from "@/hooks/use-pending-instructions";
-import { InstructionBanner } from "@/components/InstructionBanner";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
-import { refreshCarrierToken } from "@/lib/browser-auth";
+import { getSupabaseBrowserClient, refreshCarrierToken } from "@/lib/browser-auth";
 import {
   formatOccupiedDuration,
   sortedOccupiedTables,
   type OccupiedTableEntry,
 } from "@/lib/clear-up-queue";
-import { getTableOccupancySnapshot, setTableEmptyCleanup } from "@/lib/table-occupancy.server";
+import { getTableOccupancySnapshotCore, setTableEmptyCleanup } from "@/lib/table-occupancy.server";
 
 export const Route = createFileRoute("/clear-up/")({ component: ClearUpRoute });
 
@@ -102,25 +100,25 @@ function ClearUpRoute() {
   const restaurantId = identity?.restaurantId ?? "";
   const snapshot = useQuery({
     queryKey: snapshotQueryKey(restaurantId),
-    queryFn: async () =>
-      getTableOccupancySnapshot({
-        data: {
-          restaurantId,
-          sessionToken: identity!.roleSessionToken,
-          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
-        },
-      }),
+    queryFn: async () => {
+      const client = getSupabaseBrowserClient();
+      if (!client) {
+        return {
+          ok: false as const,
+          code: "UNAVAILABLE" as const,
+          message: "Gagal memproses permintaan meja.",
+        };
+      }
+      return getTableOccupancySnapshotCore(
+        { restaurantId, sessionToken: identity!.roleSessionToken },
+        async (fn, params) => client.rpc(fn, params),
+      );
+    },
     enabled: Boolean(identity),
     // Realtime is primary; the hook also owns the visible-only 12-second safety net.
     refetchOnWindowFocus: true,
   });
   const { items, unread, push, markRead } = useNotificationCenter();
-  const { pending: pendingInstructions, dismiss: dismissInstruction } = usePendingInstructions(
-    identity?.roleSessionToken ?? "",
-    identity?.accessToken ?? "",
-    identity?.restaurantId ?? "",
-    identity?.roleSessionId ?? "",
-  );
   const realtimeStatus = useTableOccupancyRealtime(
     restaurantId,
     identity?.roleSessionToken ?? "",
@@ -180,12 +178,6 @@ function ClearUpRoute() {
 
   return (
     <>
-      <InstructionBanner
-        instructions={pendingInstructions}
-        roleSessionToken={identity.roleSessionToken}
-        accessToken={identity.accessToken}
-        onDismiss={dismissInstruction}
-      />
       <CrewShell
         roleLabel="CLEAR UP"
         userName={identity.displayName}

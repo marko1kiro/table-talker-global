@@ -35,13 +35,11 @@ import {
 import { useLayoutPreference } from "@/lib/use-layout-preference";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
 import { useNotificationCenter } from "@/hooks/use-notification-center";
-import { usePendingInstructions } from "@/hooks/use-pending-instructions";
-import { InstructionBanner } from "@/components/InstructionBanner";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
-import { refreshCarrierToken } from "@/lib/browser-auth";
+import { getSupabaseBrowserClient, refreshCarrierToken } from "@/lib/browser-auth";
 import {
-  getTableOccupancySnapshot,
+  getTableOccupancySnapshotCore,
   setTableOccupiedKasir,
   type TableOccupancyRow,
 } from "@/lib/table-occupancy.server";
@@ -78,12 +76,6 @@ function KasirRoute() {
   const [actionError, setActionError] = useState("");
   const { layoutPreference, setLayoutPreference } = useLayoutPreference("kasir");
   const { items, unread, push, markRead } = useNotificationCenter();
-  const { pending: pendingInstructions, dismiss: dismissInstruction } = usePendingInstructions(
-    identity?.roleSessionToken ?? "",
-    identity?.accessToken ?? "",
-    identity?.restaurantId ?? "",
-    identity?.roleSessionId ?? "",
-  );
 
   // Client-only hydration, same pattern as src/routes/index.tsx: reading
   // sessionStorage during SSR would always return null and mismatch the
@@ -101,14 +93,20 @@ function KasirRoute() {
   const restaurantId = identity?.restaurantId ?? "";
   const snapshot = useQuery({
     queryKey: snapshotQueryKey(restaurantId),
-    queryFn: async () =>
-      getTableOccupancySnapshot({
-        data: {
-          restaurantId,
-          sessionToken: identity!.roleSessionToken,
-          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
-        },
-      }),
+    queryFn: async () => {
+      const client = getSupabaseBrowserClient();
+      if (!client) {
+        return {
+          ok: false as const,
+          code: "UNAVAILABLE" as const,
+          message: "Gagal memproses permintaan meja.",
+        };
+      }
+      return getTableOccupancySnapshotCore(
+        { restaurantId, sessionToken: identity!.roleSessionToken },
+        async (fn, params) => client.rpc(fn, params),
+      );
+    },
     enabled: Boolean(identity),
     // Realtime is primary; the hook also owns the visible-only 12-second safety net.
     refetchOnWindowFocus: true,
@@ -180,12 +178,6 @@ function KasirRoute() {
 
   return (
     <>
-      <InstructionBanner
-        instructions={pendingInstructions}
-        roleSessionToken={identity.roleSessionToken}
-        accessToken={identity.accessToken}
-        onDismiss={dismissInstruction}
-      />
       <AppShell
         brand={brand}
         navItems={navItems}

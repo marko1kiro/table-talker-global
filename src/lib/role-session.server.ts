@@ -19,7 +19,7 @@ import { CREW_ROLES, type CrewRole } from "./role-session-domain";
 // their bodies hard-fail with `UNAUTHORIZED` when `auth.uid() is null` -- a
 // service-role JWT carries no `auth.uid()` and can never pass that check
 // regardless of grants, so the caller's real session must be forwarded. Reused
-// by crew-auth.server.ts, table-occupancy.server.ts, crew-instructions, the
+// by crew-auth.server.ts, table-occupancy.server.ts, the
 // manager/AM dashboard reads, and manager-auth.
 export function getAnonAuthedSupabaseClient(accessToken: string): SupabaseClient | null {
   const url = process.env.VITE_SUPABASE_URL;
@@ -38,7 +38,7 @@ export { CREW_ROLES };
 export type { CrewRole };
 
 // Shared shape for the dependency-injected RPC cores across the server modules
-// (crew-auth.server.ts, crew-instructions, manager reads, table-occupancy).
+// (crew-auth.server.ts, manager reads, table-occupancy).
 export type RpcCaller = (
   fn: string,
   params: Record<string, unknown>,

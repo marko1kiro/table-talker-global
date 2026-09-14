@@ -5,6 +5,10 @@
 // never a sign-in attempt (the anonymous provider is banned forever).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+let authStateCallback: ((event: string, session: { access_token?: string } | null) => void) | null =
+  null;
+// setAuth must return a promise: the implementation chains .catch on it.
+const setAuth = vi.fn().mockResolvedValue(undefined);
 const auth = {
   getSession: vi.fn(),
   signInWithOtp: vi.fn(),
@@ -12,8 +16,14 @@ const auth = {
   signOut: vi.fn(),
   signInWithPassword: vi.fn(),
   signInAnonymously: vi.fn(),
+  onAuthStateChange: vi.fn(
+    (callback: (event: string, session: { access_token?: string } | null) => void) => {
+      authStateCallback = callback;
+      return { data: { subscription: { unsubscribe: () => undefined } } };
+    },
+  ),
 };
-const fakeClient = { auth };
+const fakeClient = { auth, realtime: { setAuth } };
 
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => fakeClient),
@@ -45,21 +55,45 @@ beforeEach(() => {
   auth.verifyOtp.mockReset();
   auth.signOut.mockReset();
   auth.signInWithPassword.mockReset();
+  authStateCallback = null;
+  vi.mocked(auth.onAuthStateChange).mockClear();
+  setAuth.mockReset();
+  setAuth.mockResolvedValue(undefined); // keep .catch() on the returned promise valid
 });
 
 describe("getSupabaseBrowserClient", () => {
-  it("creates one client with default (localStorage) persistence — no storage adapter", () => {
-    const client = getSupabaseBrowserClient();
-    expect(client).toBeTruthy();
-    expect(getSupabaseBrowserClient()).toBe(client);
-    // Singleton count is order-sensitive (module-level cache), so pin only
-    // what matters regardless of which test triggers construction first:
+  it("creates one client with default (localStorage) persistence — no storage adapter", async () => {
+    // The module-level singleton is order-sensitive: if any other test
+    // constructed it first, a plain call here proves nothing. Reset and
+    // re-import so THIS test triggers construction, then pin what matters:
     // exactly two positional args -- no third `auth:{storage:...}` override.
-    expect(createClient).toHaveBeenCalled();
-    expect(vi.mocked(createClient).mock.calls[0]).toEqual([
+    vi.resetModules();
+    const { getSupabaseBrowserClient: freshGet } = await import("../src/lib/browser-auth");
+    const { createClient: freshCreateClient } = await import("@supabase/supabase-js");
+    const client = freshGet();
+    expect(client).toBeTruthy();
+    expect(freshGet()).toBe(client);
+    expect(freshCreateClient).toHaveBeenCalled();
+    expect(vi.mocked(freshCreateClient).mock.calls[0]).toEqual([
       "https://unit.test.supabase.co",
       "unit-anon-key",
     ]);
+  });
+
+  it("hands every rotated session token to the singleton realtime connection", async () => {
+    // Order-independence (same as the creation test): construct on a fresh
+    // module instance so the listener wiring is guaranteed to (re-)run here.
+    vi.resetModules();
+    const { getSupabaseBrowserClient: freshGet } = await import("../src/lib/browser-auth");
+    const client = freshGet();
+    expect(client).toBeTruthy();
+    expect(auth.onAuthStateChange).toHaveBeenCalledTimes(1);
+    expect(authStateCallback).toBeTypeOf("function");
+    authStateCallback!("TOKEN_REFRESHED", { access_token: "rotated-token" });
+    await vi.waitFor(() => expect(setAuth).toHaveBeenCalledWith("rotated-token"));
+    authStateCallback!("SIGNED_OUT", null);
+    await Promise.resolve();
+    expect(setAuth).toHaveBeenCalledTimes(1); // sign-out must NOT setAuth(undefined)
   });
 });
 
