@@ -14,17 +14,20 @@ export function getSupabaseBrowserClient(): SupabaseClient | null {
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !anonKey) return null;
   if (!client) {
-    client = createClient(url, anonKey);
+    const created = createClient(url, anonKey);
+    client = created;
     // Poin 6 L5: whenever GoTrue rotates the session, hand the fresh JWT to the
     // singleton Realtime connection. Without this an open tab that survives a
     // refresh keeps a stale access_token inside the socket and every private
     // channel re-join afterwards races or binds against a dead token.
     // ponytail: the listener subscription is never released because this client
     // is a page-lifetime singleton; upgrade path = store subscription if the
-    // singleton ever becomes disposable.
-    client.auth.onAuthStateChange((_event, session) => {
+    // singleton ever becomes disposable. The .catch swallow is deliberate: a
+    // failed setAuth self-heals because the next auth event re-syncs the token,
+    // and the hook-level setAuth still runs on every channel join.
+    created.auth.onAuthStateChange((_event, session) => {
       const accessToken = session?.access_token;
-      if (accessToken) void client?.realtime.setAuth(accessToken);
+      if (accessToken) void created.realtime.setAuth(accessToken).catch(() => undefined);
     });
   }
   return client;
