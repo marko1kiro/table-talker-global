@@ -420,7 +420,7 @@ export const crewClaimShift = createServerFn({ method: "POST" })
 
 // ---------------------------------------------------------------------------
 // Manager-facing (JWT carrier + p_manager_token, same transport as
-// manager-dashboard.server.ts's getManagerSnapshot)
+// manager-dashboard.server.ts's getManagerSnapshotCore)
 // ---------------------------------------------------------------------------
 
 function managerClientFn(accessToken: string) {

@@ -7,7 +7,7 @@
 //
 // Per the design spec, Clear Up's list is sorted/highlighted by occupied
 // duration, computed entirely client-side from `occupied_at` (already
-// part of every getTableOccupancySnapshot row) -- a plain
+// part of every getTableOccupancySnapshotCore row) -- a plain
 // `Date.now() - occupied_at` computation, zero additional server or DB
 // cost. `sortedOccupiedTables` is a pure function of its `nowMs` argument
 // (never reads the clock itself) so the route's 1-second `setInterval`
