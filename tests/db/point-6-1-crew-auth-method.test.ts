@@ -1,6 +1,6 @@
 // Poin 6.1 S1: crew_auth_method verdicts + burst quota. Additive migration:
 // must not remove or alter any protected asset object.
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import type { Client } from "pg";
 import { createTestDb, stopAll, type TestDb } from "./harness";
 
@@ -15,6 +15,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await db?.close();
   await stopAll();
+});
+
+afterEach(async () => {
+  await c?.query("reset role").catch(() => undefined);
 });
 
 async function verdict(email: string): Promise<string> {
