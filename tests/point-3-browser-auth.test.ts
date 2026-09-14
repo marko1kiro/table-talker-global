@@ -5,6 +5,9 @@
 // never a sign-in attempt (the anonymous provider is banned forever).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+let authStateCallback: ((event: string, session: { access_token?: string } | null) => void) | null =
+  null;
+const setAuth = vi.fn();
 const auth = {
   getSession: vi.fn(),
   signInWithOtp: vi.fn(),
@@ -12,8 +15,14 @@ const auth = {
   signOut: vi.fn(),
   signInWithPassword: vi.fn(),
   signInAnonymously: vi.fn(),
+  onAuthStateChange: vi.fn(
+    (callback: (event: string, session: { access_token?: string } | null) => void) => {
+      authStateCallback = callback;
+      return { data: { subscription: { unsubscribe: () => undefined } } };
+    },
+  ),
 };
-const fakeClient = { auth };
+const fakeClient = { auth, realtime: { setAuth } };
 
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => fakeClient),
@@ -45,6 +54,9 @@ beforeEach(() => {
   auth.verifyOtp.mockReset();
   auth.signOut.mockReset();
   auth.signInWithPassword.mockReset();
+  authStateCallback = null;
+  vi.mocked(auth.onAuthStateChange).mockClear();
+  setAuth.mockReset();
 });
 
 describe("getSupabaseBrowserClient", () => {
@@ -60,6 +72,24 @@ describe("getSupabaseBrowserClient", () => {
       "https://unit.test.supabase.co",
       "unit-anon-key",
     ]);
+  });
+
+  it("hands every rotated session token to the singleton realtime connection", async () => {
+    // The creation test above already built the module-level singleton, so the
+    // construction-time wiring never re-runs for a second call. Reset the
+    // module registry and re-import to observe a genuinely fresh construction.
+    vi.resetModules();
+    const { getSupabaseBrowserClient: freshGet } = await import("../src/lib/browser-auth");
+    const client = freshGet();
+    expect(client).toBeTruthy();
+    expect(auth.onAuthStateChange).toHaveBeenCalledTimes(1);
+    expect(authStateCallback).toBeTypeOf("function");
+    authStateCallback!("TOKEN_REFRESHED", { access_token: "rotated-token" });
+    await Promise.resolve();
+    expect(setAuth).toHaveBeenCalledWith("rotated-token");
+    authStateCallback!("SIGNED_OUT", null);
+    await Promise.resolve();
+    expect(setAuth).toHaveBeenCalledTimes(1); // sign-out must NOT setAuth(undefined)
   });
 });
 
