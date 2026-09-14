@@ -5,11 +5,6 @@ import type { TableOccupancyRow } from "./table-occupancy.server";
 
 const GENERIC = "Gagal memuat data manager.";
 
-export const managerSnapshotInputSchema = z.object({
-  managerToken: z.string().min(1),
-  accessToken: z.string().min(1),
-});
-
 export type ManagerSnapshotResult =
   | { ok: true; revision: number; tables: TableOccupancyRow[] }
   | { ok: false; code: "INVALID_SESSION" | "UNAVAILABLE"; message: string };
@@ -54,16 +49,6 @@ export async function getManagerSnapshotCore(
     return { ok: false, code: "UNAVAILABLE", message: GENERIC };
   }
 }
-
-export const getManagerSnapshot = createServerFn({ method: "GET" })
-  .validator(managerSnapshotInputSchema)
-  .handler(async ({ data }): Promise<ManagerSnapshotResult> => {
-    const client = getAnonAuthedSupabaseClient(data.accessToken);
-    if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
-    return getManagerSnapshotCore({ managerToken: data.managerToken }, async (fn, params) =>
-      client.rpc(fn, params),
-    );
-  });
 
 export const managerCrewHistoryInputSchema = z.object({
   managerToken: z.string().min(1),

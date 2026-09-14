@@ -45,12 +45,12 @@ import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime"
 import { useNotificationCenter } from "@/hooks/use-notification-center";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { formatOccupancyNotice } from "@/lib/occupancy-notice";
-import { refreshCarrierToken } from "@/lib/browser-auth";
+import { getSupabaseBrowserClient, refreshCarrierToken } from "@/lib/browser-auth";
 import {
   cancelEscortIntent,
   confirmEscortIntent,
   createEscortIntent,
-  getTableOccupancySnapshot,
+  getTableOccupancySnapshotCore,
   type TableOccupancyRow,
 } from "@/lib/table-occupancy.server";
 import {
@@ -131,14 +131,20 @@ function SatgasRoute() {
   const restaurantId = identity?.restaurantId ?? "";
   const snapshot = useQuery({
     queryKey: snapshotQueryKey(restaurantId),
-    queryFn: async () =>
-      getTableOccupancySnapshot({
-        data: {
-          restaurantId,
-          sessionToken: identity!.roleSessionToken,
-          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
-        },
-      }),
+    queryFn: async () => {
+      const client = getSupabaseBrowserClient();
+      if (!client) {
+        return {
+          ok: false as const,
+          code: "UNAVAILABLE" as const,
+          message: "Gagal memproses permintaan meja.",
+        };
+      }
+      return getTableOccupancySnapshotCore(
+        { restaurantId, sessionToken: identity!.roleSessionToken },
+        async (fn, params) => client.rpc(fn, params),
+      );
+    },
     enabled: Boolean(identity),
     // Realtime is primary; the hook also owns the visible-only 12-second safety net.
     refetchOnWindowFocus: true,

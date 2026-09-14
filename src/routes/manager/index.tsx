@@ -15,7 +15,7 @@ import {
   type ManagerIdentity,
 } from "@/lib/manager-session-identity";
 import { bootManagerDashboard } from "@/lib/manager-boot-guard";
-import { getManagerSnapshot, getManagerCrewHistory } from "@/lib/manager-dashboard.server";
+import { getManagerSnapshotCore, getManagerCrewHistory } from "@/lib/manager-dashboard.server";
 import { getManagerDailyStats } from "@/lib/manager-stats.server";
 import { buildManagerCsv, downloadCsv } from "@/lib/manager-csv-export";
 import { useTableOccupancyRealtime } from "@/hooks/use-table-occupancy-realtime";
@@ -31,7 +31,7 @@ import {
   wibDateKey,
   type CrewScope,
 } from "@/lib/crew-history-scope";
-import { refreshCarrierToken } from "@/lib/browser-auth";
+import { getSupabaseBrowserClient, refreshCarrierToken } from "@/lib/browser-auth";
 import { TABLE_COUNT } from "@/lib/audio";
 import { SessionExpiredNotice } from "@/components/SessionExpiredNotice";
 import { ChangePasswordDialog } from "@/components/dashboard/ChangePasswordDialog";
@@ -116,13 +116,19 @@ function ManagerDashboard() {
   const restaurantId = identity?.restaurantId ?? "";
   const snapshot = useQuery({
     queryKey: snapshotKey(restaurantId),
-    queryFn: async () =>
-      getManagerSnapshot({
-        data: {
-          managerToken: identity!.managerToken,
-          accessToken: (await refreshCarrierToken()) ?? identity!.accessToken,
-        },
-      }),
+    queryFn: async () => {
+      const client = getSupabaseBrowserClient();
+      if (!client) {
+        return {
+          ok: false as const,
+          code: "UNAVAILABLE" as const,
+          message: "Gagal memuat data manager.",
+        };
+      }
+      return getManagerSnapshotCore({ managerToken: identity!.managerToken }, async (fn, params) =>
+        client.rpc(fn, params),
+      );
+    },
     enabled: Boolean(identity),
     refetchOnWindowFocus: true,
   });

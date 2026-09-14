@@ -366,15 +366,6 @@ export async function getTableOccupancySnapshotCore(
   }
 }
 
-export const getTableOccupancySnapshot = createServerFn({ method: "GET" })
-  .validator(tableOccupancySnapshotInputSchema)
-  .handler(async ({ data }): Promise<TableOccupancySnapshotResult> => {
-    const client = getAnonAuthedSupabaseClient(data.accessToken);
-    if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC_ERROR };
-    const { accessToken: _accessToken, ...rpcData } = data;
-    return getTableOccupancySnapshotCore(rpcData, async (fn, params) => client.rpc(fn, params));
-  });
-
 // ---------------------------------------------------------------------------
 // record_qr_scan -- the sole RPC actually granted to service_role; called
 // server-to-server from the Task 7 QR Interceptor, never from a browser,

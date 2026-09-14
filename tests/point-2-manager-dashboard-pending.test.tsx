@@ -51,7 +51,7 @@ vi.mock("@/hooks/use-notification-center", () => ({
 // The dashboard's server functions must never attempt a real round-trip when a
 // clean identity hydrates the shell in the no-pending regression case.
 vi.mock("@/lib/manager-dashboard.server", () => ({
-  getManagerSnapshot: async () => ({ ok: false }),
+  getManagerSnapshotCore: async () => ({ ok: false }),
   getManagerCrewHistory: async () => ({ ok: false, crew: [] }),
 }));
 vi.mock("@/lib/manager-stats.server", () => ({
