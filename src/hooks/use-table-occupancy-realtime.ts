@@ -158,6 +158,7 @@ export function createTableOccupancyRealtimeController({
   };
 
   const scheduleRetry = () => {
+    // A second error while a retry is pending is a no-op: the ladder keeps a single rung.
     if (disposed || !online || retryHandle !== null) return;
     const delay = backoffDelayMs(retryAttempt);
     retryAttempt += 1;

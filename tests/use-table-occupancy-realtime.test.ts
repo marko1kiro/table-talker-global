@@ -58,6 +58,7 @@ function fakeClient() {
   const channels = new Map<string, ReturnType<typeof fakeChannel>>();
   const removeChannel = vi.fn();
   const client = {
+    // Synchronous on purpose: mount-time bind+channel must complete before the first assertion (see ladder tests).
     rpc: vi.fn(() => immediateRpcSuccess()),
     channel: vi.fn((name: string, _options: { config: { private: true } }) => {
       const created = fakeChannel();
@@ -95,17 +96,19 @@ function fakeVisibility(initiallyVisible = true) {
 function fakeNet(initiallyOnline = true) {
   let online = initiallyOnline;
   let callback: (() => void) | null = null;
+  const unsubscribe = vi.fn(() => {
+    callback = null;
+  });
   const net = {
     isOnline: () => online,
     subscribe: vi.fn((next: () => void) => {
       callback = next;
-      return () => {
-        callback = null;
-      };
+      return unsubscribe;
     }),
   };
   return {
     net,
+    unsubscribe,
     setOnline(next: boolean) {
       online = next;
       callback?.();
@@ -626,5 +629,29 @@ describe("Poin 6 reconnect contract", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(POLL_FALLBACK_MS);
     expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("unsubscribes net + visibility listeners and cancels a pending retry on dispose", () => {
+    const { client, channels } = fakeClient();
+    const { visibility, unsubscribe: unsubscribeVisibility } = fakeVisibility(true);
+    const { net, unsubscribe: unsubscribeNet } = fakeNet(true);
+    const controller = createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch: vi.fn(),
+      visibility,
+      net,
+    });
+    expect(client.channel).toHaveBeenCalledTimes(1);
+
+    // Schedule a 1s retry but never advance the timer: dispose must cancel it.
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitStatus("CHANNEL_ERROR");
+    controller.dispose();
+    vi.advanceTimersByTime(60_000);
+
+    expect(client.channel).toHaveBeenCalledTimes(1);
+    expect(unsubscribeNet).toHaveBeenCalledTimes(1);
+    expect(unsubscribeVisibility).toHaveBeenCalledTimes(1);
   });
 });
