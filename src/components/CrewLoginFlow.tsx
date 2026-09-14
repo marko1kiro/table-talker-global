@@ -1,9 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  Eye,
+  EyeOff,
   Loader2,
   LogOut,
   Mail,
@@ -15,12 +17,15 @@ import {
   Volume2,
   Wallet,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AuthLayout, IconField } from "@/components/dashboard/auth";
 import { taPrimaryButtonClass } from "@/components/dashboard/ui";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Footer } from "@/components/Footer";
 import {
   crewClaimShift,
   crewConfirmPairing,
+  crewLoginMethod,
   crewMe,
   crewRequestPairing,
   crewValidateCode,
@@ -28,6 +33,8 @@ import {
 import {
   getDeviceToken,
   crewSignInWithOtp,
+  crewSignInWithPassword,
+  crewSetPassword,
   crewSignOut,
   crewVerifyOtp,
   refreshCarrierToken,
@@ -46,6 +53,16 @@ import type { CrewSessionIdentity, RoleSessionIdentity } from "@/lib/crew-sessio
 // this is the only escape on a shared tablet). Authority is unchanged:
 // role_session_tokens minted by crew_shift_claim, realtime/RPC keep refreshing
 // the live JWT via refreshCarrierToken (Task 7).
+//
+// Poin 6.1: the magic link is demoted to a setup/reset tool. The flow is now
+// email-first: submitEmail asks crewLoginMethod which door this account uses —
+// password accounts go straight to the "Masuk" screen, everyone else keeps the
+// OTP route — and EVERY OTP entry passes the mandatory "Buat Password" gate so
+// the next login is a password, not an email round-trip. The pairing screen
+// keeps its own empty field (otpPairing) instead of borrowing the login-code
+// state (the email-code bleed this fixes), and transient post-login failures
+// offer an in-place "Coba lagi" retry instead of dumping the crew back onto
+// the email step (the loop-login bug).
 //
 // Markup conventions (AuthLayout, IconField, taPrimaryButtonClass, step dots,
 // role cards, inline alert) mirror the previous crew login screen so the swap
@@ -71,8 +88,26 @@ const KICKED = "Akun ini dipakai login di perangkat lain.";
 const DISABLED = "Akun kamu sudah dinonaktifkan. Hubungi Manager.";
 const PAIR_STALE = "Permintaan ditolak/kedaluwarsa — mulai ulang";
 const GENERIC = "Terjadi kesalahan. Coba lagi.";
+// Poin 6.1 password-machine copy.
+const PW_BAD_CREDENTIALS = "Email atau password salah.";
+const PW_MISMATCH = "Ulangi password belum sama.";
+const PW_MIN = "Password minimal 6 karakter.";
+const LOOKUP_THROTTLED = "Terlalu sering mencoba. Tunggu sekitar 15 menit lalu coba lagi.";
+const ROUTE_TRANSIENT = "Gagal memuat data. Coba lagi.";
+const PW_SAVED_TOAST = "Password tersimpan";
+const OTP_SENT_TOAST = "Kode dikirim ke email";
 
-type Step = "boot" | "email" | "otpEmail" | "resto" | "waiting" | "checkin" | "kicked" | "disabled";
+type Step =
+  | "boot"
+  | "email"
+  | "password"
+  | "otpEmail"
+  | "setPassword"
+  | "resto"
+  | "waiting"
+  | "checkin"
+  | "kicked"
+  | "disabled";
 
 // checkin is a step, the pairing OTP is an inline expansion of waiting.
 type Pairing = { requestId: string; expiresAt: number };
@@ -83,6 +118,8 @@ export type CrewLoginFlowProps = {
   onRoleContinue: (identity: RoleSessionIdentity) => void;
   // Test seam (p1-3 resend cooldown): 0 disables the window.
   resendCooldownMs?: number;
+  // Test seam (Poin 6.1): sessionAndDevice's single retry delay; 0 disables.
+  sessionRetryMs?: number;
 };
 
 // 30 s between OTP emails per flow (the 13 Sep pajarhidayat double-send:
@@ -97,7 +134,9 @@ const ROLE_META: Record<CrewRole, { icon: typeof Volume2; description: string }>
   clear_up: { icon: Sparkles, description: "Kosongkan meja setelah selesai dibersihkan" },
 };
 
-const STEP_ORDER: Step[] = ["email", "otpEmail", "resto", "waiting", "checkin"];
+// Dots only render while wizardMode === "otp" (Poin 6.1: the password route
+// has no wizard, so it shows no progress bar).
+const STEP_ORDER: Step[] = ["email", "otpEmail", "setPassword", "resto", "waiting", "checkin"];
 
 function onlyDigits(value: string, maxLength: number) {
   return value.replace(/\D/g, "").slice(0, maxLength);
@@ -134,17 +173,32 @@ export function CrewLoginFlow({
   onSsContinue,
   onRoleContinue,
   resendCooldownMs = RESEND_COOLDOWN_MS,
+  sessionRetryMs = 1_000,
 }: CrewLoginFlowProps) {
   const [step, setStep] = useState<Step>("boot");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  // Pairing form code: its OWN state (Poin 6.1) — the login/email code state
+  // must never leak into the manager-code field (and vice versa).
+  const [otpPairing, setOtpPairing] = useState("");
+  const [wizardMode, setWizardMode] = useState<"otp" | "password" | null>(null);
+  const [badPassword, setBadPassword] = useState(false);
+  // pw1 doubles as the LOGIN password and the NEW password: the password and
+  // setPassword screens never coexist, so one field is honest, not shared.
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  // In-place retry for transient post-login failures (Poin 6.1 anti-loop):
+  // set instead of bouncing to the email step; every post-email screen renders
+  // a "Coba lagi" button while it is set.
+  const [retryable, setRetryable] = useState<{ run: () => void } | null>(null);
+  const lastRouteTarget = useRef<Step>("email");
   const [name, setName] = useState("");
   const [restoCode, setRestoCode] = useState("");
   const [resto, setResto] = useState<{ restaurantId: string; displayName: string } | null>(null);
   const [pairing, setPairing] = useState<Pairing | null>(null);
-  const [showPairingOtp, setShowPairingOtp] = useState(false);
   // Restaurant identity known at boot/verify time (paired email) or set on
   // successful pairing confirmation; drives the checkin badge.
   const [info, setInfo] = useState<RestoInfo | null>(null);
@@ -161,9 +215,15 @@ export function CrewLoginFlow({
   // device token. getDeviceToken is a synchronous localStorage read, so one
   // helper replaces the six `if (!token || !device)` / `if (!token)` guards
   // that had drifted apart (different verdicts, some leaving busy stuck).
-  // Returns null whenever the session is gone (post-verification => SESSION_LOST).
+  // Poin 6.1: one delayed retry on a null token (anti WiFi-kedip) before
+  // declaring the session gone. Returns null whenever the session is gone
+  // (post-verification => SESSION_LOST). Device is read once, AFTER the retry.
   async function sessionAndDevice(): Promise<{ token: string; device: string } | null> {
-    const token = await refreshCarrierToken();
+    let token = await refreshCarrierToken();
+    if (!token && sessionRetryMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, sessionRetryMs));
+      token = await refreshCarrierToken();
+    }
     const device = getDeviceToken();
     if (!token || !device) return null;
     return { token, device };
@@ -186,11 +246,16 @@ export function CrewLoginFlow({
     }
     setEmail("");
     setOtp("");
+    setOtpPairing("");
+    setWizardMode(null);
+    setBadPassword(false);
+    setPw1("");
+    setPw2("");
     setName("");
     setRestoCode("");
     setResto(null);
     setPairing(null);
-    setShowPairingOtp(false);
+    setRetryable(null);
     setInfo(null);
     setRole(null);
     setError("");
@@ -220,18 +285,31 @@ export function CrewLoginFlow({
    * Shared boot/post-OTP branch (§3.2 step 1 & 3): a valid session's pairing
    * state decides where the crew lands. unpairedTarget differs: bootstrap
    * STARTS at the email screen, verified accounts PROCEED to resto.
+   * Poin 6.1: the target is remembered for retries, and a NON-auth failure
+   * keeps the crew on screen with a "Coba lagi" retry instead of bouncing to
+   * the email step (the loop-login bug: session was fine, only the probe died).
    */
   async function routeSession(
     accessToken: string,
     deviceToken: string,
     unpairedTarget: Step,
   ): Promise<void> {
+    lastRouteTarget.current = unpairedTarget;
     const me = await crewMe({ data: { accessToken, deviceToken } });
     if (!me.ok) {
-      setStep("email");
-      setError(me.code === "UNAUTHORIZED" ? SESSION_LOST : GENERIC);
+      if (me.code === "UNAUTHORIZED") {
+        setStep("email");
+        setError(SESSION_LOST);
+        setRetryable(null);
+        return;
+      }
+      setError(ROUTE_TRANSIENT);
+      setRetryable({
+        run: () => void routeWithFreshSession(lastRouteTarget.current ?? "email"),
+      });
       return;
     }
+    setRetryable(null);
     if (!me.paired) {
       setStep(unpairedTarget);
       return;
@@ -248,6 +326,22 @@ export function CrewLoginFlow({
     setStep(me.deviceCurrent ? "checkin" : "kicked");
   }
 
+  // Retry path for routeSession failures: re-read a live session (never trust
+  // the possibly-dead token from the failed attempt), then route to the target
+  // the crew was heading for.
+  async function routeWithFreshSession(target: Step): Promise<void> {
+    const session = await sessionAndDevice();
+    if (!session) {
+      setStep("email");
+      setError(SESSION_LOST);
+      setRetryable(null);
+      return;
+    }
+    await routeSession(session.token, session.device, target);
+  }
+
+  // Mount-once by design: sessionAndDevice/routeSession are recreated every
+  // render but the boot probe must run exactly one time per tab load.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -262,22 +356,87 @@ export function CrewLoginFlow({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function sendOtp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!email.trim() || Date.now() < sendUntil) return;
-    setBusy(true);
-    setError("");
+  // Shared OTP send used by submitEmail's otp branch AND the password screen's
+  // "lupa" link: cooldown, error copy and landing spot stay identical.
+  async function sendOtpRoundtrip() {
     const result = await crewSignInWithOtp(email.trim());
-    setBusy(false);
     if (!result.ok) {
+      setBusy(false);
       setError(result.code === "RATE_LIMITED" ? OTP_RATE_LIMITED : PROVIDER_DOWN);
       return;
     }
     setSendUntil(Date.now() + resendCooldownMs);
     setOtp("");
+    setWizardMode("otp");
     setStep("otpEmail");
+    toast.success(OTP_SENT_TOAST);
+    setBusy(false);
+  }
+
+  async function submitEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !email.trim() || Date.now() < sendUntil) return;
+    setBusy(true);
+    setError("");
+    const normalizedEmail = email.trim().toLowerCase();
+    const verdict = await crewLoginMethod({ data: { email: normalizedEmail } });
+    if (!verdict.ok) {
+      setBusy(false);
+      if (verdict.code === "THROTTLED") {
+        setError(LOOKUP_THROTTLED);
+        return;
+      }
+      setError(ROUTE_TRANSIENT);
+      setRetryable({ run: () => void submitEmail(event) });
+      return;
+    }
+    setRetryable(null);
+    if (verdict.method === "password") {
+      setWizardMode("password");
+      setBadPassword(false);
+      setPw1("");
+      setStep("password");
+      setBusy(false);
+      return;
+    }
+    await sendOtpRoundtrip();
+  }
+
+  async function submitPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !pw1) return;
+    setBusy(true);
+    setError("");
+    setBadPassword(false);
+    const result = await crewSignInWithPassword(email.trim().toLowerCase(), pw1);
+    if (result.ok) {
+      // busy stays true across the whole routeSession hop: a re-entrant submit
+      // while crewMe is in flight would otherwise land on a half-routed state.
+      const session = await sessionAndDevice();
+      if (!session) {
+        setBusy(false);
+        setError(SESSION_LOST);
+        return;
+      }
+      await routeSession(session.token, session.device, "resto");
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    if (result.code === "INVALID_CREDENTIALS") {
+      setBadPassword(true);
+      setError(PW_BAD_CREDENTIALS);
+      return;
+    }
+    if (result.code === "RATE_LIMITED") {
+      setError(OTP_RATE_LIMITED);
+      return;
+    }
+    setError(ROUTE_TRANSIENT);
+    setRetryable({ run: () => void submitPassword(event) });
   }
 
   async function verifyOtp(event: FormEvent<HTMLFormElement>) {
@@ -291,16 +450,53 @@ export function CrewLoginFlow({
       setError(OTP_EMAIL_BAD);
       return;
     }
-    // busy stays true across the whole routeSession hop: a re-entrant submit
-    // while crewMe is in flight would otherwise land on a half-routed state.
-    const session = await sessionAndDevice();
-    if (!session) {
-      setBusy(false);
-      setError(SESSION_LOST);
+    // Poin 6.1: verified OTP no longer routes — every OTP entry passes the
+    // mandatory "Buat Password" gate first (submitSetPassword does the routing).
+    setOtp("");
+    setPw1("");
+    setPw2("");
+    setRetryable(null);
+    setBusy(false);
+    setStep("setPassword");
+  }
+
+  async function submitSetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    setError("");
+    // Local guards first: cheap mistakes never touch the network.
+    if (pw1.length < 6) {
+      setError(PW_MIN);
       return;
     }
-    await routeSession(session.token, session.device, "resto");
+    if (pw1 !== pw2) {
+      setError(PW_MISMATCH);
+      return;
+    }
+    setBusy(true);
+    const result = await crewSetPassword(pw1);
+    if (result.ok) {
+      toast.success(PW_SAVED_TOAST);
+      // busy stays true across the whole routeSession hop (old verifyOtp habit):
+      // no re-entrant submit while crewMe is in flight.
+      const session = await sessionAndDevice();
+      if (!session) {
+        setBusy(false);
+        setError(SESSION_LOST);
+        return;
+      }
+      await routeSession(session.token, session.device, "resto");
+      setBusy(false);
+      return;
+    }
     setBusy(false);
+    if (result.code === "WEAK") {
+      setError(PW_MIN);
+      return;
+    }
+    // UNAVAILABLE: stay put, the session is intact — retry the save in place.
+    setError(ROUTE_TRANSIENT);
+    setRetryable({ run: () => void submitSetPassword(event) });
   }
 
   async function checkRestoCode(event: FormEvent<HTMLFormElement>) {
@@ -355,7 +551,9 @@ export function CrewLoginFlow({
           fullName: normalized.displayName,
         });
         setPairing({ requestId: result.requestId, expiresAt: Date.now() + PAIRING_WINDOW_MS });
-        setShowPairingOtp(false);
+        // Poin 6.1: the manager-code field is always visible on waiting and
+        // must start EMPTY — never a leftover of the email/OTP code.
+        setOtpPairing("");
         setError("");
         setStep("waiting");
         return;
@@ -376,7 +574,7 @@ export function CrewLoginFlow({
 
   async function confirmPairing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || !pairing || otp.length !== 6) return;
+    if (busy || !pairing || otpPairing.length !== 6) return;
     setBusy(true);
     setError("");
     const session = await sessionAndDevice();
@@ -386,11 +584,11 @@ export function CrewLoginFlow({
       return;
     }
     const result = await crewConfirmPairing({
-      data: { accessToken: session.token, requestId: pairing.requestId, otp },
+      data: { accessToken: session.token, requestId: pairing.requestId, otp: otpPairing },
     });
     setBusy(false);
     if (result.ok) {
-      setOtp("");
+      setOtpPairing("");
       setStep("checkin");
       return;
     }
@@ -404,8 +602,7 @@ export function CrewLoginFlow({
       result.code === "NOT_FOUND"
     ) {
       setPairing(null);
-      setShowPairingOtp(false);
-      setOtp("");
+      setOtpPairing("");
       setError("");
       return;
     }
@@ -437,7 +634,7 @@ export function CrewLoginFlow({
     // §7: a network/transport failure surfaces as UNAVAILABLE (the core
     // maps thrown RPC errors to it) and gets exactly ONE silent retry; a
     // persistent failure then shows the generic message inline, keeping the
-    // crew on the checkin screen. Deterministic-checkedInAt: the retry
+    // crew on the checkin screen. Deterministic checkedInAt: the retry
     // reuses the SAME payload, so the shift start never drifts between
     // attempts.
     if (!result.ok && result.code === "UNAVAILABLE") {
@@ -508,11 +705,40 @@ export function CrewLoginFlow({
     "inline-flex items-center gap-1 text-xs font-bold text-ta-gray-400 transition hover:text-ta-gray-600";
   const bigButton = (enabled: boolean) => (enabled ? primary : disabledButton);
 
+  // Poin 6.1 in-place retry: rendered directly under the Alert on every
+  // post-email screen whenever a transient failure left a retry closure.
+  const retryBlock = retryable && (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => retryable.run()}
+      className={`${secondary} mx-auto flex`}
+    >
+      Coba lagi
+    </button>
+  );
+
+  // Show/hide eye, shared by the password + setPassword screens.
+  const eyeToggle = (
+    <button
+      type="button"
+      aria-label={showPw ? "Sembunyikan password" : "Tampilkan password"}
+      onClick={() => setShowPw((v) => !v)}
+      className="text-ta-gray-400 transition hover:text-ta-gray-600"
+    >
+      {showPw ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+    </button>
+  );
+
   if (step === "boot") {
     return (
       <AuthLayout>
-        <div className="flex min-h-[40svh] items-center justify-center">
-          <Loader2 className="size-6 animate-spin text-brand-500" />
+        <div className="flex min-h-[40svh] flex-col justify-center gap-4">
+          <div className="animate-pulse space-y-4">
+            <Skeleton className="mx-auto h-10 w-2/3 rounded-xl" />
+            <Skeleton className="h-11 w-full rounded-lg" />
+            <Skeleton className="h-11 w-full rounded-lg" />
+          </div>
         </div>
       </AuthLayout>
     );
@@ -523,6 +749,7 @@ export function CrewLoginFlow({
       <AuthLayout>
         <RestoBadge name={info?.restaurantName ?? ""} />
         <Alert>{KICKED}</Alert>
+        {retryBlock}
         <button type="button" onClick={() => setStep("checkin")} className={`${primary} mt-6`}>
           <Unlock className="size-4" /> Lanjut di perangkat ini
         </button>
@@ -540,6 +767,7 @@ export function CrewLoginFlow({
           <h1 className="text-2xl font-bold tracking-tight text-ta-gray-900">Akun Tidak Aktif</h1>
         </div>
         <Alert>{DISABLED}</Alert>
+        {retryBlock}
         <p className="mt-4 text-center text-xs text-ta-gray-400">
           Aktivitas login dapat dicatat untuk keamanan operasional.
         </p>
@@ -550,23 +778,25 @@ export function CrewLoginFlow({
 
   return (
     <AuthLayout>
-      <div className="mb-5 flex items-center justify-center gap-2">
-        {STEP_ORDER.map((s, i) => (
-          <span
-            key={s}
-            className={`h-1.5 rounded-full transition-all duration-300 ${
-              i === stepIndex
-                ? "w-8 bg-brand-500"
-                : i < stepIndex
-                  ? "w-4 bg-brand-300"
-                  : "w-4 bg-ta-gray-200"
-            }`}
-          />
-        ))}
-      </div>
+      {wizardMode === "otp" && (
+        <div className="mb-5 flex items-center justify-center gap-2">
+          {STEP_ORDER.map((s, i) => (
+            <span
+              key={s}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === stepIndex
+                  ? "w-8 bg-brand-500"
+                  : i < stepIndex
+                    ? "w-4 bg-brand-300"
+                    : "w-4 bg-ta-gray-200"
+              }`}
+            />
+          ))}
+        </div>
+      )}
 
       {step === "email" && (
-        <form className="space-y-4" onSubmit={sendOtp}>
+        <form className="space-y-4" onSubmit={submitEmail}>
           <div className="mb-2 flex flex-col items-center text-center">
             <img src="/lime-logo.webp" alt="LIME" className="mb-3 h-10 w-auto" />
             <h1 className="text-2xl font-bold tracking-tight text-ta-gray-900">Login Crew</h1>
@@ -587,17 +817,71 @@ export function CrewLoginFlow({
             autoFocus
           />
           {error && <Alert>{error}</Alert>}
+          {retryBlock}
           <button
             type="submit"
             disabled={busy || !canSubmitEmail || sendSecsLeft > 0}
             className={bigButton(canSubmitEmail)}
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
-            {busy ? "Memproses..." : sendSecsLeft > 0 ? `Tunggu ${sendSecsLeft} dtk` : "Kirim Kode"}
+            {busy ? "Memproses..." : sendSecsLeft > 0 ? `Tunggu ${sendSecsLeft} dtk` : "Lanjut"}
           </button>
           <p className="text-center text-xs text-ta-gray-400">
             Sudah punya akun? kode dikirim ke email Anda
           </p>
+        </form>
+      )}
+
+      {step === "password" && (
+        <form className="space-y-4" onSubmit={submitPassword}>
+          <button
+            type="button"
+            onClick={() => {
+              setStep("email");
+              setWizardMode(null);
+              setError("");
+            }}
+            className={secondary}
+          >
+            <ArrowLeft className="size-3.5" /> Ganti email
+          </button>
+          <div className="mb-2 flex flex-col items-center text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-ta-gray-900">Masuk</h1>
+            <p className="mt-1 text-sm text-ta-gray-500">{email.trim()}</p>
+          </div>
+          <IconField
+            icon={Unlock}
+            id="crew-password"
+            aria-label="Password"
+            type={showPw ? "text" : "password"}
+            value={pw1}
+            onChange={(event) => setPw1(event.target.value)}
+            placeholder="Password kamu"
+            autoComplete="current-password"
+            required
+            autoFocus
+            trailing={eyeToggle}
+          />
+          {error && <Alert>{error}</Alert>}
+          {retryBlock}
+          {badPassword && (
+            <button
+              type="button"
+              disabled={busy || Date.now() < sendUntil}
+              onClick={() => {
+                setBusy(true);
+                setError("");
+                void sendOtpRoundtrip();
+              }}
+              className={`${secondary} mx-auto flex`}
+            >
+              Belum bisa masuk? Kirim kode email
+            </button>
+          )}
+          <button type="submit" disabled={busy || !pw1} className={bigButton(pw1.length > 0)}>
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {busy ? "Memproses..." : "Masuk"}
+          </button>
         </form>
       )}
 
@@ -632,6 +916,7 @@ export function CrewLoginFlow({
             className="text-center text-lg font-black tracking-[0.4em]"
           />
           {error && <Alert>{error}</Alert>}
+          {retryBlock}
           {error === OTP_EMAIL_BAD && (
             <button
               type="button"
@@ -653,11 +938,53 @@ export function CrewLoginFlow({
           )}
           <button
             type="submit"
+            aria-label="Verifikasi"
             disabled={busy || otp.length !== 6}
             className={bigButton(otp.length === 6)}
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
             {busy ? "Memproses..." : "Verifikasi"}
+          </button>
+        </form>
+      )}
+
+      {step === "setPassword" && (
+        <form className="space-y-4" onSubmit={submitSetPassword}>
+          <div className="mb-2 flex flex-col items-center text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-ta-gray-900">Buat Password</h1>
+            <p className="mt-1 text-sm text-ta-gray-500">
+              Password dipakai untuk login berikutnya, tanpa kode email.
+            </p>
+          </div>
+          <IconField
+            icon={Unlock}
+            id="crew-new-password"
+            aria-label="Password baru"
+            type={showPw ? "text" : "password"}
+            value={pw1}
+            onChange={(event) => setPw1(event.target.value)}
+            placeholder="Minimal 6 karakter"
+            autoComplete="new-password"
+            required
+            autoFocus
+            trailing={eyeToggle}
+          />
+          <IconField
+            icon={Unlock}
+            id="crew-repeat-password"
+            aria-label="Ulangi password"
+            type={showPw ? "text" : "password"}
+            value={pw2}
+            onChange={(event) => setPw2(event.target.value)}
+            placeholder="Ulangi password"
+            autoComplete="new-password"
+            required
+          />
+          {error && <Alert>{error}</Alert>}
+          {retryBlock}
+          <button type="submit" disabled={busy} className={busy ? disabledButton : primary}>
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {busy ? "Menyimpan..." : "Simpan Password"}
           </button>
         </form>
       )}
@@ -698,6 +1025,7 @@ export function CrewLoginFlow({
               required
             />
             {error && <Alert>{error}</Alert>}
+            {retryBlock}
             <button
               type="submit"
               disabled={busy || !restoCode.trim()}
@@ -735,6 +1063,7 @@ export function CrewLoginFlow({
             </p>
           )}
           {error && <Alert>{error}</Alert>}
+          {retryBlock}
           {pairingStale ? (
             <>
               <Alert>{PAIR_STALE}</Alert>
@@ -749,40 +1078,33 @@ export function CrewLoginFlow({
               </button>
             </>
           ) : (
-            <>
-              {!showPairingOtp && (
-                <button type="button" onClick={() => setShowPairingOtp(true)} className={primary}>
-                  Sudah punya kode? Masukkan
-                </button>
-              )}
-              {showPairingOtp && (
-                <form className="space-y-4" onSubmit={confirmPairing}>
-                  <IconField
-                    icon={ShieldCheck}
-                    id="pairing-otp"
-                    aria-label="Kode pairing"
-                    value={otp}
-                    onChange={(event) => setOtp(onlyDigits(event.target.value, 6))}
-                    placeholder="000000"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    required
-                    autoFocus
-                    className="text-center text-lg font-black tracking-[0.4em]"
-                  />
-                  <button
-                    type="submit"
-                    disabled={busy || otp.length !== 6}
-                    className={bigButton(otp.length === 6)}
-                  >
-                    {busy && <Loader2 className="size-4 animate-spin" />}
-                    {busy ? "Memproses..." : "Register Device"}
-                  </button>
-                </form>
-              )}
-            </>
+            // Poin 6.1: the code form is ALWAYS visible (no "Sudah punya kode?"
+            // reveal dance) and bound to its own empty field.
+            <form className="space-y-4" onSubmit={confirmPairing}>
+              <IconField
+                icon={ShieldCheck}
+                id="pairing-otp"
+                aria-label="Kode dari Manager"
+                value={otpPairing}
+                onChange={(event) => setOtpPairing(onlyDigits(event.target.value, 6))}
+                placeholder="000000"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                autoComplete="one-time-code"
+                maxLength={6}
+                required
+                autoFocus
+                className="text-center text-lg font-black tracking-[0.4em]"
+              />
+              <button
+                type="submit"
+                disabled={busy || otpPairing.length !== 6}
+                className={bigButton(otpPairing.length === 6)}
+              >
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                {busy ? "Memproses..." : "Register Device"}
+              </button>
+            </form>
           )}
         </div>
       )}
@@ -829,6 +1151,7 @@ export function CrewLoginFlow({
             })}
           </div>
           {error && <Alert>{error}</Alert>}
+          {retryBlock}
           <form onSubmit={claimShift}>
             <button type="submit" disabled={busy || !role} className={bigButton(Boolean(role))}>
               {busy ? (

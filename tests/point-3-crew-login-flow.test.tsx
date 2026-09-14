@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+const crewLoginMethod = vi.fn();
 const crewMe = vi.fn();
 const crewValidateCode = vi.fn();
 const crewRequestPairing = vi.fn();
@@ -13,11 +14,15 @@ const crewConfirmPairing = vi.fn();
 const crewClaimShift = vi.fn();
 const crewSignInWithOtp = vi.fn();
 const crewVerifyOtp = vi.fn();
+const crewSignInWithPassword = vi.fn();
+const crewSetPassword = vi.fn();
 const refreshCarrierToken = vi.fn();
 const getDeviceToken = vi.fn();
 const crewSignOut = vi.fn();
 
+vi.mock("sonner", () => ({ toast: { success: () => {} } }));
 vi.mock("@/lib/crew-auth.server", () => ({
+  crewLoginMethod: (a: unknown) => crewLoginMethod(a),
   crewMe: (a: unknown) => crewMe(a),
   crewValidateCode: (a: unknown) => crewValidateCode(a),
   crewRequestPairing: (a: unknown) => crewRequestPairing(a),
@@ -27,6 +32,9 @@ vi.mock("@/lib/crew-auth.server", () => ({
 vi.mock("@/lib/browser-auth", () => ({
   crewSignInWithOtp: (email: string) => crewSignInWithOtp(email),
   crewVerifyOtp: (email: string, otp: string) => crewVerifyOtp(email, otp),
+  crewSignInWithPassword: (email: string, password: string) =>
+    crewSignInWithPassword(email, password),
+  crewSetPassword: (password: string) => crewSetPassword(password),
   crewSignOut: () => crewSignOut(),
   refreshCarrierToken: () => refreshCarrierToken(),
   getDeviceToken: () => getDeviceToken(),
@@ -81,6 +89,7 @@ function renderFlow(resendCooldownMs = 0) {
       onSsContinue={onSsContinue}
       onRoleContinue={onRoleContinue}
       resendCooldownMs={resendCooldownMs}
+      sessionRetryMs={0}
     />,
   );
   return { onSsContinue, onRoleContinue };
@@ -94,11 +103,22 @@ async function submitField(label: string, value: string, buttonName: RegExp) {
   await waitFor(() => expect(screen.queryByText("Memproses...")).toBeNull());
 }
 
+// Poin 6.1: every successful email-OTP verify now lands on the mandatory
+// "Buat Password" gate BEFORE routing; helpers cross it on the way to resto.
+async function passSetPasswordGate() {
+  await waitFor(() => expect(screen.getByLabelText(/password baru/i)).toBeInTheDocument());
+  fireEvent.change(screen.getByLabelText(/password baru/i), { target: { value: "rahasia1" } });
+  fireEvent.change(screen.getByLabelText(/ulangi password/i), { target: { value: "rahasia1" } });
+  fireEvent.click(screen.getByRole("button", { name: /simpan password/i }));
+  await waitFor(() => expect(screen.queryByText("Menyimpan...")).toBeNull());
+}
+
 beforeEach(() => {
   // Module-level vi.fn mocks PERSIST across tests: reset first, then re-pin
   // defaults (leftover Once-queues/implementations from the previous test are
   // exactly the isolation bug this guards).
   for (const fn of [
+    crewLoginMethod,
     crewMe,
     crewValidateCode,
     crewRequestPairing,
@@ -106,6 +126,8 @@ beforeEach(() => {
     crewClaimShift,
     crewSignInWithOtp,
     crewVerifyOtp,
+    crewSignInWithPassword,
+    crewSetPassword,
     crewSignOut,
     refreshCarrierToken,
     getDeviceToken,
@@ -116,9 +138,12 @@ beforeEach(() => {
   // email step anyway; post-verify calls reuse the same fake for accessToken
   // forwarding assertions.
   refreshCarrierToken.mockResolvedValue("crew-jwt");
+  crewLoginMethod.mockResolvedValue({ ok: true, method: "otp" });
   crewMe.mockResolvedValue(okMe());
   crewSignInWithOtp.mockResolvedValue({ ok: true });
   crewVerifyOtp.mockResolvedValue({ ok: true });
+  crewSignInWithPassword.mockResolvedValue({ ok: true });
+  crewSetPassword.mockResolvedValue({ ok: true });
   crewSignOut.mockResolvedValue({ ok: true });
   crewValidateCode.mockResolvedValue({ ok: true, restaurantId: REST, displayName: "RMuji" });
   crewRequestPairing.mockResolvedValue({ ok: true, requestId: REQUEST_ID });
@@ -135,7 +160,7 @@ describe("boot", () => {
   it("unpaired session / no session -> email step; empty email cannot send", async () => {
     renderFlow();
     expect(await screen.findByLabelText(/email/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /kirim kode/i }));
+    fireEvent.click(screen.getByRole("button", { name: /lanjut/i }));
     expect(crewSignInWithOtp).not.toHaveBeenCalled();
     expect(screen.getByLabelText(/email/i).hasAttribute("required")).toBe(true);
   });
@@ -222,7 +247,7 @@ describe("Keluar akun (spec §12#5 shared-tablet escape)", () => {
 describe("email + otp screens", () => {
   it("send -> otp screen echoes the email; otp error shows the §7 message + resend", async () => {
     renderFlow();
-    await submitField("Email", EMAIL, /kirim kode/i);
+    await submitField("Email", EMAIL, /lanjut/i);
     expect(crewSignInWithOtp).toHaveBeenCalledWith(EMAIL);
     expect(await screen.findByText(EMAIL)).toBeTruthy();
 
@@ -242,21 +267,21 @@ describe("email + otp screens", () => {
   it("provider failure on send maps to the §7 login-disabled message", async () => {
     crewSignInWithOtp.mockResolvedValue({ ok: false, code: "UNAVAILABLE" });
     renderFlow();
-    await submitField("Email", EMAIL, /kirim kode/i);
+    await submitField("Email", EMAIL, /lanjut/i);
     expect(await screen.findByText("Sistem login sedang dimatikan. Hubungi Manager.")).toBeTruthy();
   });
 
   it("GoTrue 429 rate-limit on send gets the slow-down copy, not the disabled message", async () => {
     crewSignInWithOtp.mockResolvedValue({ ok: false, code: "RATE_LIMITED" });
     renderFlow();
-    await submitField("Email", EMAIL, /kirim kode/i);
+    await submitField("Email", EMAIL, /lanjut/i);
     expect(await screen.findByText(/terlalu sering meminta kode/i)).toBeTruthy();
     expect(screen.queryByText("Sistem login sedang dimatikan. Hubungi Manager.")).toBeNull();
   });
 
   it("30s cooldown: after a successful send the same email cannot knock again (double-send guard)", async () => {
     renderFlow(30_000);
-    await submitField("Email", EMAIL, /kirim kode/i);
+    await submitField("Email", EMAIL, /lanjut/i);
     // First send landed on the otp screen; go back via "Ganti email" (mirrors
     // the pajarhidayat 1.8s double-tap path) and try to knock again.
     fireEvent.click(screen.getByRole("button", { name: /ganti email/i }));
@@ -268,34 +293,41 @@ describe("email + otp screens", () => {
 
   it("expired cooldown re-arms the submit button", async () => {
     renderFlow(300);
-    await submitField("Email", EMAIL, /kirim kode/i);
+    await submitField("Email", EMAIL, /lanjut/i);
     fireEvent.click(screen.getByRole("button", { name: /ganti email/i }));
     await screen.findByRole("button", { name: /tunggu \d+ dtk/i });
     await waitFor(
-      () => expect(screen.getByRole("button", { name: /kirim kode/i }).disabled).toBe(false),
+      () => expect(screen.getByRole("button", { name: /lanjut/i }).disabled).toBe(false),
       { timeout: 3000 },
     );
-    fireEvent.click(screen.getByRole("button", { name: /kirim kode/i }));
+    fireEvent.click(screen.getByRole("button", { name: /lanjut/i }));
     await waitFor(() => expect(crewSignInWithOtp).toHaveBeenCalledTimes(2));
   });
 
-  it("verify keeps busy pinned through routeSession; a second submit cannot re-enter", async () => {
+  // Poin 6.1: verify no longer routes — the mandatory "Buat Password" gate is
+  // the routing hop now. Same contract, moved one screen down: busy stays
+  // pinned across routeSession, a second submit cannot re-enter.
+  it("gate routing keeps busy pinned; a second submit cannot re-enter", async () => {
     renderFlow();
-    await submitField("Email", EMAIL, /kirim kode/i);
-    // Hang routeSession's crewMe (post-boot => the verify call) to expose the
-    // interactive window the busy-through-resolve fix is meant to close.
-    let releaseMe: (v: unknown) => void = () => {};
-    crewMe.mockImplementationOnce(() => new Promise((r) => (releaseMe = r)));
+    await submitField("Email", EMAIL, /lanjut/i);
     fireEvent.change(screen.getByLabelText(/kode email/i), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /verifikasi/i }));
+    await screen.findByLabelText(/password baru/i);
+    // Hang routeSession's crewMe to expose the interactive window the
+    // busy-through-resolve fix is meant to close.
+    let releaseMe: (v: unknown) => void = () => {};
+    crewMe.mockImplementationOnce(() => new Promise((r) => (releaseMe = r)));
+    fireEvent.change(screen.getByLabelText(/password baru/i), { target: { value: "rahasia1" } });
+    fireEvent.change(screen.getByLabelText(/ulangi password/i), { target: { value: "rahasia1" } });
+    fireEvent.click(screen.getByRole("button", { name: /simpan password/i }));
 
     // crewMe is still in flight yet busy never dropped: spinner persists, so the
     // submit button is NOT re-enabled mid-route (the bug before the fix).
-    expect(await screen.findByText("Memproses...")).toBeTruthy();
+    expect(await screen.findByText("Menyimpan...")).toBeTruthy();
     // second submit during the in-flight hop
-    fireEvent.click(screen.getByRole("button", { name: /memproses/i }));
+    fireEvent.click(screen.getByRole("button", { name: /menyimpan/i }));
     expect(crewVerifyOtp).toHaveBeenCalledTimes(1);
-    // boot + one verify route = exactly two crewMe probes, no re-entry
+    // boot + one gate route = exactly two crewMe probes, no re-entry
     expect(crewMe).toHaveBeenCalledTimes(2);
 
     releaseMe(pairedMe());
@@ -304,11 +336,16 @@ describe("email + otp screens", () => {
 
   it("a token lost AFTER verification shows the unified SESSION_LOST copy, not PROVIDER_DOWN", async () => {
     renderFlow();
-    await submitField("Email", EMAIL, /kirim kode/i);
-    // boot used the blanket token; now the carrier JWT is gone before verify routes
+    await submitField("Email", EMAIL, /lanjut/i);
+    // boot used the blanket token; now the carrier JWT is gone before the
+    // gate's routeSession hop (Poin 6.1: verify alone no longer consumes it)
     refreshCarrierToken.mockResolvedValue(null);
     fireEvent.change(screen.getByLabelText(/kode email/i), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /verifikasi/i }));
+    await screen.findByLabelText(/password baru/i);
+    fireEvent.change(screen.getByLabelText(/password baru/i), { target: { value: "rahasia1" } });
+    fireEvent.change(screen.getByLabelText(/ulangi password/i), { target: { value: "rahasia1" } });
+    fireEvent.click(screen.getByRole("button", { name: /simpan password/i }));
     expect(await screen.findByText("Sesi login berakhir. Kirim kode lagi.")).toBeTruthy();
     expect(screen.queryByText("Sistem login sedang dimatikan. Hubungi Manager.")).toBeNull();
   });
@@ -317,9 +354,10 @@ describe("email + otp screens", () => {
     refreshCarrierToken.mockResolvedValue("crew-jwt");
     crewMe.mockResolvedValueOnce(okMe({ paired: false })).mockResolvedValueOnce(pairedMe());
     renderFlow();
-    await submitField("Email", EMAIL, /kirim kode/i);
+    await submitField("Email", EMAIL, /lanjut/i);
     fireEvent.change(screen.getByLabelText(/kode/i), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /verifikasi/i }));
+    await passSetPasswordGate();
     expect(await screen.findByRole("button", { name: /^masuk$/i })).toBeTruthy();
     expect(crewValidateCode).not.toHaveBeenCalled();
   });
@@ -328,9 +366,11 @@ describe("email + otp screens", () => {
 describe("resto -> waiting -> pairing -> checkin happy path", () => {
   async function toResto() {
     const handlers = renderFlow();
-    await submitField("Email", EMAIL, /kirim kode/i);
+    await submitField("Email", EMAIL, /lanjut/i);
     fireEvent.change(screen.getByLabelText(/kode/i), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /verifikasi/i }));
+    // Poin 6.1: the mandatory gate sits between a verified OTP and resto.
+    await passSetPasswordGate();
     await screen.findByLabelText(/nama/i);
     return handlers;
   }
@@ -423,7 +463,8 @@ describe("resto -> waiting -> pairing -> checkin happy path", () => {
     fireEvent.click(screen.getByRole("button", { name: /lanjutkan/i }));
     await screen.findByText("Hubungi Manager untuk mendapatkan kode aktifasi");
 
-    fireEvent.click(screen.getByRole("button", { name: /sudah punya kode/i }));
+    // Poin 6.1: the manager-code field is ALWAYS visible on waiting (the
+    // "Sudah punya kode?" reveal dance is gone); it carries its own state.
     crewConfirmPairing
       .mockResolvedValueOnce({
         ok: false,
@@ -459,10 +500,16 @@ describe("resto -> waiting -> pairing -> checkin happy path", () => {
     renderFlow();
     await flush();
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: EMAIL } });
-    fireEvent.click(screen.getByRole("button", { name: /kirim kode/i }));
+    fireEvent.click(screen.getByRole("button", { name: /lanjut/i }));
     await flush();
     fireEvent.change(screen.getByLabelText(/kode email/i), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /verifikasi/i }));
+    await flush();
+    // Poin 6.1: cross the mandatory "Buat Password" gate (sessionRetryMs=0,
+    // so the routing hop needs no timer; a plain flush settles it).
+    fireEvent.change(screen.getByLabelText(/password baru/i), { target: { value: "rahasia1" } });
+    fireEvent.change(screen.getByLabelText(/ulangi password/i), { target: { value: "rahasia1" } });
+    fireEvent.click(screen.getByRole("button", { name: /simpan password/i }));
     await flush();
     fireEvent.change(screen.getByLabelText(/nama/i), { target: { value: "Budi" } });
     fireEvent.change(screen.getByLabelText(/kode resto/i), { target: { value: "RM01" } });
@@ -487,7 +534,7 @@ describe("resto -> waiting -> pairing -> checkin happy path", () => {
     await screen.findByText("RMuji");
     fireEvent.click(screen.getByRole("button", { name: /lanjutkan/i }));
     await screen.findByText("Hubungi Manager untuk mendapatkan kode aktifasi");
-    fireEvent.click(screen.getByRole("button", { name: /sudah punya kode/i }));
+    // Poin 6.1: no reveal click anymore — the pairing field is always shown.
     fireEvent.change(screen.getByLabelText(/kode/i), { target: { value: "123123" } });
     fireEvent.click(screen.getByRole("button", { name: /register device/i }));
     await screen.findByRole("button", { name: /^masuk$/i });
