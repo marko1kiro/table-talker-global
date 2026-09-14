@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createTableOccupancyRealtimeController,
+  IDLE_REFRESH_MS,
   POLL_FALLBACK_MS,
   REFETCH_RATE_LIMIT_MS,
   tableOccupancyChannelName,
@@ -86,6 +87,27 @@ function fakeVisibility(initiallyVisible = true) {
     unsubscribe,
     setVisible(next: boolean) {
       visible = next;
+      callback?.();
+    },
+  };
+}
+
+function fakeNet(initiallyOnline = true) {
+  let online = initiallyOnline;
+  let callback: (() => void) | null = null;
+  const net = {
+    isOnline: () => online,
+    subscribe: vi.fn((next: () => void) => {
+      callback = next;
+      return () => {
+        callback = null;
+      };
+    }),
+  };
+  return {
+    net,
+    setOnline(next: boolean) {
+      online = next;
       callback?.();
     },
   };
@@ -196,7 +218,7 @@ describe("createTableOccupancyRealtimeController", () => {
     }
   });
 
-  it("keeps light safety polling active even while SUBSCRIBED", () => {
+  it("polls at the 120-second idle cadence while healthy", () => {
     vi.useFakeTimers();
     try {
       const { client, channels } = fakeClient();
@@ -210,8 +232,11 @@ describe("createTableOccupancyRealtimeController", () => {
       const entry = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
 
       entry.emitStatus("SUBSCRIBED");
-      vi.advanceTimersByTime(POLL_FALLBACK_MS * 3);
-      expect(refetch).toHaveBeenCalledTimes(3);
+      vi.advanceTimersByTime(60_000);
+      expect(refetch).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(IDLE_REFRESH_MS - 60_000);
+      expect(refetch).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
@@ -352,7 +377,7 @@ describe("no-heartbeat architectural invariant", () => {
     vi.useRealTimers();
   });
 
-  it("never calls any RPC-like heartbeat while subscribed; only the light safety poll refetches", () => {
+  it("never calls any RPC-like heartbeat while subscribed; only the idle safety poll refetches", () => {
     const { client, channels } = fakeClient();
     const refetch = vi.fn();
     createTableOccupancyRealtimeController({
@@ -368,7 +393,7 @@ describe("no-heartbeat architectural invariant", () => {
 
     // Exactly one authorization bind is allowed; no periodic RPC is allowed.
     expect(client.rpc).toHaveBeenCalledTimes(1);
-    expect(refetch).toHaveBeenCalledTimes(5);
+    expect(refetch).toHaveBeenCalledTimes(0);
   });
 
   const hookSource = readFileSync(
@@ -385,6 +410,7 @@ describe("no-heartbeat architectural invariant", () => {
     expect(hookSource).toContain("visibilitychange");
     expect(hookSource).not.toContain("pagehide");
     expect(hookSource).not.toMatch(/\.subscribe\([^)]*visibility/i);
+    expect(hookSource).not.toMatch(/setStatus\("SUBSCRIBED"/);
   });
 
   it("uses broadcast/invalidate events, not postgres_changes", () => {
@@ -421,6 +447,13 @@ describe("useTableOccupancyRealtime hook source contract", () => {
     const block = hookSource.slice(start);
     expect(block).toContain("revisionRef.current = revision");
     expect(block).toContain("getCurrentRevision: () => revisionRef.current");
+  });
+
+  it("contains no fabricated SUBSCRIBED fallback timer", () => {
+    const start = hookSource.indexOf("export function useTableOccupancyRealtime");
+    const block = hookSource.slice(start);
+    expect(block).not.toContain("setTimeout");
+    expect(block).not.toContain("force SUBSCRIBED");
   });
 });
 
@@ -485,5 +518,113 @@ describe("occupancy notice emission", () => {
     });
     channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitInvalidate(7);
     expect(onNotice).not.toHaveBeenCalled();
+  });
+});
+
+describe("Poin 6 reconnect contract", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("never reports SUBSCRIBED without a real channel callback", () => {
+    const { client } = fakeClient();
+    const onStatusChange = vi.fn();
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch: vi.fn(),
+      onStatusChange,
+    });
+    vi.advanceTimersByTime(300_000);
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
+  it("resubscribes with exponential backoff after status errors, capped at 60s", () => {
+    const { client, channels } = fakeClient();
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch: vi.fn(),
+    });
+    expect(client.channel).toHaveBeenCalledTimes(1);
+
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitStatus("CHANNEL_ERROR");
+    vi.advanceTimersByTime(999);
+    expect(client.channel).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(client.channel).toHaveBeenCalledTimes(2);
+
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitStatus("TIMED_OUT");
+    vi.advanceTimersByTime(1_999);
+    expect(client.channel).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(1);
+    expect(client.channel).toHaveBeenCalledTimes(3);
+
+    // The third ladder rung would be 4s. A SUBSCRIBED verdict resets it: after
+    // error again the retry is due at +1s, not +4s.
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitStatus("SUBSCRIBED");
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitStatus("CHANNEL_ERROR");
+    vi.advanceTimersByTime(999);
+    expect(client.channel).toHaveBeenCalledTimes(3);
+    vi.advanceTimersByTime(1);
+    expect(client.channel).toHaveBeenCalledTimes(4);
+  });
+
+  it("drops the previous channel before each retry resubscribe", () => {
+    const { client, channels, removeChannel } = fakeClient();
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch: vi.fn(),
+    });
+    const first = channels.get(`table-occupancy:${RESTAURANT_ID}`)!;
+    first.emitStatus("CHANNEL_ERROR");
+    vi.advanceTimersByTime(1_000);
+    expect(removeChannel).toHaveBeenCalledWith(first.channel);
+  });
+
+  it("goes quiet while offline, then resubscribes immediately on the online transition", () => {
+    const { client, channels } = fakeClient();
+    const { net, setOnline } = fakeNet(true);
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch: vi.fn(),
+      net,
+    });
+    setOnline(false);
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitStatus("CLOSED");
+    vi.advanceTimersByTime(300_000);
+    expect(client.channel).toHaveBeenCalledTimes(1); // no retry ladder while offline
+
+    setOnline(true);
+    expect(client.channel).toHaveBeenCalledTimes(2); // immediate resubscribe, ladder reset
+    // and the next error starts from 1s again:
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitStatus("CHANNEL_ERROR");
+    vi.advanceTimersByTime(1_000);
+    expect(client.channel).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses the 12-second fallback cadence while unhealthy", () => {
+    const { client, channels } = fakeClient();
+    const refetch = vi.fn();
+    createTableOccupancyRealtimeController({
+      client,
+      restaurantId: RESTAURANT_ID,
+      sessionToken: SESSION_TOKEN,
+      refetch,
+    });
+    channels.get(`table-occupancy:${RESTAURANT_ID}`)!.emitStatus("CHANNEL_ERROR");
+    vi.advanceTimersByTime(POLL_FALLBACK_MS);
+    expect(refetch).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(POLL_FALLBACK_MS);
+    expect(refetch).toHaveBeenCalledTimes(2);
   });
 });

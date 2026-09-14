@@ -1,6 +1,9 @@
 // Shared role-UI infrastructure for Kasir/Satgas/Clear Up occupancy views.
 // Realtime is an invalidation hint only: snapshots remain authorized by the
-// role-session RPC, and visible pages keep the 12-second polling safety net.
+// role-session RPC. Status is the real channel callback -- never fabricated.
+// Visible pages poll at the idle refresh cadence while healthy (subscribed and
+// online) and fall back to the fast poll otherwise; the retry ladder re-opens
+// the session after channel errors and on every online transition.
 import { useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../lib/browser-auth";
 import { parseOccupancyBroadcast, type OccupancyBroadcast } from "../lib/occupancy-notice";
@@ -14,6 +17,9 @@ export type TableOccupancyRealtimeStatus =
 
 export const REFETCH_RATE_LIMIT_MS = 1_000;
 export const POLL_FALLBACK_MS = 12_000;
+export const IDLE_REFRESH_MS = 120_000;
+export const RETRY_BASE_MS = 1_000;
+export const RETRY_CAP_MS = 60_000;
 
 type BroadcastChannelLike = {
   on: (
@@ -54,6 +60,35 @@ function browserVisibilitySource(): VisibilitySource {
   };
 }
 
+export type NetworkSource = {
+  isOnline: () => boolean;
+  subscribe: (callback: () => void) => () => void;
+};
+
+const ALWAYS_ONLINE: NetworkSource = {
+  isOnline: () => true,
+  subscribe: () => () => undefined,
+};
+
+function browserNetworkSource(): NetworkSource {
+  if (typeof window === "undefined") return ALWAYS_ONLINE;
+  return {
+    isOnline: () => window.navigator.onLine,
+    subscribe: (callback) => {
+      window.addEventListener("online", callback);
+      window.addEventListener("offline", callback);
+      return () => {
+        window.removeEventListener("online", callback);
+        window.removeEventListener("offline", callback);
+      };
+    },
+  };
+}
+
+function backoffDelayMs(attempt: number): number {
+  return Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_CAP_MS);
+}
+
 export function tableOccupancyChannelName(restaurantId: string): string {
   return `table-occupancy:${restaurantId}`;
 }
@@ -76,6 +111,7 @@ export function createTableOccupancyRealtimeController({
   setIntervalFn = (handler: () => void, ms: number) => setInterval(handler, ms),
   clearIntervalFn = (handle: ReturnType<typeof setInterval>) => clearInterval(handle),
   visibility = ALWAYS_VISIBLE,
+  net = ALWAYS_ONLINE,
   selfRoleSessionId = null,
   onNotice,
   bindRpc = "bind_role_session_realtime",
@@ -90,14 +126,21 @@ export function createTableOccupancyRealtimeController({
   setIntervalFn?: (handler: () => void, ms: number) => ReturnType<typeof setInterval>;
   clearIntervalFn?: (handle: ReturnType<typeof setInterval>) => void;
   visibility?: VisibilitySource;
+  net?: NetworkSource;
   selfRoleSessionId?: string | null;
   onNotice?: (broadcast: OccupancyBroadcast) => void;
   bindRpc?: string;
 }): TableOccupancyRealtimeController {
   let lastRefetchAt = -Infinity;
   let pollHandle: ReturnType<typeof setInterval> | null = null;
+  let pollPeriodMs: number | null = null;
   let channel: BroadcastChannelLike | null = null;
   let disposed = false;
+  let currentStatus: TableOccupancyRealtimeStatus | null = null;
+  let online = net.isOnline();
+  let retryAttempt = 0;
+  let retryHandle: ReturnType<typeof setTimeout> | null = null;
+  let startSession: () => void = () => undefined;
 
   const rateLimitedRefetch = () => {
     if (disposed) return;
@@ -107,29 +150,79 @@ export function createTableOccupancyRealtimeController({
     refetch();
   };
 
+  const clearRetryTimer = () => {
+    if (retryHandle !== null) {
+      clearTimeout(retryHandle);
+      retryHandle = null;
+    }
+  };
+
+  const scheduleRetry = () => {
+    if (disposed || !online || retryHandle !== null) return;
+    const delay = backoffDelayMs(retryAttempt);
+    retryAttempt += 1;
+    retryHandle = setTimeout(() => {
+      retryHandle = null;
+      if (disposed) return;
+      startSession();
+    }, delay);
+  };
+
+  const healthy = () => online && currentStatus === "SUBSCRIBED";
+
   const startPolling = () => {
-    if (pollHandle || disposed) return;
+    if (pollHandle || disposed || !visibility.isVisible()) return;
+    const period = healthy() ? IDLE_REFRESH_MS : POLL_FALLBACK_MS;
+    pollPeriodMs = period;
     pollHandle = setIntervalFn(() => {
       if (!disposed && visibility.isVisible()) refetch();
-    }, POLL_FALLBACK_MS);
+    }, period);
   };
 
   const stopPolling = () => {
     if (!pollHandle) return;
     clearIntervalFn(pollHandle);
     pollHandle = null;
+    pollPeriodMs = null;
   };
 
   const syncPolling = () => {
+    if (pollHandle && pollPeriodMs !== (healthy() ? IDLE_REFRESH_MS : POLL_FALLBACK_MS)) {
+      stopPolling();
+    }
     if (!disposed && visibility.isVisible()) startPolling();
     else stopPolling();
   };
 
   const unsubscribeVisibility = visibility.subscribe(syncPolling);
 
+  const unsubscribeNet = net.subscribe(() => {
+    const nextOnline = net.isOnline();
+    if (nextOnline && !online) {
+      retryAttempt = 0;
+      clearRetryTimer();
+      startSession();
+    }
+    online = nextOnline;
+    if (!online) clearRetryTimer();
+    syncPolling();
+  });
+
   const handleStatus = (status: string) => {
     if (disposed) return;
-    onStatusChange?.(status as TableOccupancyRealtimeStatus);
+    currentStatus = status as TableOccupancyRealtimeStatus;
+    if (currentStatus === "SUBSCRIBED") {
+      retryAttempt = 0;
+      clearRetryTimer();
+    } else if (
+      currentStatus === "CHANNEL_ERROR" ||
+      currentStatus === "TIMED_OUT" ||
+      currentStatus === "CLOSED"
+    ) {
+      scheduleRetry();
+    }
+    onStatusChange?.(currentStatus);
+    syncPolling();
   };
 
   const handleInvalidate = (message: unknown) => {
@@ -158,6 +251,7 @@ export function createTableOccupancyRealtimeController({
 
   const subscribePrivate = () => {
     if (!client || disposed) return;
+    if (channel) client.removeChannel(channel);
     channel = client
       .channel(tableOccupancyChannelName(restaurantId), { config: { private: true } })
       .on("broadcast", { event: "invalidate" }, handleInvalidate)
@@ -177,39 +271,42 @@ export function createTableOccupancyRealtimeController({
       if (!disposed) handleStatus("CHANNEL_ERROR");
     };
 
-    const hasAuth =
-      "auth" in client &&
-      typeof (client as unknown as { auth?: { getSession?: () => Promise<unknown> } }).auth
-        ?.getSession === "function";
+    startSession = () => {
+      const hasAuth =
+        "auth" in client &&
+        typeof (client as unknown as { auth?: { getSession?: () => Promise<unknown> } }).auth
+          ?.getSession === "function";
 
-    const bindAfterAuth = () =>
-      client
-        .rpc(bindRpc, {
-          p_restaurant_id: restaurantId,
-          p_session_token: sessionToken,
-        })
-        .then(onRpcResult, onRpcReject);
+      const bindAfterAuth = () =>
+        client
+          .rpc(bindRpc, {
+            p_restaurant_id: restaurantId,
+            p_session_token: sessionToken,
+          })
+          .then(onRpcResult, onRpcReject);
 
-    if (hasAuth) {
-      void (client as unknown as { auth: { getSession: () => Promise<unknown> } }).auth
-        .getSession()
-        .then(
-          () => {
-            // Force-supply the JWT to the Realtime client so the channel join
-            // payload carries the access_token. Without this, the async
-            // setAuth inside connect() races against the join message.
-            const rt = (client as unknown as { realtime?: { setAuth?: () => Promise<void> } })
-              .realtime;
-            if (rt?.setAuth) {
-              return rt.setAuth().then(bindAfterAuth, bindAfterAuth);
-            }
-            return bindAfterAuth();
-          },
-          () => bindAfterAuth(),
-        );
-    } else {
-      void bindAfterAuth();
-    }
+      if (hasAuth) {
+        void (client as unknown as { auth: { getSession: () => Promise<unknown> } }).auth
+          .getSession()
+          .then(
+            () => {
+              // Force-supply the JWT to the Realtime client so the channel join
+              // payload carries the access_token. Without this, the async
+              // setAuth inside connect() races against the join message.
+              const rt = (client as unknown as { realtime?: { setAuth?: () => Promise<void> } })
+                .realtime;
+              if (rt?.setAuth) {
+                return rt.setAuth().then(bindAfterAuth, bindAfterAuth);
+              }
+              return bindAfterAuth();
+            },
+            () => bindAfterAuth(),
+          );
+      } else {
+        void bindAfterAuth();
+      }
+    };
+    startSession();
   } else {
     handleStatus("CHANNEL_ERROR");
   }
@@ -219,6 +316,8 @@ export function createTableOccupancyRealtimeController({
     dispose() {
       if (disposed) return;
       disposed = true;
+      clearRetryTimer();
+      unsubscribeNet();
       unsubscribeVisibility();
       stopPolling();
       if (channel && client) client.removeChannel(channel);
@@ -260,20 +359,13 @@ export function useTableOccupancyRealtime(
       getCurrentRevision: () => revisionRef.current,
       onStatusChange: setStatus,
       visibility: browserVisibilitySource(),
+      net: browserNetworkSource(),
       selfRoleSessionId: selfRoleSessionIdRef.current ?? null,
       onNotice: (broadcast) => onNoticeRef.current?.(broadcast),
       bindRpc: bindRpcRef.current,
     });
 
-    // Safety fallback: force SUBSCRIBED after 5s if callback never fires.
-    // The Realtime connection works (occupancy data updates via broadcast);
-    // this just ensures the status text disappears.
-    const fallback = setTimeout(() => {
-      setStatus((prev) => (prev === "SUBSCRIBING" ? "SUBSCRIBED" : prev));
-    }, 5_000);
-
     return () => {
-      clearTimeout(fallback);
       controller.dispose();
     };
   }, [restaurantId, sessionToken]);
