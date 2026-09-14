@@ -1,6 +1,6 @@
 // Poin 6 S1 contract: the Manager->Crew instruction feature must be GONE from
-// the browser bundle. Source-scan style (node env), like the client-asset guards
-// in tests/restaurant-login-build.test.ts.
+// src/ (source-scan bundle proxy; built-asset guards live in
+// tests/restaurant-login-build.test.ts).
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -17,11 +17,11 @@ function listSources(dir: string): string[] {
 }
 
 const FORBIDDEN = [
-  "@/lib/crew-instructions.server",
-  "@/lib/manager-instructions.server",
-  "@/lib/instruction-domain",
-  "@/hooks/use-pending-instructions",
-  "@/components/InstructionBanner",
+  "crew-instructions.server",
+  "manager-instructions.server",
+  "instruction-domain",
+  "use-pending-instructions",
+  "InstructionBanner",
   "KIRIM INSTRUKSI",
   "mgr-instr",
   "instruction-thread",
