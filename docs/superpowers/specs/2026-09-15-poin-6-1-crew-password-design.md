@@ -101,7 +101,7 @@ Tradeoff sadar: crew yang lagi input panjang bisa kehilangan draft saat memilih 
 ## 7. Testing (TDD; mesin transisi diuji murni)
 
 - `src/lib/crew-login-machine.ts` (baru): reducer murni `(step, event) → step + effect` untuk P1 di atas. `tests/crew-login-machine.test.ts` — semua jalur: mode=password/otp, lupa-password, wajib setPassword, retry in-place vs buangan sesi, guard busy.
-- Komponen (`tests/crew-login-flow*.test.ts`): field pairing mulai kosong meski otpEmail terisi; tidak ada tombol "Sudah punya kode"; submit disable saat busy; Enter submit.
+- Komponen (perluas `tests/point-3-crew-login-flow.test.tsx` + `tests/crew-login-code.test.ts` yang sudah ada): field pairing mulai kosong meski otpEmail terisi; tidak ada tombol "Sudah punya kode"; submit disable saat busy; Enter submit.
 - Server fn `crewLoginMethod`: mock rpc — throttle, fail-closed, normalisasi email, dua nilai method.
 - `tests/db/point-6-1-crew-password.test.ts`: `crew_auth_method` ada, SECURITY DEFINER, grant hanya service_role, verdict password/otp benar; nol objek yang di-drop (post-check aset).
 - Guard build: `version.json` ter-generate dengan placeholder dev; `Toaster` ter-mount; tidak ada route `/auth/callback` magic link.
