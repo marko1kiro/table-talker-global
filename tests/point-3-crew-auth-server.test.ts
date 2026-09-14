@@ -595,6 +595,11 @@ describe("crew-auth.server.ts source contract", () => {
     const text = source();
     expect(text).toContain("getAnonAuthedSupabaseClient");
     expect(text).toContain('createServerFn({ method: "POST" })');
-    expect(text).not.toContain("getServiceClient");
+    // Poin 3's anon-authed fns must never touch service_role; Poin 6.1's
+    // crewLoginMethod is the sanctioned exception and may only reach
+    // getServiceClient via a dynamic import inside its handler (a static
+    // top-level import would leak the service client into the client graph).
+    expect(text).not.toMatch(/^import\s.*getServiceClient/m);
+    expect(text).toContain('await import("./remote-audio.server")');
   });
 });
