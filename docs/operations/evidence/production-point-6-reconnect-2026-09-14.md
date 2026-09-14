@@ -47,11 +47,11 @@ Baris commit: `ed7e7ee` plan docs · `4602b9e`+`a22bb5a` S1 frontend+guard · `b
 - Realtime 24 jam tetap bergantung retry internal supabase-js di atas jaring baru (dokumentasi spec §3.3).
 - SS flush + validasi akses (30 dtk) masih invokasi server — target invokasi akhir lebih dekat batas atas 1-1,5jt/bln; revisit kalau Usage page minta.
 
-## 6. PENDING / handoff
+## 6. T3 + field test (update 14 Sep ±20:1x WIB)
 
-- **T3 (umur token GoTrue / `jwt_exp`): BELUM dieksekusi** — kredensial Management API (PAT `sbp_…`) tidak tersimpan di mesin ini. Jalur: set env user `SUPABASE_ACCESS_TOKEN` lalu leader jalankan GET → PATCH flat (satu field umur token) → GET verify (runbook 429 Poin 3), ATAU pemilik ubah manual Dashboard. Nol urgensi: konektivitas malam sudah beres via Task 3+4.
-- **Field test pemilik (penutup DONE, spec §3.4.5):** (1) buka tab SS/kasir, (2) cabut router resto ±2 menit → banner "Menunggu koneksi realtime" MUNCUL jujur (dulu tidak pernah), (3) colok lagi → TANPA menyentuh tab: data fresh ≤12 dtk lalu berhenti ke ritme 120 dtk saat socket sehat; bell hidup lagi. (4) biarkan semalaman → pagi tetap real-time. Laporkan hasil ke leader.
+- **T3 EKSEKUSI:** Management API `PATCH /v1/projects/kjzxtmxdbcanvkgqqdow/config/auth` body flat `{"jwt_exp":28800}`. Diff: `jwt_exp` **3600 → 28800** (GET balik = 28800 ✔). Hanya token BARU terdampak; `live_tokens` tak berubah pasca-patch (role session 9 jam + device pin + Cabut sesi tetap mengunci jendela aksi — risiko tercatat spec §5). Prosedur sama insiden 429 (runbook Poin 3); PAT dibaca dari env user, tidak pernah dicetak.
+- **Field test pemilik (penutup DONE, spec §3.4.5):** (1) buka tab SS/kasir, (2) cabut router resto ±2 menit → banner "Menunggu koneksi realtime" MUNCUL jujur (dulu tidak pernah), (3) colok lagi → TANPA menyentuh tab: data fresh ≤12 dtk lalu berhenti ke ritme 120 dtk saat socket sehat; bell hidup lagi. (4) biarkan semalaman → pagi tetap real-time; login ulang pagi (token basi 1 jam) tidak boleh terjadi lagi (T3).
 
 ## 7. Verdict
 
-S1 ✔ (code+DB production), S2 ✔ (unit-terkontrak), S3 ✔ (terpasang di production `fb639dc`). CI hijau penuh di PR #31; production READY; sesi crew utuh (29→36 live tokens, 0 invalidasi); aset §2 utuh dengan bukti pre/post. Status Poin 6 = **SELESAI IMPLEMENTASI — menunggu field test pemilik + T3 (PAT)**.
+S1 ✔ (code+DB production), S2 ✔ (unit-terkontrak), S3 ✔ (terpasang di production `fb639dc`). CI hijau penuh di PR #31; production READY; sesi crew utuh (29→36 live tokens, 0 invalidasi); aset §2 utuh dengan bukti pre/post. Status Poin 6 = **SELESAI IMPLEMENTASI + T3 mendarat — menunggu field test pemilik** (satu-satunya penutup DONE).
