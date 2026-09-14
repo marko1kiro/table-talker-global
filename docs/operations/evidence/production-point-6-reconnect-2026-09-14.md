@@ -1,6 +1,6 @@
 # Evidence Poin 6 — Reconnect Jujur, Rampingkan Instruksi, Read Browser-Direct
 
-**Tanggal:** 14 September 2026 (hari-1 pilot CKRBUL) — merge ±17:45 WIB, deploy READY ±17:57 WIB, apply migration 17:50-18:00 WIB.
+**Tanggal:** 14 September 2026 (hari-1 pilot CKRBUL) — CI hijau 17:39 WIB, backup 17:59 WIB, apply migration ±19:12 WIB, merge ±19:16 WIB, deployment dibuat 19:17 WIB (READY ±19:18 WIB).
 **Spec:** `docs/superpowers/specs/2026-09-14-poin-6-reconnect-simplify-design.md` · **Plan:** `docs/superpowers/plans/2026-09-14-poin-6-reconnect-simplify.md`
 **Metodologi:** TDD per task (RED dilihat/direproduksi ulang scratch-checkout), reviewer spec → reviewer quality → audit independen leader (AGENTS). Gate = CI GitHub (Poin 4) — `npm run verify` lokal tidak menunggu penuh (Windows >30 menit; CI Linux ±2 menit 05 detik, command identik).
 
