@@ -87,7 +87,7 @@ export const crewValidateCode = createServerFn({ method: "POST" })
 
 export type CrewLoginMethodResult =
   | { ok: true; method: "password" | "otp" }
-  | { ok: false; code: "THROTTLED" | "UNAVAILABLE"; message?: string };
+  | { ok: false; code: "THROTTLED" | "UNAVAILABLE"; message: string };
 
 export const crewLoginMethodInputSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(254),

@@ -599,7 +599,10 @@ describe("crew-auth.server.ts source contract", () => {
     // crewLoginMethod is the sanctioned exception and may only reach
     // getServiceClient via a dynamic import inside its handler (a static
     // top-level import would leak the service client into the client graph).
-    expect(text).not.toMatch(/^import\s.*getServiceClient/m);
+    // multi-line static imports too (no `;` may sit between `import` and the
+    // symbol), while the sanctioned dynamic `await import(...)` form has no
+    // getServiceClient token before its semicolon and so stays unmatched.
+    expect(text).not.toMatch(/import\b[^;]*\bgetServiceClient\b/);
     expect(text).toContain('await import("./remote-audio.server")');
   });
 });
