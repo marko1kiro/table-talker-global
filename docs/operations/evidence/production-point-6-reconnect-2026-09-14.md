@@ -52,6 +52,15 @@ Baris commit: `ed7e7ee` plan docs · `4602b9e`+`a22bb5a` S1 frontend+guard · `b
 - **T3 EKSEKUSI:** Management API `PATCH /v1/projects/kjzxtmxdbcanvkgqqdow/config/auth` body flat `{"jwt_exp":28800}`. Diff: `jwt_exp` **3600 → 28800** (GET balik = 28800 ✔). Hanya token BARU terdampak; `live_tokens` tak berubah pasca-patch (role session 9 jam + device pin + Cabut sesi tetap mengunci jendela aksi — risiko tercatat spec §5). Prosedur sama insiden 429 (runbook Poin 3); PAT dibaca dari env user, tidak pernah dicetak.
 - **Field test pemilik (penutup DONE, spec §3.4.5):** (1) buka tab SS/kasir, (2) cabut router resto ±2 menit → banner "Menunggu koneksi realtime" MUNCUL jujur (dulu tidak pernah), (3) colok lagi → TANPA menyentuh tab: data fresh ≤12 dtk lalu berhenti ke ritme 120 dtk saat socket sehat; bell hidup lagi. (4) biarkan semalaman → pagi tetap real-time; login ulang pagi (token basi 1 jam) tidak boleh terjadi lagi (T3).
 
-## 7. Verdict
+## 7. Insiden login manager/super-admin pasca-deploy (update 14 Sep ±21:4x WIB)
+
+- **Simtom:** crew login normal; manager + super admin gagal dengan alert GENERIC "Login gagal. Periksa kembali ID dan password." Owner juga lihat console Vercel: `Server function info not found for 9a5cf8…` (hash server-fn build pra-deploy).
+- **Kronologi (UTC):** ±11:17Z deploy production `fb639dc` → 12:00:36Z PATCH T3 `jwt_exp` memicu reload GoTrue (jendela mati login ±10 mnt, pulih sendiri) → 13:05–13:10Z crew `/otp`+`/verify` 200 → 13:12:17Z `/token` manager 200 (loginStaff SUKSES) → 13:12:18Z error hash `9a5cf8…` dari tab lama. Percobaan-spam 20:0x–20:1x WIB mengisi bucket rate-limit.
+- **Root cause TERKONFIRMASI (tes pemilik: normal kembali setelah cooldown):** fail-closed rate-limit login owner/staff — window 15 menit, 5 kegagalan → `blocked_until +15 menit` (`supabase/migrations/20260823133000_global_login_rate_limit.sql:22-24`), dan reservasi per-attempt via RPC `reserve_owner_login_attempt` (`src/lib/owner-login-rate-limit.server.ts`). Saat bucket tertutup, kredensial benar pun dibalas `GENERIC_AUTH_FAILURE` — by design, bukan regresi Poin 6.
+- **Yang dieksklusi selama investigasi:** hash lama `9a5cf8…` TIDAK ada di seluruh asset terlayani (`index-CKRkHyh1.js` 39 hash, `login-Do19JmBj.js` 5, `manager-auth.server-CPrw7Yk-.js` 2 — semua hash build baru) → bukan mismatch build; `password_hash` manager 123123 & 411173 diverifikasi match (scrypt, `src/lib/manager-password.server.ts`) → bukan data rusak; sesi live 0 invalidasi.
+- **Efek samping error hash `9a5cf8…`:** khusus tab lama bundle pra-deploy yang masih terbuka — risiko sudah tercatat §5; hilang total saat reload.
+- **Penutup:** tidak ada perubahan kode/DB. Perilaku rate-limit dipertahankan (proteksi brute-force = fitur). Ops note: kalau muncul laporan "password bener tapi gagal" serentak pasca-insiden, cek `blocked_until` bucket dulu sebelum curiga deploy.
+
+## 8. Verdict
 
 S1 ✔ (code+DB production), S2 ✔ (unit-terkontrak), S3 ✔ (terpasang di production `fb639dc`). CI hijau penuh di PR #31; production READY; sesi crew utuh (29→36 live tokens, 0 invalidasi); aset §2 utuh dengan bukti pre/post. Status Poin 6 = **SELESAI IMPLEMENTASI + T3 mendarat — menunggu field test pemilik** (satu-satunya penutup DONE).
