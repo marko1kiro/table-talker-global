@@ -84,4 +84,12 @@ describe("crewSetPassword", () => {
       code: "UNAVAILABLE",
     });
   });
+
+  test("non-WEAK server error => UNAVAILABLE (never mislabeled WEAK)", async () => {
+    authStub.updateUser.mockResolvedValue(err(undefined, "Server went boom"));
+    await expect(crewSetPassword("rahasia1")).resolves.toEqual({
+      ok: false,
+      code: "UNAVAILABLE",
+    });
+  });
 });
