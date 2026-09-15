@@ -1,7 +1,14 @@
 "use client";
 
+// Poin 7: SyncDialog is the MODE DECIDER, not just a blocking sync gate. The
+// manifest fetch races a timeout; on fetch failure decideAudioStartup picks
+// the mode (offline + snapshot => silent offline handoff via onOfflineReady +
+// onSynced, first-ever => legacy blocking error). On fetch success the fresh
+// version is reported via onManifestFresh before sync starts.
+
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getRestaurantManifest } from "@/lib/restaurants.server";
+import { getRestaurantManifest, type ManifestItem } from "@/lib/restaurants.server";
+import { type AudioSnapshot, decideAudioStartup } from "@/lib/audio-manifest-store";
 import { captureError } from "@/lib/error-capture";
 import {
   type SyncProgress,
@@ -17,6 +24,10 @@ type SyncDialogProps = {
   tenantToken: string;
   onSynced: (audioIds: string[]) => void;
   onSessionInvalid: () => void;
+  fallbackSnapshot?: AudioSnapshot | null;
+  onOfflineReady?: (snapshot: AudioSnapshot) => void;
+  onManifestFresh?: (info: { version: number; items: ManifestItem[] }) => void;
+  manifestTimeoutMs?: number;
 };
 
 type SyncState =
@@ -35,6 +46,10 @@ export function SyncDialog({
   tenantToken,
   onSynced,
   onSessionInvalid,
+  fallbackSnapshot = null,
+  onOfflineReady,
+  onManifestFresh,
+  manifestTimeoutMs = 8000,
 }: SyncDialogProps) {
   const [state, setState] = useState<SyncState>({ phase: "idle" });
   const runGateRef = useRef(createSyncRunGate());
@@ -47,15 +62,34 @@ export function SyncDialog({
     [tenantToken],
   );
 
+  const handOfflineSnapshot = useCallback(
+    (snapshot: AudioSnapshot | null): snapshot is AudioSnapshot => {
+      if (decideAudioStartup({ snapshot, fetched: null }) !== "offline" || !snapshot) {
+        return false;
+      }
+      onOfflineReady?.(snapshot);
+      onSynced(snapshot.items.map(({ audioId }) => audioId));
+      return true;
+    },
+    [onOfflineReady, onSynced],
+  );
+
   const runSync = useCallback(async () => {
     const runId = runGateRef.current.start();
     setState({ phase: "fetching" });
 
+    let timeout: ReturnType<typeof setTimeout> | null = null;
     try {
-      const res = await getRestaurantManifest({ data: { restaurantId, tenantToken } });
+      const res = await Promise.race([
+        getRestaurantManifest({ data: { restaurantId, tenantToken } }),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error("manifest-timeout")), manifestTimeoutMs);
+        }),
+      ]);
 
       if (isOfflineResult(res)) {
         reportSyncError("SYNC_OFFLINE", res.message);
+        if (handOfflineSnapshot(fallbackSnapshot)) return;
         setState({
           phase: "error",
           message: "Tidak dapat terhubung ke server.",
@@ -93,6 +127,7 @@ export function SyncDialog({
         : res.manifest;
       if (manifest.length === 0) failedManifestRef.current = null;
       const syncItems = manifest.length > 0 ? manifest : res.manifest;
+      onManifestFresh?.({ version: res.version, items: res.manifest });
       setState({
         phase: "syncing",
         progress: { current: 0, total: syncItems.length, label: "Memulai..." },
@@ -130,6 +165,7 @@ export function SyncDialog({
           "SYNC_MANIFEST",
           error instanceof Error ? error.message : "Unknown sync error.",
         );
+        if (handOfflineSnapshot(fallbackSnapshot)) return;
         setState({
           phase: "error",
           message: "Terjadi kesalahan.",
@@ -137,8 +173,20 @@ export function SyncDialog({
           reportCode: "SYNC_MANIFEST",
         });
       }
+    } finally {
+      if (timeout !== null) clearTimeout(timeout);
     }
-  }, [onSessionInvalid, onSynced, reportSyncError, restaurantId, tenantToken]);
+  }, [
+    fallbackSnapshot,
+    handOfflineSnapshot,
+    manifestTimeoutMs,
+    onManifestFresh,
+    onSessionInvalid,
+    onSynced,
+    reportSyncError,
+    restaurantId,
+    tenantToken,
+  ]);
 
   useEffect(() => {
     const runGate = runGateRef.current;
