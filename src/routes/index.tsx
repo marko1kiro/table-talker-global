@@ -13,7 +13,17 @@ import {
   runIfPlaybackCurrent,
   unlockBundledAudio,
 } from "@/lib/audio";
-import { createCachedAudioUrlPool } from "@/lib/audio-sync";
+import { toast } from "sonner";
+import { createCachedAudioUrlPool, syncManifest } from "@/lib/audio-sync";
+import {
+  clearAudioSnapshot,
+  decideAudioStartup,
+  formatAudioAge,
+  loadAudioSnapshot,
+  saveAudioSnapshot,
+  snapshotFromFresh,
+} from "@/lib/audio-manifest-store";
+import { getRestaurantManifest, type ManifestItem } from "@/lib/restaurants.server";
 import { CrewLoginFlow } from "@/components/CrewLoginFlow";
 import { SyncDialog } from "@/components/SyncDialog";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
@@ -103,6 +113,19 @@ function SoundboardPage() {
   const accessValidationPromiseRef = useRef<Promise<void> | null>(null);
   const crewIdentityRef = useRef<CrewIdentity | null>(null);
   crewIdentityRef.current = crewIdentity;
+
+  // Poin 7 Task 3: silent stale re-sync + offline age. SyncDialog owns the
+  // first paint; afterwards this page re-probes on "online" and fills Profile.
+  const [audioOffline, setAudioOffline] = useState(false);
+  const [audioVersion, setAudioVersion] = useState<number | null>(null);
+  const [audioFetchedAt, setAudioFetchedAt] = useState<number | null>(null);
+  const [bgSync, setBgSync] = useState<{ current: number; total: number } | null>(null);
+  const [bgFailed, setBgFailed] = useState<string[]>([]);
+  const pendingFreshRef = useRef<{ version: number; items: ManifestItem[] } | null>(null);
+  const lastFreshRef = useRef<{ version: number; items: ManifestItem[] } | null>(null);
+  const lastRecheckRef = useRef(0);
+  const bgSyncRef = useRef(false);
+  const audioVersionRef = useRef<number | null>(null);
 
   const deviceIdRef = useRef(generateDeviceId());
 
@@ -196,12 +219,22 @@ function SoundboardPage() {
     if (identity) {
       await clearQueuedEvents(identity.tenantToken, identity.crewSessionId);
     }
+    if (identity?.restaurantId) clearAudioSnapshot(identity.restaurantId);
     setCrewIdentity(null);
     setAudioSynced(false);
     setAvailableAudioIds(new Set());
     setPlaying(null);
     setPaused(null);
     setLoading(null);
+    setAudioOffline(false);
+    audioVersionRef.current = null;
+    setAudioVersion(null);
+    setAudioFetchedAt(null);
+    bgSyncRef.current = false;
+    setBgSync(null);
+    setBgFailed([]);
+    pendingFreshRef.current = null;
+    lastFreshRef.current = null;
     setAccessError("Audio diblokir karena sesi resto tidak valid.");
   }, []);
 
@@ -227,9 +260,19 @@ function SoundboardPage() {
     if (identity) {
       await clearQueuedEvents(identity.tenantToken, identity.crewSessionId);
     }
+    if (identity?.restaurantId) clearAudioSnapshot(identity.restaurantId);
     setCrewIdentity(null);
     setAudioSynced(false);
     setAvailableAudioIds(new Set());
+    setAudioOffline(false);
+    audioVersionRef.current = null;
+    setAudioVersion(null);
+    setAudioFetchedAt(null);
+    bgSyncRef.current = false;
+    setBgSync(null);
+    setBgFailed([]);
+    pendingFreshRef.current = null;
+    lastFreshRef.current = null;
   }, []);
 
   const validateCrewAccessInBackground = useCallback(() => {
@@ -271,6 +314,109 @@ function SoundboardPage() {
 
     accessValidationPromiseRef.current = validation;
   }, [invalidateCrewSession]);
+
+  const fetchFreshManifest = useCallback(async (): Promise<{
+    version: number;
+    items: ManifestItem[];
+  } | null> => {
+    const identity = crewIdentityRef.current;
+    if (!identity?.restaurantId || !identity.tenantToken) return null;
+    try {
+      const res = await getRestaurantManifest({
+        data: { restaurantId: identity.restaurantId, tenantToken: identity.tenantToken },
+      });
+      if (!("ok" in res) || !res.ok || !res.manifest) return null;
+      const fresh = { version: res.version, items: res.manifest };
+      const prev = lastFreshRef.current;
+      if (!prev || fresh.version > prev.version) lastFreshRef.current = fresh;
+      return fresh;
+    } catch {
+      // Silent: background probes must never surface banners or toasts.
+      return null;
+    }
+  }, []);
+
+  const runBackgroundSync = useCallback(
+    async (items: ManifestItem[], fullFresh?: { version: number; items: ManifestItem[] }) => {
+      const identity = crewIdentityRef.current;
+      const fresh = fullFresh ?? lastFreshRef.current;
+      if (!identity?.restaurantId || !fresh || items.length === 0) return;
+      const prevVersion = audioVersionRef.current;
+      bgSyncRef.current = true;
+      setBgFailed([]);
+      setBgSync({ current: 0, total: items.length });
+      const result = await syncManifest(identity.restaurantId, items, (progress) =>
+        setBgSync({ current: progress.current, total: progress.total }),
+      );
+      bgSyncRef.current = false;
+      setBgSync(null);
+      if (!crewIdentityRef.current) return;
+      if (result.ok) {
+        const version = fresh.version;
+        const now = Date.now();
+        saveAudioSnapshot(snapshotFromFresh(identity.restaurantId, fresh, now));
+        audioVersionRef.current = version;
+        setAudioVersion(version);
+        setAudioFetchedAt(now);
+        setBgFailed([]);
+        setAvailableAudioIds(new Set(fresh.items.map((item) => item.audioId as AudioId)));
+        void getAudioUrlPool().preload(
+          identity.restaurantId,
+          fresh.items.map((item) => item.audioId),
+        );
+        if (prevVersion !== null && version > prevVersion) toast.success("Audio diperbarui");
+      } else {
+        setBgFailed(result.failedIds);
+      }
+    },
+    [getAudioUrlPool],
+  );
+
+  const recheckVersion = useCallback(async () => {
+    const identity = crewIdentityRef.current;
+    if (!identity?.restaurantId) return;
+    const fresh = await fetchFreshManifest();
+    if (!fresh) return;
+    const decision = decideAudioStartup({
+      snapshot: loadAudioSnapshot(identity.restaurantId),
+      fetched: { version: fresh.version },
+    });
+    if (decision !== "stale") return;
+    await runBackgroundSync(fresh.items, fresh);
+  }, [fetchFreshManifest, runBackgroundSync]);
+
+  const retryFailed = useCallback(async () => {
+    if (bgSyncRef.current || bgFailed.length === 0) return;
+    const fresh = await fetchFreshManifest();
+    if (!fresh) return;
+    const failed = new Set(bgFailed);
+    await runBackgroundSync(
+      fresh.items.filter((item) => failed.has(item.audioId)),
+      fresh,
+    );
+  }, [bgFailed, fetchFreshManifest, runBackgroundSync]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onOnline = () => {
+      if (!crewIdentityRef.current || !audioSynced || bgSyncRef.current) return;
+      const now = Date.now();
+      if (now - lastRecheckRef.current < 30_000) return;
+      lastRecheckRef.current = now;
+      void recheckVersion();
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [audioSynced, recheckVersion]);
+
+  const audioAge = audioFetchedAt !== null ? formatAudioAge(audioFetchedAt) : null;
+  const audioStatusText = audioOffline
+    ? audioAge
+      ? `Offline · ${audioAge}`
+      : "Offline"
+    : audioVersion !== null && audioAge
+      ? `v${audioVersion} · ${audioAge}`
+      : "Audio belum siap";
 
   const play = useCallback(
     async (id: number | AudioId) => {
@@ -474,10 +620,38 @@ function SoundboardPage() {
               <SyncDialog
                 restaurantId={crewIdentity.restaurantId}
                 tenantToken={crewIdentity.tenantToken}
+                fallbackSnapshot={
+                  crewIdentity.restaurantId ? loadAudioSnapshot(crewIdentity.restaurantId) : null
+                }
+                onManifestFresh={(info) => {
+                  pendingFreshRef.current = info;
+                  lastFreshRef.current = info;
+                }}
+                onOfflineReady={(snapshot) => {
+                  setAudioOffline(true);
+                  audioVersionRef.current = snapshot.catalogVersion;
+                  setAudioVersion(snapshot.catalogVersion);
+                  setAudioFetchedAt(snapshot.fetchedAt);
+                  setAudioSynced(true);
+                }}
                 onSynced={(audioIds) => {
                   setAvailableAudioIds(new Set(audioIds as AudioId[]));
                   setAudioSynced(true);
                   void getAudioUrlPool().preload(crewIdentity.restaurantId, audioIds);
+                  const pending = pendingFreshRef.current;
+                  bgSyncRef.current = false;
+                  setBgSync(null);
+                  setBgFailed([]);
+                  if (pending && crewIdentity.restaurantId) {
+                    saveAudioSnapshot(
+                      snapshotFromFresh(crewIdentity.restaurantId, pending, Date.now()),
+                    );
+                    pendingFreshRef.current = null;
+                    setAudioOffline(false);
+                    audioVersionRef.current = pending.version;
+                    setAudioVersion(pending.version);
+                    setAudioFetchedAt(Date.now());
+                  }
                 }}
                 onSessionInvalid={invalidateCrewSession}
               />
@@ -486,6 +660,20 @@ function SoundboardPage() {
               restaurantDisplayName={crewIdentity?.restaurantDisplayName}
               userName={crewIdentity?.displayName}
               onLogout={logout}
+              profileExtras={
+                <>
+                  <p className="truncate px-4 py-2 text-xs text-ta-gray-500 dark:text-ta-gray-400">
+                    {audioStatusText}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void recheckVersion()}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-semibold text-ta-gray-700 transition hover:bg-ta-gray-100 dark:text-ta-gray-300 dark:hover:bg-ta-gray-700"
+                  >
+                    Coba sambung lagi
+                  </button>
+                </>
+              }
             />
 
             <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
@@ -496,6 +684,20 @@ function SoundboardPage() {
                     Tap tombol untuk memanggil pelanggan mengambil pesanan.
                   </p>
                 </div>
+                {bgSync && (
+                  <span role="status" className="text-xs font-semibold text-ta-gray-500">
+                    Sync audio {bgSync.current}/{bgSync.total}
+                  </span>
+                )}
+                {!bgSync && bgFailed.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void retryFailed()}
+                    className="text-xs font-semibold text-ta-error"
+                  >
+                    {bgFailed.length} gagal — ketuk untuk ulangi
+                  </button>
+                )}
               </div>
 
               <SoundboardGrid

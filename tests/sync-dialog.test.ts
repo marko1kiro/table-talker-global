@@ -6,7 +6,8 @@ const component = () =>
 
 it("imports getRestaurantManifest and syncManifest", () => {
   const source = component();
-  expect(source).toContain("import { getRestaurantManifest }");
+  expect(source).toContain("getRestaurantManifest");
+  expect(source).toContain("@/lib/restaurants.server");
   expect(source).toContain("import {");
   expect(source).toContain("syncManifest");
 });
