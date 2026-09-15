@@ -161,11 +161,14 @@ export function SyncDialog({
       }
     } catch (error) {
       if (runGateRef.current.isCurrent(runId)) {
-        reportSyncError(
-          "SYNC_MANIFEST",
-          error instanceof Error ? error.message : "Unknown sync error.",
-        );
-        if (handOfflineSnapshot(fallbackSnapshot)) return;
+        const detail = error instanceof Error ? error.message : "Unknown sync error.";
+        if (
+          decideAudioStartup({ snapshot: fallbackSnapshot ?? null, fetched: null }) === "offline"
+        ) {
+          reportSyncError("SYNC_OFFLINE", detail);
+          if (handOfflineSnapshot(fallbackSnapshot)) return;
+        }
+        reportSyncError("SYNC_MANIFEST", detail);
         setState({
           phase: "error",
           message: "Terjadi kesalahan.",

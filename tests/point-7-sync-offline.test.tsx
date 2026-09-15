@@ -20,6 +20,7 @@ vi.mock("@/lib/audio-sync", () => ({
 }));
 vi.mock("@/lib/error-capture", () => ({ captureError: vi.fn(() => Promise.resolve()) }));
 
+import { captureError } from "@/lib/error-capture";
 import { SyncDialog } from "../src/components/SyncDialog";
 
 const SNAP = {
@@ -49,6 +50,7 @@ afterEach(() => {
   vi.useRealTimers();
   getRestaurantManifest.mockReset();
   syncManifest.mockReset();
+  vi.mocked(captureError).mockClear();
 });
 
 describe("offline fallback", () => {
@@ -74,6 +76,25 @@ describe("offline fallback", () => {
     expect(syncManifest).not.toHaveBeenCalled();
     expect(screen.queryByText("Sinkronisasi Gagal")).toBeNull();
     expect(onManifestFresh).not.toHaveBeenCalled();
+  });
+
+  it("fetch gagal (catch) + ada snapshot => telemetri SYNC_OFFLINE", async () => {
+    getRestaurantManifest.mockRejectedValue(new TypeError("offline"));
+    render(
+      <SyncDialog
+        restaurantId="resto-1"
+        tenantToken="tok"
+        fallbackSnapshot={SNAP}
+        onOfflineReady={vi.fn()}
+        onSynced={vi.fn()}
+        onSessionInvalid={vi.fn()}
+        manifestTimeoutMs={0}
+      />,
+    );
+    await waitFor(() => expect(captureError).toHaveBeenCalled());
+    const codes = vi.mocked(captureError).mock.calls.map((c) => c[0]?.reportCode);
+    expect(codes).toContain("SYNC_OFFLINE");
+    expect(codes).not.toContain("SYNC_MANIFEST");
   });
 
   it("fetch gagal + TANPA snapshot => error lama (blocking first-ever dipertahankan)", async () => {
