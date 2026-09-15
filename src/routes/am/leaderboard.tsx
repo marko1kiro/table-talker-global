@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChangePasswordDialog } from "@/components/dashboard/ChangePasswordDialog";
 import { TaCard } from "@/components/dashboard/ui";
 import { AmLayout } from "@/components/am/AmLayout";
 import {
   amChangeOwnPassword,
   amLogout,
-  amScope,
   getAmStatus,
   updateOwnAmProfile,
 } from "@/lib/area-manager.server";
@@ -16,31 +14,20 @@ import { EditProfileDialog } from "@/components/dashboard/EditProfileDialog";
 import { isOwnerQueryKey } from "@/lib/owner-query-cache";
 import { browserManagerStorage, removeManagerIdentity } from "@/lib/manager-session-identity";
 
-export const Route = createFileRoute("/am/")({
+export const Route = createFileRoute("/am/leaderboard")({
   loader: () => getAmStatus(),
   head: () => ({
-    meta: [{ title: "Area Manager - LIME" }, { name: "robots", content: "noindex" }],
+    meta: [{ title: "Leaderboard - Area Manager - LIME" }, { name: "robots", content: "noindex" }],
   }),
-  component: AreaManagerDashboard,
+  component: AmLeaderboardPage,
 });
 
-const NAV_CARDS = [
-  { to: "/am/meja", title: "Status Meja", desc: "Okupansi live per resto." },
-  { to: "/am/statistik", title: "Statistik", desc: "Served, peak, okupansi." },
-  { to: "/am/leaderboard", title: "Leaderboard", desc: "Peringkat resto per periode." },
-  { to: "/am/manager", title: "Manager Resto", desc: "Kelola Manager dalam scope." },
-  { to: "/am/password", title: "Password Request", desc: "Setujui/tolak reset password." },
-  { to: "/am/audit", title: "Audit Trail", desc: "Jejak pengelolaan Manager." },
-] as const;
-
-function AreaManagerDashboard() {
+function AmLeaderboardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const auth = Route.useLoaderData();
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
-
-  const scope = useQuery({ queryKey: ["am", "scope"], queryFn: () => amScope() });
 
   const changePassword = useMutation({
     mutationFn: (input: { oldPassword: string; newPassword: string }) =>
@@ -71,46 +58,18 @@ function AreaManagerDashboard() {
 
   return (
     <AmLayout
-      active="/am"
+      active="/am/leaderboard"
       fullName={auth.fullName}
       staffId={auth.staffId}
       onLogout={() => void handleLogout()}
       onChangePassword={() => setChangePasswordOpen(true)}
       onEditProfile={() => setEditProfileOpen(true)}
     >
-      <TaCard title="Restoran dalam Scope" description="Assignment aktif Area Manager ini.">
-        {scope.isLoading && <Loader2 className="size-4 animate-spin" />}
-        {scope.data?.ok && scope.data.restaurants.length === 0 && (
-          <p className="text-sm text-slate-500">
-            Belum ada restoran dalam scope Anda. Hubungi Super Admin.
-          </p>
-        )}
-        {scope.data?.ok && (
-          <ul className="flex flex-wrap gap-2">
-            {scope.data.restaurants.map((r) => (
-              <li
-                key={String(r.restaurant_id)}
-                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold"
-              >
-                {String(r.display_name)}
-              </li>
-            ))}
-          </ul>
-        )}
+      <TaCard title="Segera hadir di 7.1b" description="Leaderboard">
+        <p className="text-sm text-slate-500">
+          Bandingkan peringkat resto dalam scope Anda per periode.
+        </p>
       </TaCard>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {NAV_CARDS.map((c) => (
-          <Link
-            key={c.to}
-            to={c.to}
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow"
-          >
-            <p className="text-sm font-bold text-slate-900">{c.title}</p>
-            <p className="mt-1 text-xs text-slate-500">{c.desc}</p>
-          </Link>
-        ))}
-      </div>
 
       <ChangePasswordDialog
         open={changePasswordOpen}
