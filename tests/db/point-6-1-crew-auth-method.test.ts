@@ -42,7 +42,9 @@ describe("crew_auth_method verdicts", () => {
   });
 
   test("verdict ignores case and surrounding spaces", async () => {
-    await c.query(`insert into auth.users (email, encrypted_password) values ('Trim@Ex.TEST', 'p')`);
+    await c.query(
+      `insert into auth.users (email, encrypted_password) values ('Trim@Ex.TEST', 'p')`,
+    );
     expect(await verdict("  trim@ex.test  ")).toBe("password");
     expect(await verdict("TRIM@EX.TEST")).toBe("password");
   });
@@ -89,9 +91,9 @@ describe("grants and shape", () => {
   test("anon and authenticated cannot execute; service_role can", async () => {
     for (const role of ["anon", "authenticated"]) {
       await c.query(`set role ${role}`);
-      await expect(
-        c.query("select public.crew_auth_method('x@ex.test')"),
-      ).rejects.toThrow(/permission denied/i);
+      await expect(c.query("select public.crew_auth_method('x@ex.test')")).rejects.toThrow(
+        /permission denied/i,
+      );
       await c.query("reset role");
     }
     await c.query("set role service_role");
@@ -102,9 +104,9 @@ describe("grants and shape", () => {
 
   test("quota table is not readable by anon/authenticated", async () => {
     await c.query("set role anon");
-    await expect(
-      c.query("select 1 from public.crew_auth_method_limits"),
-    ).rejects.toThrow(/permission denied/i);
+    await expect(c.query("select 1 from public.crew_auth_method_limits")).rejects.toThrow(
+      /permission denied/i,
+    );
     await c.query("reset role");
   });
 });
