@@ -1093,8 +1093,6 @@ export function CrewLoginFlow({
               </button>
             </>
           ) : (
-            // Poin 6.1: the code form is ALWAYS visible (no "Sudah punya kode?"
-            // reveal dance) and bound to its own empty field.
             <form className="space-y-4" onSubmit={confirmPairing}>
               <IconField
                 icon={ShieldCheck}
