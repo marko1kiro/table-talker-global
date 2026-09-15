@@ -315,10 +315,31 @@ function SoundboardPage() {
     accessValidationPromiseRef.current = validation;
   }, [invalidateCrewSession]);
 
+  const fetchFreshManifest = useCallback(async (): Promise<{
+    version: number;
+    items: ManifestItem[];
+  } | null> => {
+    const identity = crewIdentityRef.current;
+    if (!identity?.restaurantId || !identity.tenantToken) return null;
+    try {
+      const res = await getRestaurantManifest({
+        data: { restaurantId: identity.restaurantId, tenantToken: identity.tenantToken },
+      });
+      if (!("ok" in res) || !res.ok || !res.manifest) return null;
+      const fresh = { version: res.version, items: res.manifest };
+      const prev = lastFreshRef.current;
+      if (!prev || fresh.version > prev.version) lastFreshRef.current = fresh;
+      return fresh;
+    } catch {
+      // Silent: background probes must never surface banners or toasts.
+      return null;
+    }
+  }, []);
+
   const runBackgroundSync = useCallback(
-    async (items: ManifestItem[]) => {
+    async (items: ManifestItem[], fullFresh?: { version: number; items: ManifestItem[] }) => {
       const identity = crewIdentityRef.current;
-      const fresh = lastFreshRef.current;
+      const fresh = fullFresh ?? lastFreshRef.current;
       if (!identity?.restaurantId || !fresh || items.length === 0) return;
       const prevVersion = audioVersionRef.current;
       bgSyncRef.current = true;
@@ -353,23 +374,27 @@ function SoundboardPage() {
 
   const recheckVersion = useCallback(async () => {
     const identity = crewIdentityRef.current;
-    if (!identity?.restaurantId || !identity.tenantToken) return;
-    try {
-      const res = await getRestaurantManifest({
-        data: { restaurantId: identity.restaurantId, tenantToken: identity.tenantToken },
-      });
-      if (!("ok" in res) || !res.ok || !res.manifest) return;
-      const decision = decideAudioStartup({
-        snapshot: loadAudioSnapshot(identity.restaurantId),
-        fetched: { version: res.version },
-      });
-      if (decision !== "stale") return;
-      lastFreshRef.current = { version: res.version, items: res.manifest };
-      await runBackgroundSync(res.manifest);
-    } catch {
-      // Silent: re-probe must never surface banners or toasts.
-    }
-  }, [runBackgroundSync]);
+    if (!identity?.restaurantId) return;
+    const fresh = await fetchFreshManifest();
+    if (!fresh) return;
+    const decision = decideAudioStartup({
+      snapshot: loadAudioSnapshot(identity.restaurantId),
+      fetched: { version: fresh.version },
+    });
+    if (decision !== "stale") return;
+    await runBackgroundSync(fresh.items, fresh);
+  }, [fetchFreshManifest, runBackgroundSync]);
+
+  const retryFailed = useCallback(async () => {
+    if (bgSyncRef.current || bgFailed.length === 0) return;
+    const fresh = await fetchFreshManifest();
+    if (!fresh) return;
+    const failed = new Set(bgFailed);
+    await runBackgroundSync(
+      fresh.items.filter((item) => failed.has(item.audioId)),
+      fresh,
+    );
+  }, [bgFailed, fetchFreshManifest, runBackgroundSync]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -667,14 +692,7 @@ function SoundboardPage() {
                 {!bgSync && bgFailed.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => {
-                      const fresh = lastFreshRef.current;
-                      if (!fresh) return;
-                      const failed = new Set(bgFailed);
-                      void runBackgroundSync(
-                        fresh.items.filter((item) => failed.has(item.audioId)),
-                      );
-                    }}
+                    onClick={() => void retryFailed()}
                     className="text-xs font-semibold text-ta-error"
                   >
                     {bgFailed.length} gagal — ketuk untuk ulangi

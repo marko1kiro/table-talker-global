@@ -61,3 +61,23 @@ it("exposes audio age + reconnect action in Profile", () => {
 it("re-probes the manifest when the browser comes back online", () => {
   expect(route()).toContain('addEventListener("online"');
 });
+
+it("retry gagal refetch manifest fresh dulu (grant 10 mnt kedaluwarsa)", () => {
+  const source = route();
+  const defAt = source.indexOf("const retryFailed");
+  expect(defAt).toBeGreaterThan(-1);
+  const body = source.slice(defAt, defAt + 800);
+  expect(body).toContain("await fetchFreshManifest()");
+  expect(body).toContain("runBackgroundSync");
+  expect(body).not.toContain("lastFreshRef.current");
+});
+
+it("recheck + retry berbagi satu fetchFreshManifest helper", () => {
+  const source = route();
+  const defAt = source.indexOf("const fetchFreshManifest");
+  expect(defAt).toBeGreaterThan(-1);
+  const body = source.slice(defAt, defAt + 1500);
+  expect(body).toContain("lastFreshRef.current =");
+  const calls = source.match(/await fetchFreshManifest\(\)/g) ?? [];
+  expect(calls.length).toBeGreaterThanOrEqual(2);
+});
