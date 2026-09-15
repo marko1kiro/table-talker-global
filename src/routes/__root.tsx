@@ -10,6 +10,8 @@ import {
 import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import { Toaster } from "@/components/ui/sonner";
+import { UpdatePrompt } from "@/components/UpdatePrompt";
 
 function NotFoundComponent() {
   return (
@@ -148,6 +150,8 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
+      <UpdatePrompt />
+      <Toaster position="top-center" />
     </QueryClientProvider>
   );
 }
