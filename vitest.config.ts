@@ -5,7 +5,6 @@ export default defineConfig({
     alias: { "@": `${process.cwd()}/src` },
   },
   test: {
-    setupFiles: ["./tests/setup-jest-dom.ts"],
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
   },
 });

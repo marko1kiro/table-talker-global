@@ -99,7 +99,7 @@ function flow() {
 
 async function submitEmail() {
   await flow();
-  await waitFor(() => expect(screen.getByLabelText("Email")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByLabelText("Email")).not.toBeNull());
   fireEvent.change(screen.getByLabelText("Email"), { target: { value: EMAIL } });
   fireEvent.click(screen.getByRole("button", { name: /Lanjut/i }));
 }
@@ -111,13 +111,13 @@ function liveSession() {
 }
 
 async function passOtpVerification() {
-  await waitFor(() => expect(screen.getByLabelText("Kode email")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByLabelText("Kode email")).not.toBeNull());
   fireEvent.change(screen.getByLabelText("Kode email"), { target: { value: "123456" } });
   fireEvent.click(screen.getByRole("button", { name: /Verifikasi/i }));
 }
 
 async function passSetPasswordGate() {
-  await waitFor(() => expect(screen.getByLabelText("Password baru")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByLabelText("Password baru")).not.toBeNull());
   fireEvent.change(screen.getByLabelText("Password baru"), { target: { value: "rahasia1" } });
   fireEvent.change(screen.getByLabelText("Ulangi password"), { target: { value: "rahasia1" } });
   liveSession();
@@ -129,18 +129,18 @@ describe("routing by verdict", () => {
     crewLoginMethod.mockResolvedValueOnce({ ok: true, method: "password" });
     await submitEmail();
     expect(crewLoginMethod).toHaveBeenCalledWith({ data: { email: EMAIL } });
-    await waitFor(() => expect(screen.getByLabelText("Password")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Password")).not.toBeNull());
     expect(crewSignInWithOtp).not.toHaveBeenCalled();
   });
 
   it("password ok lands on checkin without touching setPassword", async () => {
     crewLoginMethod.mockResolvedValueOnce({ ok: true, method: "password" });
     await submitEmail();
-    await waitFor(() => expect(screen.getByLabelText("Password")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Password")).not.toBeNull());
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "rahasia1" } });
     liveSession();
     fireEvent.click(screen.getByRole("button", { name: /Masuk/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Kasir/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /Kasir/i })).not.toBeNull());
     expect(crewSetPassword).not.toHaveBeenCalled();
   });
 
@@ -148,10 +148,10 @@ describe("routing by verdict", () => {
     crewLoginMethod.mockResolvedValueOnce({ ok: true, method: "password" });
     crewSignInWithPassword.mockResolvedValueOnce({ ok: false, code: "INVALID_CREDENTIALS" });
     await submitEmail();
-    await waitFor(() => expect(screen.getByLabelText("Password")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Password")).not.toBeNull());
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "salah" } });
     fireEvent.click(screen.getByRole("button", { name: /Masuk/i }));
-    await waitFor(() => expect(screen.getByText("Email atau password salah.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Email atau password salah.")).not.toBeNull());
     expect(crewSignInWithOtp).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /kirim kode email/i }));
     await waitFor(() => expect(crewSignInWithOtp).toHaveBeenCalledWith(EMAIL));
@@ -167,25 +167,25 @@ describe("OTP gate leads to setPassword everywhere", () => {
     await passSetPasswordGate();
     await waitFor(() => expect(crewSetPassword).toHaveBeenCalledWith("rahasia1"));
     expect(toastSuccess).toHaveBeenCalledWith("Password tersimpan");
-    await waitFor(() => expect(screen.getByLabelText("Kode Resto")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Kode Resto")).not.toBeNull());
   });
 
   it("mismatched confirmation is refused locally (no network)", async () => {
     await submitEmail();
     await passOtpVerification();
-    await waitFor(() => expect(screen.getByLabelText("Password baru")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Password baru")).not.toBeNull());
     fireEvent.change(screen.getByLabelText("Password baru"), { target: { value: "rahasia1" } });
     fireEvent.change(screen.getByLabelText("Ulangi password"), { target: { value: "lain123" } });
     fireEvent.click(screen.getByRole("button", { name: /Simpan Password/i }));
     expect(crewSetPassword).not.toHaveBeenCalled();
-    expect(screen.getByText(/belum sama/i)).toBeInTheDocument();
+    expect(screen.getByText(/belum sama/i)).not.toBeNull();
   });
 
   it("paired old crew: setPassword gate BEFORE checkin (owner rule)", async () => {
     await submitEmail();
     await passOtpVerification();
     await passSetPasswordGate();
-    await waitFor(() => expect(screen.getByRole("button", { name: /Kasir/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /Kasir/i })).not.toBeNull());
   });
 });
 
@@ -204,15 +204,19 @@ describe("pairing screen fixes", () => {
     await submitEmail();
     await passOtpVerification();
     await passSetPasswordGate();
-    await waitFor(() => expect(screen.getByLabelText("Kode Resto")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Kode Resto")).not.toBeNull());
     fireEvent.change(screen.getByLabelText("Nama"), { target: { value: "Budi" } });
     fireEvent.change(screen.getByLabelText("Kode Resto"), { target: { value: "GACOAN" } });
     fireEvent.click(screen.getByRole("button", { name: /Cek Kode/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Lanjutkan/i })).toBeEnabled());
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: /Lanjutkan/i }) as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole("button", { name: /Lanjutkan/i }));
-    await waitFor(() => expect(screen.getByLabelText(/kode dari manager/i)).toBeInTheDocument());
-    expect(screen.getByLabelText(/kode dari manager/i)).toHaveAttribute("value", "");
-    expect(screen.queryByText(/sudah punya kode/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/kode dari manager/i)).not.toBeNull());
+    expect((screen.getByLabelText(/kode dari manager/i) as HTMLInputElement).value).toBe("");
+    expect(screen.queryByText(/sudah punya kode/i)).toBeNull();
   });
 });
 
@@ -222,11 +226,11 @@ describe("in-place retry replaces the email-loop bug", () => {
     await submitEmail();
     await passOtpVerification();
     await passSetPasswordGate();
-    await waitFor(() => expect(screen.getByText(/Gagal memuat data/i)).toBeInTheDocument());
-    expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Gagal memuat data/i)).not.toBeNull());
+    expect(screen.queryByLabelText("Email")).toBeNull();
     crewMe.mockResolvedValueOnce(okMePaired);
     fireEvent.click(screen.getByRole("button", { name: /Coba lagi/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Kasir/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /Kasir/i })).not.toBeNull());
   });
 });
 
@@ -240,10 +244,14 @@ describe("busy-disable rule (owner: one click, buttons lock)", () => {
         }),
     );
     await submitEmail();
-    await waitFor(() => expect(screen.getByLabelText("Kode email")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Kode email")).not.toBeNull());
     fireEvent.change(screen.getByLabelText("Kode email"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /Verifikasi/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Verifikasi/i })).toBeDisabled());
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: /Verifikasi/i }) as HTMLButtonElement).disabled,
+      ).toBe(true),
+    );
     resolveVerify({ ok: true });
   });
 });

@@ -106,7 +106,7 @@ async function submitField(label: string, value: string, buttonName: RegExp) {
 // Poin 6.1: every successful email-OTP verify now lands on the mandatory
 // "Buat Password" gate BEFORE routing; helpers cross it on the way to resto.
 async function passSetPasswordGate() {
-  await waitFor(() => expect(screen.getByLabelText(/password baru/i)).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByLabelText(/password baru/i)).not.toBeNull());
   fireEvent.change(screen.getByLabelText(/password baru/i), { target: { value: "rahasia1" } });
   fireEvent.change(screen.getByLabelText(/ulangi password/i), { target: { value: "rahasia1" } });
   fireEvent.click(screen.getByRole("button", { name: /simpan password/i }));
@@ -437,7 +437,7 @@ describe("resto -> waiting -> pairing -> checkin happy path", () => {
     await fillRestoAndCheck("Budi");
     expect(await screen.findByText("Gagal memverifikasi kode resto.")).toBeTruthy();
     expect(screen.queryByText("RMuji")).toBeNull();
-    // jest-dom matchers are not configured in this repo; use the DOM property.
+    // DOM matchers are not configured in this repo; use the DOM property.
     expect((screen.getByRole("button", { name: /lanjutkan/i }) as HTMLButtonElement).disabled).toBe(
       true,
     );
