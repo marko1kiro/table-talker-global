@@ -1,6 +1,6 @@
 // Poin 7 Task 1: manifest snapshot store — pure, no DOM, no network.
 // localStorage is stubbed per-test (real jsdom storage would leak between files).
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 import {
   clearAudioSnapshot,
   decideAudioStartup,
