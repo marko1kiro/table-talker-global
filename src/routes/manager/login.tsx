@@ -11,6 +11,7 @@ import {
   cleanupManagerPendingSession,
 } from "@/lib/staff-login.server";
 import { ensureStaffCarrier } from "@/lib/staff-carrier.server";
+import { amEnsureCarrier } from "@/lib/area-manager.server";
 import { staffCarrierToken, staffSignInCarrier } from "@/lib/browser-auth";
 import {
   readPendingManagerHandoff,
@@ -164,7 +165,21 @@ function StaffLoginPage() {
         attemptKeyRef.current = "";
         return;
       }
-      // Area Manager: cookie session sudah dibuat server-side; redirect by role.
+      // Area Manager: cookie session sudah dibuat server-side; swap ke staff
+      // carrier sebelum redirect (pola runManagerHandoff ensureAccessToken).
+      // Fail closed: carrier/sign-in gagal -> jangan navigate.
+      const carrier = await amEnsureCarrier();
+      if (!carrier.ok) {
+        attemptKeyRef.current = "";
+        setError("Gagal memulai sesi. Coba lagi.");
+        return;
+      }
+      const signed = await staffSignInCarrier(carrier.carrierEmail, carrier.carrierPassword);
+      if (!signed.ok) {
+        attemptKeyRef.current = "";
+        setError("Gagal memulai sesi. Coba lagi.");
+        return;
+      }
       // Review A4: satu role per browser — identitas manager lama dihapus.
       attemptKeyRef.current = "";
       removeManagerIdentity(browserManagerStorage());
