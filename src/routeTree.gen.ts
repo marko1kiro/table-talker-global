@@ -38,7 +38,13 @@ import { Route as QDeclineRouteImport } from './routes/q/decline'
 import { Route as QTokenRouteImport } from './routes/q/$token'
 import { Route as ManagerLoginRouteImport } from './routes/manager/login'
 import { Route as ManagerForgotRouteImport } from './routes/manager/forgot'
+import { Route as AmStatistikRouteImport } from './routes/am/statistik'
+import { Route as AmPasswordRouteImport } from './routes/am/password'
+import { Route as AmMejaRouteImport } from './routes/am/meja'
+import { Route as AmManagerRouteImport } from './routes/am/manager'
+import { Route as AmLeaderboardRouteImport } from './routes/am/leaderboard'
 import { Route as AmForgotRouteImport } from './routes/am/forgot'
+import { Route as AmAuditRouteImport } from './routes/am/audit'
 import { Route as SuperAdminRestaurantsIndexRouteImport } from './routes/super-admin/restaurants/index'
 import { Route as SuperAdminRestaurantsIdRouteImport } from './routes/super-admin/restaurants/$id'
 import { Route as ApiAudioAudioIdRouteImport } from './routes/api/audio/$audioId'
@@ -189,9 +195,39 @@ const ManagerForgotRoute = ManagerForgotRouteImport.update({
   path: '/manager/forgot',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AmStatistikRoute = AmStatistikRouteImport.update({
+  id: '/am/statistik',
+  path: '/am/statistik',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AmPasswordRoute = AmPasswordRouteImport.update({
+  id: '/am/password',
+  path: '/am/password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AmMejaRoute = AmMejaRouteImport.update({
+  id: '/am/meja',
+  path: '/am/meja',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AmManagerRoute = AmManagerRouteImport.update({
+  id: '/am/manager',
+  path: '/am/manager',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AmLeaderboardRoute = AmLeaderboardRouteImport.update({
+  id: '/am/leaderboard',
+  path: '/am/leaderboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AmForgotRoute = AmForgotRouteImport.update({
   id: '/am/forgot',
   path: '/am/forgot',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AmAuditRoute = AmAuditRouteImport.update({
+  id: '/am/audit',
+  path: '/am/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SuperAdminRestaurantsIndexRoute =
@@ -227,7 +263,13 @@ export interface FileRoutesByFullPath {
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
+  '/am/audit': typeof AmAuditRoute
   '/am/forgot': typeof AmForgotRoute
+  '/am/leaderboard': typeof AmLeaderboardRoute
+  '/am/manager': typeof AmManagerRoute
+  '/am/meja': typeof AmMejaRoute
+  '/am/password': typeof AmPasswordRoute
+  '/am/statistik': typeof AmStatistikRoute
   '/manager/forgot': typeof ManagerForgotRoute
   '/manager/login': typeof ManagerLoginRoute
   '/q/$token': typeof QTokenRoute
@@ -262,7 +304,13 @@ export interface FileRoutesByTo {
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
+  '/am/audit': typeof AmAuditRoute
   '/am/forgot': typeof AmForgotRoute
+  '/am/leaderboard': typeof AmLeaderboardRoute
+  '/am/manager': typeof AmManagerRoute
+  '/am/meja': typeof AmMejaRoute
+  '/am/password': typeof AmPasswordRoute
+  '/am/statistik': typeof AmStatistikRoute
   '/manager/forgot': typeof ManagerForgotRoute
   '/manager/login': typeof ManagerLoginRoute
   '/q/$token': typeof QTokenRoute
@@ -299,7 +347,13 @@ export interface FileRoutesById {
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms-of-use': typeof TermsOfUseRoute
+  '/am/audit': typeof AmAuditRoute
   '/am/forgot': typeof AmForgotRoute
+  '/am/leaderboard': typeof AmLeaderboardRoute
+  '/am/manager': typeof AmManagerRoute
+  '/am/meja': typeof AmMejaRoute
+  '/am/password': typeof AmPasswordRoute
+  '/am/statistik': typeof AmStatistikRoute
   '/manager/forgot': typeof ManagerForgotRoute
   '/manager/login': typeof ManagerLoginRoute
   '/q/$token': typeof QTokenRoute
@@ -337,7 +391,13 @@ export interface FileRouteTypes {
     | '/privacy-policy'
     | '/sitemap.xml'
     | '/terms-of-use'
+    | '/am/audit'
     | '/am/forgot'
+    | '/am/leaderboard'
+    | '/am/manager'
+    | '/am/meja'
+    | '/am/password'
+    | '/am/statistik'
     | '/manager/forgot'
     | '/manager/login'
     | '/q/$token'
@@ -372,7 +432,13 @@ export interface FileRouteTypes {
     | '/privacy-policy'
     | '/sitemap.xml'
     | '/terms-of-use'
+    | '/am/audit'
     | '/am/forgot'
+    | '/am/leaderboard'
+    | '/am/manager'
+    | '/am/meja'
+    | '/am/password'
+    | '/am/statistik'
     | '/manager/forgot'
     | '/manager/login'
     | '/q/$token'
@@ -408,7 +474,13 @@ export interface FileRouteTypes {
     | '/privacy-policy'
     | '/sitemap.xml'
     | '/terms-of-use'
+    | '/am/audit'
     | '/am/forgot'
+    | '/am/leaderboard'
+    | '/am/manager'
+    | '/am/meja'
+    | '/am/password'
+    | '/am/statistik'
     | '/manager/forgot'
     | '/manager/login'
     | '/q/$token'
@@ -445,7 +517,13 @@ export interface RootRouteChildren {
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsOfUseRoute: typeof TermsOfUseRoute
+  AmAuditRoute: typeof AmAuditRoute
   AmForgotRoute: typeof AmForgotRoute
+  AmLeaderboardRoute: typeof AmLeaderboardRoute
+  AmManagerRoute: typeof AmManagerRoute
+  AmMejaRoute: typeof AmMejaRoute
+  AmPasswordRoute: typeof AmPasswordRoute
+  AmStatistikRoute: typeof AmStatistikRoute
   ManagerForgotRoute: typeof ManagerForgotRoute
   ManagerLoginRoute: typeof ManagerLoginRoute
   QTokenRoute: typeof QTokenRoute
@@ -664,11 +742,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManagerForgotRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/am/statistik': {
+      id: '/am/statistik'
+      path: '/am/statistik'
+      fullPath: '/am/statistik'
+      preLoaderRoute: typeof AmStatistikRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/am/password': {
+      id: '/am/password'
+      path: '/am/password'
+      fullPath: '/am/password'
+      preLoaderRoute: typeof AmPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/am/meja': {
+      id: '/am/meja'
+      path: '/am/meja'
+      fullPath: '/am/meja'
+      preLoaderRoute: typeof AmMejaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/am/manager': {
+      id: '/am/manager'
+      path: '/am/manager'
+      fullPath: '/am/manager'
+      preLoaderRoute: typeof AmManagerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/am/leaderboard': {
+      id: '/am/leaderboard'
+      path: '/am/leaderboard'
+      fullPath: '/am/leaderboard'
+      preLoaderRoute: typeof AmLeaderboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/am/forgot': {
       id: '/am/forgot'
       path: '/am/forgot'
       fullPath: '/am/forgot'
       preLoaderRoute: typeof AmForgotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/am/audit': {
+      id: '/am/audit'
+      path: '/am/audit'
+      fullPath: '/am/audit'
+      preLoaderRoute: typeof AmAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/super-admin/restaurants/': {
@@ -748,7 +868,13 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyPolicyRoute: PrivacyPolicyRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsOfUseRoute: TermsOfUseRoute,
+  AmAuditRoute: AmAuditRoute,
   AmForgotRoute: AmForgotRoute,
+  AmLeaderboardRoute: AmLeaderboardRoute,
+  AmManagerRoute: AmManagerRoute,
+  AmMejaRoute: AmMejaRoute,
+  AmPasswordRoute: AmPasswordRoute,
+  AmStatistikRoute: AmStatistikRoute,
   ManagerForgotRoute: ManagerForgotRoute,
   ManagerLoginRoute: ManagerLoginRoute,
   QTokenRoute: QTokenRoute,
