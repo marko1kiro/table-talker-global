@@ -83,6 +83,28 @@ export function clearAudioSnapshot(restaurantId: string, deps: StoreDeps = {}): 
   }
 }
 
+export type FreshManifest = {
+  version: number;
+  items: { audioId: string; contentHash: string; byteSize: number }[];
+};
+
+export function snapshotFromFresh(
+  restaurantId: string,
+  fresh: FreshManifest,
+  now: number = Date.now(),
+): AudioSnapshot {
+  return {
+    restaurantId,
+    catalogVersion: fresh.version,
+    fetchedAt: now,
+    items: fresh.items.map((it) => ({
+      audioId: it.audioId,
+      hash: it.contentHash,
+      size: it.byteSize,
+    })),
+  };
+}
+
 export type StartupDecision = "first-ever" | "offline" | "current" | "stale";
 
 export function decideAudioStartup(args: {

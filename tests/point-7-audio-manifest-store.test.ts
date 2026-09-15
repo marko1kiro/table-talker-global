@@ -7,6 +7,7 @@ import {
   formatAudioAge,
   loadAudioSnapshot,
   saveAudioSnapshot,
+  snapshotFromFresh,
   type AudioSnapshot,
 } from "@/lib/audio-manifest-store";
 
@@ -94,6 +95,49 @@ describe("decideAudioStartup", () => {
 
   test("different version => stale", () => {
     expect(decideAudioStartup({ snapshot: snap(), fetched: { version: 13 } })).toBe("stale");
+  });
+});
+
+describe("snapshotFromFresh", () => {
+  test("maps fresh manifest to snapshot shape", () => {
+    expect(
+      snapshotFromFresh(
+        "resto-1",
+        {
+          version: 13,
+          items: [{ audioId: "table:1", contentHash: "h1", byteSize: 100 }],
+        },
+        2_000_000,
+      ),
+    ).toEqual({
+      restaurantId: "resto-1",
+      catalogVersion: 13,
+      fetchedAt: 2_000_000,
+      items: [{ audioId: "table:1", hash: "h1", size: 100 }],
+    });
+  });
+
+  test("empty items pass through as-is (validation happens at load)", () => {
+    expect(snapshotFromFresh("resto-1", { version: 13, items: [] }, 2_000_000).items).toEqual([]);
+  });
+
+  test("maps multiple items preserving order", () => {
+    const out = snapshotFromFresh(
+      "resto-1",
+      {
+        version: 14,
+        items: [
+          { audioId: "table:2", contentHash: "h2", byteSize: 200 },
+          { audioId: "table:1", contentHash: "h1", byteSize: 100 },
+        ],
+      },
+      3_000_000,
+    );
+    expect(out.catalogVersion).toBe(14);
+    expect(out.items).toEqual([
+      { audioId: "table:2", hash: "h2", size: 200 },
+      { audioId: "table:1", hash: "h1", size: 100 },
+    ]);
   });
 });
 

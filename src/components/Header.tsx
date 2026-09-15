@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { LifeBuoy, LogOut } from "lucide-react";
 import { RoleEmblem } from "@/components/dashboard/RoleEmblem";
@@ -11,6 +12,7 @@ interface HeaderProps {
   // Public info pages render this Header without an active crew/role session,
   // so the sign-out affordance is optional and only wired when a handler exists.
   onLogout?: () => void;
+  profileExtras?: ReactNode;
 }
 
 // SS station header, TailAdmin-styled (de-brutalized in SP3). Shared by the SS
@@ -19,10 +21,11 @@ interface HeaderProps {
 // On the station (userName present), Help and the theme toggle live inside the
 // profile dropdown; the info pages keep them as standalone buttons. No
 // notification bell (SS has no live occupancy feed).
-export function Header({ restaurantDisplayName, userName, onLogout }: HeaderProps) {
+export function Header({ restaurantDisplayName, userName, onLogout, profileExtras }: HeaderProps) {
   const restoLabel = formatRestaurantLabel("", restaurantDisplayName ?? "") || "Restoran";
   const dropdownExtras = (
     <>
+      {profileExtras}
       <Link
         to="/help"
         className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-semibold text-ta-gray-700 transition hover:bg-ta-gray-100 dark:text-ta-gray-300 dark:hover:bg-ta-gray-700"
