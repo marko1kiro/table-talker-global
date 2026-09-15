@@ -25,7 +25,10 @@ import { browserManagerStorage, removeManagerIdentity } from "@/lib/manager-sess
 export const Route = createFileRoute("/am/password")({
   loader: () => getAmStatus(),
   head: () => ({
-    meta: [{ title: "Password Request - Area Manager - LIME" }, { name: "robots", content: "noindex" }],
+    meta: [
+      { title: "Password Request - Area Manager - LIME" },
+      { name: "robots", content: "noindex" },
+    ],
   }),
   component: AmPasswordPage,
 });
@@ -88,8 +91,7 @@ function AmPasswordPage() {
     pending.data?.ok === true
       ? pending.data.requests.filter((r) => !active || String(r.restaurant_id) === active)
       : [];
-  const decisions =
-    audit.data?.ok === true ? selectResetDecisions(audit.data.entries, active) : [];
+  const decisions = audit.data?.ok === true ? selectResetDecisions(audit.data.entries, active) : [];
 
   return (
     <AmLayout

@@ -112,7 +112,9 @@ function AmAuditPage() {
                 <li key={String(e.id)} className="border-b border-slate-100 py-1">
                   <span className="font-bold">{String(e.action)}</span>{" "}
                   <span className="text-slate-400">{String(e.created_at)}</span>{" "}
-                  <span className={e.result === "ok" ? "text-emerald-600" : "text-red-600 font-bold"}>
+                  <span
+                    className={e.result === "ok" ? "text-emerald-600" : "text-red-600 font-bold"}
+                  >
                     {String(e.result)}
                   </span>
                   {e.reason ? <span className="text-slate-400"> · {String(e.reason)}</span> : null}

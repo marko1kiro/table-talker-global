@@ -26,7 +26,10 @@ import { browserManagerStorage, removeManagerIdentity } from "@/lib/manager-sess
 export const Route = createFileRoute("/am/manager")({
   loader: () => getAmStatus(),
   head: () => ({
-    meta: [{ title: "Manager Resto - Area Manager - LIME" }, { name: "robots", content: "noindex" }],
+    meta: [
+      { title: "Manager Resto - Area Manager - LIME" },
+      { name: "robots", content: "noindex" },
+    ],
   }),
   component: AmManagerPage,
 });
@@ -211,9 +214,7 @@ function CreateManagerCard({
 }) {
   const [fullName, setFullName] = useState("");
   const [staffId, setStaffId] = useState("");
-  const [restaurantId, setRestaurantId] = useState(
-    initialRestaurantId ?? restaurants[0]?.id ?? "",
-  );
+  const [restaurantId, setRestaurantId] = useState(initialRestaurantId ?? restaurants[0]?.id ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
