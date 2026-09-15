@@ -234,6 +234,22 @@ describe("in-place retry replaces the email-loop bug", () => {
   });
 });
 
+describe("boot transient never dead-ends", () => {
+  it("boot crewMe UNAVAILABLE shows alert+retry, retry lands checkin", async () => {
+    refreshCarrierToken.mockResolvedValue("jwt-1");
+    crewMe
+      .mockReset()
+      .mockResolvedValueOnce({ ok: false, code: "UNAVAILABLE", message: "x" })
+      .mockResolvedValue(okMePaired);
+    flow();
+    await waitFor(() => expect(screen.getByText(/Gagal memuat data/i)).not.toBeNull());
+    const btn = screen.getByRole("button", { name: /Coba lagi/i }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    fireEvent.click(btn);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Kasir/i })).not.toBeNull());
+  });
+});
+
 describe("busy-disable rule (owner: one click, buttons lock)", () => {
   it("Verifikasi button is disabled while the network call is in flight", async () => {
     let resolveVerify: (v: { ok: boolean }) => void = () => {};

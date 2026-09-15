@@ -46,7 +46,7 @@ import type { CrewSessionIdentity, RoleSessionIdentity } from "@/lib/crew-sessio
 
 // Poin 3 Task 8 (spec §3.2): crew login on REAL email accounts. Replaces the
 // anonymous "Kode + PIN" rails (Task 9 removed the old component and homepage
-// mount). Steps: boot -> email -> otpEmail -> resto ->
+// mount). Steps: boot -> email -> (password | otpEmail -> setPassword) -> resto ->
 // waiting (-> pairing input) -> checkin, plus the derived kicked/disabled
 // screens (§7 copy). "Keluar akun" on the kick + checkin screens drops the
 // GoTrue session (spec §12#5: role-session logout deliberately KEEPS it, so
@@ -92,6 +92,7 @@ const GENERIC = "Terjadi kesalahan. Coba lagi.";
 const PW_BAD_CREDENTIALS = "Email atau password salah.";
 const PW_MISMATCH = "Ulangi password belum sama.";
 const PW_MIN = "Password minimal 6 karakter.";
+const PW_THROTTLED = "Terlalu sering mencoba masuk. Tunggu sebentar lalu coba lagi.";
 const LOOKUP_THROTTLED = "Terlalu sering mencoba. Tunggu sekitar 15 menit lalu coba lagi.";
 const ROUTE_TRANSIENT = "Gagal memuat data. Coba lagi.";
 const PW_SAVED_TOAST = "Password tersimpan";
@@ -111,6 +112,7 @@ type Step =
 
 // checkin is a step, the pairing OTP is an inline expansion of waiting.
 type Pairing = { requestId: string; expiresAt: number };
+type RetryAction = "email" | "password" | "setPassword" | "route";
 type RestoInfo = { restaurantId: string; restaurantName: string; fullName: string };
 
 export type CrewLoginFlowProps = {
@@ -191,9 +193,11 @@ export function CrewLoginFlow({
   const [pw2, setPw2] = useState("");
   const [showPw, setShowPw] = useState(false);
   // In-place retry for transient post-login failures (Poin 6.1 anti-loop):
-  // set instead of bouncing to the email step; every post-email screen renders
-  // a "Coba lagi" button while it is set.
-  const [retryable, setRetryable] = useState<{ run: () => void } | null>(null);
+  // a discriminated ACTION token, not a captured closure — the single retry
+  // button dispatches to the CURRENT render's handler, so form fields are
+  // always re-read live. Every post-email screen (plus boot) renders a
+  // "Coba lagi" button while it is set.
+  const [retryAction, setRetryAction] = useState<RetryAction | null>(null);
   const lastRouteTarget = useRef<Step>("email");
   const [name, setName] = useState("");
   const [restoCode, setRestoCode] = useState("");
@@ -251,11 +255,13 @@ export function CrewLoginFlow({
     setBadPassword(false);
     setPw1("");
     setPw2("");
+    setShowPw(false);
+    setSendUntil(0);
     setName("");
     setRestoCode("");
     setResto(null);
     setPairing(null);
-    setRetryable(null);
+    setRetryAction(null);
     setInfo(null);
     setRole(null);
     setError("");
@@ -300,16 +306,14 @@ export function CrewLoginFlow({
       if (me.code === "UNAUTHORIZED") {
         setStep("email");
         setError(SESSION_LOST);
-        setRetryable(null);
+        setRetryAction(null);
         return;
       }
       setError(ROUTE_TRANSIENT);
-      setRetryable({
-        run: () => void routeWithFreshSession(lastRouteTarget.current ?? "email"),
-      });
+      setRetryAction("route");
       return;
     }
-    setRetryable(null);
+    setRetryAction(null);
     if (!me.paired) {
       setStep(unpairedTarget);
       return;
@@ -334,7 +338,7 @@ export function CrewLoginFlow({
     if (!session) {
       setStep("email");
       setError(SESSION_LOST);
-      setRetryable(null);
+      setRetryAction(null);
       return;
     }
     await routeSession(session.token, session.device, target);
@@ -359,21 +363,24 @@ export function CrewLoginFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Shared OTP send used by submitEmail's otp branch AND the password screen's
-  // "lupa" link: cooldown, error copy and landing spot stay identical.
+  // Shared OTP send used by (a) submitEmail's otp branch, (b) the password
+  // screen's "lupa" link, and (c) the otp screen's resend button: cooldown,
+  // error copy and landing spot stay identical (previously three drifting copies).
   async function sendOtpRoundtrip() {
-    const result = await crewSignInWithOtp(email.trim());
-    if (!result.ok) {
+    try {
+      const result = await crewSignInWithOtp(email.trim());
+      if (!result.ok) {
+        setError(result.code === "RATE_LIMITED" ? OTP_RATE_LIMITED : PROVIDER_DOWN);
+        return;
+      }
+      setSendUntil(Date.now() + resendCooldownMs);
+      setOtp("");
+      setWizardMode("otp");
+      setStep("otpEmail");
+      toast.success(OTP_SENT_TOAST);
+    } finally {
       setBusy(false);
-      setError(result.code === "RATE_LIMITED" ? OTP_RATE_LIMITED : PROVIDER_DOWN);
-      return;
     }
-    setSendUntil(Date.now() + resendCooldownMs);
-    setOtp("");
-    setWizardMode("otp");
-    setStep("otpEmail");
-    toast.success(OTP_SENT_TOAST);
-    setBusy(false);
   }
 
   async function submitEmail(event: FormEvent<HTMLFormElement>) {
@@ -387,13 +394,14 @@ export function CrewLoginFlow({
       setBusy(false);
       if (verdict.code === "THROTTLED") {
         setError(LOOKUP_THROTTLED);
+        setRetryAction(null);
         return;
       }
       setError(ROUTE_TRANSIENT);
-      setRetryable({ run: () => void submitEmail(event) });
+      setRetryAction("email");
       return;
     }
-    setRetryable(null);
+    setRetryAction(null);
     if (verdict.method === "password") {
       setWizardMode("password");
       setBadPassword(false);
@@ -432,11 +440,11 @@ export function CrewLoginFlow({
       return;
     }
     if (result.code === "RATE_LIMITED") {
-      setError(OTP_RATE_LIMITED);
+      setError(PW_THROTTLED);
       return;
     }
     setError(ROUTE_TRANSIENT);
-    setRetryable({ run: () => void submitPassword(event) });
+    setRetryAction("password");
   }
 
   async function verifyOtp(event: FormEvent<HTMLFormElement>) {
@@ -455,7 +463,8 @@ export function CrewLoginFlow({
     setOtp("");
     setPw1("");
     setPw2("");
-    setRetryable(null);
+    setShowPw(false);
+    setRetryAction(null);
     setBusy(false);
     setStep("setPassword");
   }
@@ -496,7 +505,7 @@ export function CrewLoginFlow({
     }
     // UNAVAILABLE: stay put, the session is intact — retry the save in place.
     setError(ROUTE_TRANSIENT);
-    setRetryable({ run: () => void submitSetPassword(event) });
+    setRetryAction("setPassword");
   }
 
   async function checkRestoCode(event: FormEvent<HTMLFormElement>) {
@@ -706,12 +715,21 @@ export function CrewLoginFlow({
   const bigButton = (enabled: boolean) => (enabled ? primary : disabledButton);
 
   // Poin 6.1 in-place retry: rendered directly under the Alert on every
-  // post-email screen whenever a transient failure left a retry closure.
-  const retryBlock = retryable && (
+  // post-email screen (plus boot) whenever a transient failure left an action
+  // token. Dispatches to the CURRENT render's handler — never a stale closure —
+  // with a synthetic no-op event so form fields are always re-read live.
+  function runRetryAction(action: RetryAction) {
+    const noop = { preventDefault() {} } as FormEvent<HTMLFormElement>;
+    if (action === "email") void submitEmail(noop);
+    else if (action === "password") void submitPassword(noop);
+    else if (action === "setPassword") void submitSetPassword(noop);
+    else void routeWithFreshSession(lastRouteTarget.current);
+  }
+  const retryBlock = retryAction && (
     <button
       type="button"
       disabled={busy}
-      onClick={() => retryable.run()}
+      onClick={() => runRetryAction(retryAction)}
       className={`${secondary} mx-auto flex`}
     >
       Coba lagi
@@ -734,6 +752,8 @@ export function CrewLoginFlow({
     return (
       <AuthLayout>
         <div className="flex min-h-[40svh] flex-col justify-center gap-4">
+          {error && <Alert>{error}</Alert>}
+          {retryBlock}
           <div className="animate-pulse space-y-4">
             <Skeleton className="mx-auto h-10 w-2/3 rounded-xl" />
             <Skeleton className="h-11 w-full rounded-lg" />
@@ -924,12 +944,7 @@ export function CrewLoginFlow({
               onClick={() => {
                 setBusy(true);
                 setError("");
-                void crewSignInWithOtp(email.trim())
-                  .then((r) => {
-                    if (r.ok) setSendUntil(Date.now() + resendCooldownMs);
-                    else setError(r.code === "RATE_LIMITED" ? OTP_RATE_LIMITED : PROVIDER_DOWN);
-                  })
-                  .finally(() => setBusy(false));
+                void sendOtpRoundtrip();
               }}
               className={`${secondary} mx-auto flex`}
             >
