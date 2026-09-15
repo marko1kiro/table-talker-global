@@ -1,8 +1,8 @@
 "use client";
 // Poin 6.1 S5: modal wajib-konfirmasi (owner copy EXACT). "Refresh" reloads;
-// "Nanti Aja" silences THIS build for the rest of the tab session — the next
-// page load / login session (or a newer build) may prompt again. No ESC, no
-// overlay-click dismissal, no silent reload ever.
+// "Nanti Aja" silences THIS build for the rest of the tab session — a NEW tab,
+// a new login session on another tab, or a NEWER build after this dismissal
+// will prompt again. No ESC, no overlay-click dismissal, no silent reload ever.
 import { useEffect, useState } from "react";
 import {
   DISMISS_PREFIX,
@@ -20,7 +20,7 @@ export function UpdatePrompt({ intervalMs = PROBE_INTERVAL_MS }: { intervalMs?: 
   useEffect(() => {
     const current = currentIndexAsset();
     if (!current) return;
-    let stopped = false;
+    // No stopped-flag: in-flight fetch resolving post-unmount only calls setPending, a React no-op after unmount — no AbortController needed.
     const check = async () => {
       if (document.visibilityState !== "visible") return;
       try {
@@ -45,11 +45,9 @@ export function UpdatePrompt({ intervalMs = PROBE_INTERVAL_MS }: { intervalMs?: 
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("unhandledrejection", onRejection);
     return () => {
-      stopped = true;
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("unhandledrejection", onRejection);
-      void stopped;
     };
   }, [intervalMs]);
   if (!pending) return null;
