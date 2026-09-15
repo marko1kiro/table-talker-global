@@ -4,7 +4,17 @@
 // never taken from frontend input.
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { clearAuthSession, requireAreaManager, requireSuperAdmin } from "./auth.server";
+import {
+  clearAuthSession,
+  getAuthSession,
+  requireAreaManager,
+  requireSuperAdmin,
+} from "./auth.server";
+import {
+  buildCarrierDeps,
+  ensureStaffCarrierCore,
+  type EnsureStaffCarrierResult,
+} from "./staff-carrier.server";
 import { writeAdminAudit } from "./admin-audit.server";
 import { changeStaffPasswordCore } from "./super-admin-auth.server";
 import { hashManagerPassword, verifyManagerPassword } from "./manager-password.server";
@@ -504,6 +514,32 @@ export const updateOwnAmProfile = createServerFn({ method: "POST" })
     const verdict = readRpcVerdict(res.data, res.error);
     return verdict.ok ? { ok: true } : { ok: false, code: verdict.code };
   });
+
+export type AmEnsureCarrierDeps = {
+  mint: (bearer: string) => Promise<EnsureStaffCarrierResult>;
+};
+
+export async function amEnsureCarrierCore(
+  data: { bearer: string | null },
+  deps: AmEnsureCarrierDeps,
+): Promise<EnsureStaffCarrierResult> {
+  if (!data.bearer) return { ok: false, code: "INVALID_SESSION", message: GENERIC };
+  return deps.mint(data.bearer);
+}
+
+export const amEnsureCarrier = createServerFn({ method: "POST" }).handler(
+  async (): Promise<EnsureStaffCarrierResult> => {
+    const session = await getAuthSession();
+    const bearer = session.data.areaManagerSessionToken ?? null;
+    if (!bearer) return { ok: false, code: "INVALID_SESSION", message: GENERIC };
+    const client = getServiceClient();
+    if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC };
+    return ensureStaffCarrierCore(
+      { staffKind: "area_manager", sessionToken: bearer },
+      buildCarrierDeps(client),
+    );
+  },
+);
 
 export const amLogout = createServerFn({ method: "POST" }).handler(async () => {
   // R3-A: revoke the AM bearer session BEFORE clearing the cookie; failure
