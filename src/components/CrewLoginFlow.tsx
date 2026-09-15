@@ -186,7 +186,6 @@ export function CrewLoginFlow({
   // must never leak into the manager-code field (and vice versa).
   const [otpPairing, setOtpPairing] = useState("");
   const [wizardMode, setWizardMode] = useState<"otp" | "password" | null>(null);
-  const [badPassword, setBadPassword] = useState(false);
   // pw1 doubles as the LOGIN password and the NEW password: the password and
   // setPassword screens never coexist, so one field is honest, not shared.
   const [pw1, setPw1] = useState("");
@@ -252,7 +251,6 @@ export function CrewLoginFlow({
     setOtp("");
     setOtpPairing("");
     setWizardMode(null);
-    setBadPassword(false);
     setPw1("");
     setPw2("");
     setShowPw(false);
@@ -404,7 +402,6 @@ export function CrewLoginFlow({
     setRetryAction(null);
     if (verdict.method === "password") {
       setWizardMode("password");
-      setBadPassword(false);
       setPw1("");
       setStep("password");
       setBusy(false);
@@ -418,7 +415,6 @@ export function CrewLoginFlow({
     if (busy || !pw1) return;
     setBusy(true);
     setError("");
-    setBadPassword(false);
     const result = await crewSignInWithPassword(email.trim().toLowerCase(), pw1);
     if (result.ok) {
       // busy stays true across the whole routeSession hop: a re-entrant submit
@@ -435,7 +431,6 @@ export function CrewLoginFlow({
     }
     setBusy(false);
     if (result.code === "INVALID_CREDENTIALS") {
-      setBadPassword(true);
       setError(PW_BAD_CREDENTIALS);
       return;
     }
@@ -884,20 +879,18 @@ export function CrewLoginFlow({
           />
           {error && <Alert>{error}</Alert>}
           {retryBlock}
-          {badPassword && (
-            <button
-              type="button"
-              disabled={busy || Date.now() < sendUntil}
-              onClick={() => {
-                setBusy(true);
-                setError("");
-                void sendOtpRoundtrip();
-              }}
-              className={`${secondary} mx-auto flex`}
-            >
-              Belum bisa masuk? Kirim kode email
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={busy || Date.now() < sendUntil}
+            onClick={() => {
+              setBusy(true);
+              setError("");
+              void sendOtpRoundtrip();
+            }}
+            className={`${secondary} mx-auto flex`}
+          >
+            Belum bisa masuk? Kirim kode email
+          </button>
           <button type="submit" disabled={busy || !pw1} className={bigButton(pw1.length > 0)}>
             {busy && <Loader2 className="size-4 animate-spin" />}
             {busy ? "Memproses..." : "Masuk"}

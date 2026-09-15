@@ -139,9 +139,20 @@ describe("routing by verdict", () => {
     await waitFor(() => expect(screen.getByLabelText("Password")).not.toBeNull());
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "rahasia1" } });
     liveSession();
-    fireEvent.click(screen.getByRole("button", { name: /Masuk/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Masuk" }));
     await waitFor(() => expect(screen.getByRole("button", { name: /Kasir/i })).not.toBeNull());
     expect(crewSetPassword).not.toHaveBeenCalled();
+  });
+
+  it("password screen shows lupa link BEFORE any attempt (escape hatch)", async () => {
+    crewLoginMethod.mockResolvedValueOnce({ ok: true, method: "password" });
+    await submitEmail();
+    await waitFor(() => expect(screen.getByLabelText("Password")).not.toBeNull());
+    const lupa = screen.getByRole("button", { name: /kirim kode email/i });
+    expect((lupa as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(lupa);
+    await waitFor(() => expect(crewSignInWithOtp).toHaveBeenCalledWith(EMAIL));
+    await waitFor(() => expect(screen.getByLabelText("Kode email")).not.toBeNull());
   });
 
   it("wrong password => neutral copy + lupa link, no OTP yet", async () => {
@@ -150,7 +161,7 @@ describe("routing by verdict", () => {
     await submitEmail();
     await waitFor(() => expect(screen.getByLabelText("Password")).not.toBeNull());
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "salah" } });
-    fireEvent.click(screen.getByRole("button", { name: /Masuk/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Masuk" }));
     await waitFor(() => expect(screen.getByText("Email atau password salah.")).not.toBeNull());
     expect(crewSignInWithOtp).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /kirim kode email/i }));
