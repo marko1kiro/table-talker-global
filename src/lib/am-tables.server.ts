@@ -228,9 +228,8 @@ export const amBindTableRealtime = createServerFn({ method: "POST" })
     if (!amId) return { ok: false, code: "NOT_AUTHORIZED" };
     const client = getAnonAuthedSupabaseClient(data.accessToken);
     if (!client) return { ok: false, code: "UNAVAILABLE" };
-    return amBindTableRealtimeCore(
-      { amId, restaurantId: data.restaurantId },
-      async (fn, params) => client.rpc(fn, params),
+    return amBindTableRealtimeCore({ amId, restaurantId: data.restaurantId }, async (fn, params) =>
+      client.rpc(fn, params),
     );
   });
 
