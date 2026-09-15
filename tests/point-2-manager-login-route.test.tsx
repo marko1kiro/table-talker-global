@@ -75,6 +75,24 @@ vi.mock("@/lib/browser-auth", () => ({
   staffSignInCarrier: async () => ({ ok: true }),
   staffCarrierToken: async () => carrierToken,
 }));
+let amCarrierFails = false;
+const amCarrierCalls: unknown[] = [];
+vi.mock("@/lib/area-manager.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/area-manager.server")>();
+  return {
+    ...actual,
+    amEnsureCarrier: async () => {
+      amCarrierCalls.push(true);
+      if (amCarrierFails)
+        return { ok: false, code: "INVALID_SESSION", message: "Terjadi kesalahan. Coba lagi." };
+      return {
+        ok: true,
+        carrierEmail: "shadow+am-1@lihatmeja.com",
+        carrierPassword: "rotated-am-pw",
+      };
+    },
+  };
+});
 
 import * as loginRoute from "../src/routes/manager/login";
 import type { ComponentType } from "react";
@@ -113,6 +131,8 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     cleanupOk = true;
     carrierFails = false;
     carrierCalls.length = 0;
+    amCarrierFails = false;
+    amCarrierCalls.length = 0;
     loginResult = { ...managerLogin };
     carrierToken = "carrier-tok";
   });
@@ -403,6 +423,17 @@ describe("R4-A: /manager/login runtime handoff behaviour", () => {
     expect(navigations).toEqual(["/am"]);
     expect(confirmations).toEqual([]);
     expect(cleanups).toEqual([]);
+    expect(amCarrierCalls).toHaveLength(1);
     expect(sessionStorage.getItem("table-talker.manager-identity")).toBeNull();
+  });
+
+  it("AM role: carrier minting failure is fail-closed, no navigation", async () => {
+    amCarrierFails = true;
+    loginResult = { ok: true, role: "area_manager", fullName: "AM", staffId: "am.satu" };
+    const user = userEvent.setup();
+    render(<StaffLoginPage />);
+    await submit(user);
+    expect(navigations).toEqual([]);
+    expect(screen.getByRole("alert").textContent).toContain("Gagal memulai sesi. Coba lagi.");
   });
 });
