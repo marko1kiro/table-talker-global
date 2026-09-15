@@ -3,6 +3,9 @@
 // getAnonAuthedSupabaseClient (the crew account RPCs are revoked from
 // service_role, granted to authenticated, and auth.uid()-scoped) --
 // the service-role client can never call these RPCs and is never built here.
+// Poin 6.1's crew_auth_method/reserve_crew_auth_method are the deliberate
+// exception: service_role-only by design, no auth.uid() dependence, called via
+// getServiceClient from remote-audio.server.
 // Manager-facing fns copy manager-dashboard.server.ts's transport exactly:
 // anon-authed client + the manager bearer token as p_manager_token (the RPC
 // hashes and validates it; INVALID_SESSION on failure).
@@ -26,6 +29,7 @@ const GENERIC_REJECT = "Gagal menolak permintaan crew.";
 const GENERIC_LIST_ACCOUNTS = "Gagal memuat daftar akun crew.";
 const GENERIC_RESET = "Gagal mereset akun crew.";
 const GENERIC_END_SESSIONS = "Gagal mengakhiri sesi crew.";
+const GENERIC_LOGIN_METHOD = "Gagal memeriksa akun.";
 
 function knownRaisedCode<T extends string>(known: readonly T[], message: string): T | null {
   return (known as readonly string[]).includes(message) ? (message as T) : null;
@@ -75,6 +79,60 @@ export const crewValidateCode = createServerFn({ method: "POST" })
     const client = getAnonAuthedSupabaseClient(data.accessToken);
     if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC_VALIDATE };
     return crewValidateCodeCore({ code: data.code }, async (fn, params) => client.rpc(fn, params));
+  });
+
+// ---------------------------------------------------------------------------
+// crewLoginMethod (Poin 6.1: email-first routing 'password' vs 'otp')
+// ---------------------------------------------------------------------------
+
+export type CrewLoginMethodResult =
+  | { ok: true; method: "password" | "otp" }
+  | { ok: false; code: "THROTTLED" | "UNAVAILABLE"; message: string };
+
+export const crewLoginMethodInputSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+});
+
+export async function crewLoginMethodCore(
+  data: { email: string; ipHash: string },
+  rpc: RpcCaller,
+): Promise<CrewLoginMethodResult> {
+  try {
+    const { data: allowed, error: quotaError } = await rpc("reserve_crew_auth_method", {
+      p_ip_hash: data.ipHash,
+    });
+    if (quotaError || typeof allowed !== "boolean") {
+      return { ok: false, code: "UNAVAILABLE", message: GENERIC_LOGIN_METHOD };
+    }
+    if (!allowed) return { ok: false, code: "THROTTLED", message: GENERIC_LOGIN_METHOD };
+    const { data: verdict, error } = await rpc("crew_auth_method", { p_email: data.email });
+    if (error || (verdict !== "password" && verdict !== "otp")) {
+      return { ok: false, code: "UNAVAILABLE", message: GENERIC_LOGIN_METHOD };
+    }
+    return { ok: true, method: verdict };
+  } catch {
+    return { ok: false, code: "UNAVAILABLE", message: GENERIC_LOGIN_METHOD };
+  }
+}
+
+export const crewLoginMethod = createServerFn({ method: "POST" })
+  .validator(crewLoginMethodInputSchema)
+  .handler(async ({ data }): Promise<CrewLoginMethodResult> => {
+    // node:crypto + the service client are dynamic imports on purpose: this
+    // module sits on the client import graph via CrewLoginFlow (see file
+    // header, guarded by tests/restaurant-login-build.test.ts).
+    const { createHmac } = await import("node:crypto");
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const { getLoginRequestIp } = await import("./login-request-ip.server");
+    const { getAuthSecret } = await import("./auth.server");
+    const { getServiceClient } = await import("./remote-audio.server");
+    const client = getServiceClient();
+    if (!client) return { ok: false, code: "UNAVAILABLE", message: GENERIC_LOGIN_METHOD };
+    const ip = getLoginRequestIp(getRequest().headers);
+    const ipHash = createHmac("sha256", getAuthSecret()).update(`crew-method:${ip}`).digest("hex");
+    return crewLoginMethodCore({ email: data.email, ipHash }, async (fn, params) =>
+      client.rpc(fn, params),
+    );
   });
 
 // ---------------------------------------------------------------------------

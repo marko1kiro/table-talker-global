@@ -93,6 +93,60 @@ export function crewVerifyOtp(email: string, token: string): Promise<BrowserAuth
   return attempt(() => c.auth.verifyOtp({ type: "email", email, token }));
 }
 
+// --- Poin 6.1: password login + self-service password setup ---------------
+
+export type CrewPasswordSignInResult =
+  | { ok: true }
+  | { ok: false; code: "INVALID_CREDENTIALS" | "RATE_LIMITED" | "UNAVAILABLE" };
+
+// Deliberate asymmetry vs staffSignInCarrier (which never splits its failures):
+// crew creds are human-chosen and humans forget passwords, so the UI NEEDS the
+// invalid-vs-unavailable hint to offer the OTP escape hatch; carrier creds are
+// server-minted rotating secrets where that split would only hand attackers a
+// probe oracle. Keep the two functions intentionally different.
+export async function crewSignInWithPassword(
+  email: string,
+  password: string,
+): Promise<CrewPasswordSignInResult> {
+  const c = getSupabaseBrowserClient();
+  if (!c) return { ok: false, code: "UNAVAILABLE" };
+  // GoTrue's AuthApiError carries code "invalid_credentials"; the message
+  // regex stays as the both-arms fallback for legacy/obscured error shapes.
+  const isBadCreds = (e: unknown) => {
+    const err = e as { code?: string; message?: string } | null;
+    return (
+      err?.code === "invalid_credentials" ||
+      /invalid login credentials/i.test(typeof err?.message === "string" ? err.message : "")
+    );
+  };
+  try {
+    const { error } = await c.auth.signInWithPassword({ email, password });
+    if (!error) return { ok: true };
+    if (isBadCreds(error)) return { ok: false, code: "INVALID_CREDENTIALS" };
+    return { ok: false, code: classifyAuthFailure(error) };
+  } catch (err) {
+    if (isBadCreds(err)) return { ok: false, code: "INVALID_CREDENTIALS" };
+    return { ok: false, code: classifyAuthFailure(err) };
+  }
+}
+
+export type CrewSetPasswordResult = { ok: true } | { ok: false; code: "WEAK" | "UNAVAILABLE" };
+
+export async function crewSetPassword(password: string): Promise<CrewSetPasswordResult> {
+  const c = getSupabaseBrowserClient();
+  if (!c) return { ok: false, code: "UNAVAILABLE" };
+  try {
+    const { error } = await c.auth.updateUser({ password });
+    if (!error) return { ok: true };
+    if (/at least/i.test((error as { message?: string }).message ?? "")) {
+      return { ok: false, code: "WEAK" };
+    }
+    return { ok: false, code: "UNAVAILABLE" };
+  } catch {
+    return { ok: false, code: "UNAVAILABLE" };
+  }
+}
+
 // The spec §12#5 escape hatch: CrewLoginFlow's "Keluar akun" (kick + checkin
 // screens). Role-page logout deliberately does NOT call this -- one login = one
 // logged-in device -- so this is the only way off a shared tablet's account.
